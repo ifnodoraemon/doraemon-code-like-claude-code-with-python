@@ -27,7 +27,6 @@ dependencies = [
 
 [project.scripts]
 polymath = "src.host.cli:entry_point"
+pl = "src.host.cli:entry_point"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]

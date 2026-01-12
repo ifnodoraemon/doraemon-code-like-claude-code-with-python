@@ -19,31 +19,25 @@
     cd polymath
     ```
 
-2.  **创建并激活环境:**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
-
-3.  **安装依赖:**
+2.  **安装 (推荐使用 pipx 或 venv):**
     ```bash
     pip install .
     ```
+    
+    安装成功后，系统会多出一个 `pl` (或 `polymath`) 命令。
 
 ## ⚙️ 配置
 
-1.  **创建环境变量文件 `.env`:**
-    ```bash
-    # 必填 (默认使用 Gemini)
-    GOOGLE_API_KEY="your_google_api_key"
-    
-    # 选填 (如果想用 GPT-4o 进行视觉识别)
-    OPENAI_API_KEY="your_openai_api_key"
-    ```
+Polymath 会按以下顺序查找配置：
+1.  当前目录: `.polymath/config.json` (项目级)
+2.  用户目录: `~/.polymath/config.json` (全局级)
+3.  默认配置: 内置于安装包中
 
-2.  **配置 MCP Servers (`.polymath/config.json`):**
-    默认已配置 Memory, Vision, Web, Filesystem, Computer 五大服务。
-    你可以在此文件中修改视觉模型版本 (e.g., `gemini-1.5-pro`) 或切换 Provider (`google` -> `openai`).
+建议在项目根目录下创建 `.env` 文件来管理密钥：
+```bash
+GOOGLE_API_KEY="your_google_api_key"
+OPENAI_API_KEY="your_openai_api_key" # 可选
+```
 
 ## 🚀 使用方法
 
@@ -51,11 +45,11 @@
 这是主要的交互方式。支持项目隔离。
 
 ```bash
-# 启动默认项目
-polymath start
+# 在任意目录下启动 Polymath
+pl start
 
 # 启动特定项目 (记忆库独立)
-polymath start --project "ProjectAlpha"
+pl start --project "ProjectAlpha"
 ```
 
 ### Web 调试模式 (ADK)
@@ -75,5 +69,5 @@ adk web src/agent.py
 
 ## 🛡️ 安全机制
 
-*   **HITL (Human-in-the-loop):** 当 AI 尝试执行代码、写文件或修改记忆时，CLI 会暂停并请求你的确认。
+*   **HITL (Human-in-the-loop):** 当 AI 尝试执行代码、写文件或修改记忆时，CLI 会弹出醒目的**红色警示**并显示具体参数。
 *   **Path Jailing:** 文件系统操作被限制在当前工作目录，防止越权访问。

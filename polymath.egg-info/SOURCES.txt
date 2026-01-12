@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+polymath.egg-info/PKG-INFO
+polymath.egg-info/SOURCES.txt
+polymath.egg-info/dependency_links.txt
+polymath.egg-info/entry_points.txt
+polymath.egg-info/requires.txt
+polymath.egg-info/top_level.txt
+src/agent.py
+src/host/cli.py
+src/host/client.py
+src/servers/computer.py
+src/servers/files.py
+src/servers/memory.py
+src/servers/vision.py
+src/servers/web.py
