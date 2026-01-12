@@ -9,6 +9,8 @@ from rich.console import Console
 from src.servers.memory import save_note, search_notes, update_user_persona, get_user_persona
 from src.servers.vision import ocr_image, describe_image
 from src.servers.web import search_internet
+from src.servers.computer import execute_python
+from src.servers.files import read_file, list_directory, write_file
 
 console = Console()
 
@@ -64,13 +66,13 @@ class PolymathAgent:
     # [Web Tools]
     search_internet = tool(search_internet)
 
-    @tool
-    def read_local_file(self, path: str) -> str:
-        """Read content of a local file (e.g., source code, text)."""
-        if not os.path.exists(path):
-            return "File not found."
-        with open(path, "r") as f:
-            return f.read()
+    # [Computer Tools]
+    execute_python = tool(execute_python)
+
+    # [Filesystem Tools]
+    read_file = tool(read_file)
+    write_file = tool(write_file)
+    list_directory = tool(list_directory)
 
 if __name__ == "__main__":
     console.print("[bold green]Polymath Agent Definition Loaded for ADK Web.[/bold green]")

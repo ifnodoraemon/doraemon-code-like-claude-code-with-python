@@ -19,6 +19,16 @@
       "command": "python3",
       "args": ["src/servers/web.py"],
       "env": {}
+    },
+    "computer": {
+      "command": "python3",
+      "args": ["src/servers/computer.py"],
+      "env": {}
+    },
+    "filesystem": {
+      "command": "python3",
+      "args": ["src/servers/files.py"],
+      "env": {}
     }
   },
   "persona": {

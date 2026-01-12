@@ -1,13 +1,18 @@
 import os
+import sys
 import asyncio
 import json
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.prompt import Prompt
 
+# 加载 .env 环境变量
+load_dotenv()
+
+# Google GenAI
 import google.generativeai as genai
-from google.generativeai.types import Tool as GenAITool
 
 # 导入通用 MCP 客户端
 from src.host.client import MultiServerMCPClient
