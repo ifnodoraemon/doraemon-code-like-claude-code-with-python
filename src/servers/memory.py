@@ -23,30 +23,33 @@ collection = client.get_or_create_collection(name="polymath_notes")
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 @mcp.tool()
-def save_note(title: str, content: str, tags: list[str] = []) -> str:
-    """保存一条笔记到长期记忆库（向量数据库）。"""
+def save_note(title: str, content: str, collection_name: str = "default", tags: list[str] = []) -> str:
+    """保存一条笔记到特定项目的长期记忆库。"""
+    # 动态获取 collection
+    coll = client.get_or_create_collection(name=f"polymath_{collection_name}")
     note_id = f"{title}_{len(content)}"
     embedding = embedding_model.encode(content).tolist()
     
-    collection.add(
+    coll.add(
         documents=[content],
         metadatas=[{"title": title, "tags": ",".join(tags)}],
         ids=[note_id],
         embeddings=[embedding]
     )
-    return f"笔记 '{title}' 已保存。"
+    return f"笔记 '{title}' 已保存到项目 {collection_name}。"
 
 @mcp.tool()
-def search_notes(query: str, n_results: int = 3) -> str:
-    """从长期记忆库中搜索相关笔记。"""
+def search_notes(query: str, collection_name: str = "default", n_results: int = 3) -> str:
+    """从特定项目的长期记忆库中搜索相关笔记。"""
+    coll = client.get_or_create_collection(name=f"polymath_{collection_name}")
     query_embedding = embedding_model.encode(query).tolist()
-    results = collection.query(
+    results = coll.query(
         query_embeddings=[query_embedding],
         n_results=n_results
     )
     
     if not results['documents'][0]:
-        return "未找到相关笔记。"
+        return f"项目 {collection_name} 中未找到相关笔记。"
         
     output = []
     for doc, meta in zip(results['documents'][0], results['metadatas'][0]):

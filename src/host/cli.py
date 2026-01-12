@@ -123,12 +123,30 @@ async def chat_loop():
                         tool_name = fc.name
                         args = dict(fc.args)
                         
-                        console.print(f"[cyan]Calling Tool: {tool_name}({args})[/cyan]")
-                        
-                        # 调用 MCP Client
-                        try:
+                        # 注入当前项目上下文 (如果是 memory 相关工具)
+                        if tool_name in ["save_note", "search_notes"]:
+                            args["collection_name"] = project
+
+                        # --- 安全审批流 ---
+                        if tool_name in SENSITIVE_TOOLS:
+                            console.print(f"\n[bold red]⚠️  AI 请求执行敏感操作:[/bold red]")
+                            console.print(f"[yellow]Tool:[/yellow] {tool_name}")
+                            console.print(f"[yellow]Args:[/yellow] {json.dumps(args, indent=2, ensure_ascii=False)}")
+                            
+                            confirm = Prompt.ask("允许执行吗？", choices=["y", "n"], default="n")
+                            if confirm.lower() != "y":
+                                tool_result = "User denied the operation."
+                                console.print("[red]已拒绝。[/red]")
+                            else:
+                                tool_result = await mcp_client.call_tool(tool_name, args)
+                        else:
+                            # 非敏感工具直接执行
+                            console.print(f"[cyan]Calling Tool: {tool_name}...[/cyan]")
                             tool_result = await mcp_client.call_tool(tool_name, args)
-                            console.print(f"[dim]Result: {str(tool_result)[:100]}...[/dim]")
+                        
+                        # --- 结束安全审批流 ---
+
+                        console.print(f"[dim]Result: {str(tool_result)[:100]}...[/dim]")
                             
                             # 把结果喂回给模型
                             response = chat.send_message(
@@ -163,8 +181,9 @@ async def chat_loop():
         await mcp_client.cleanup()
 
 @app.command()
-def start():
-    asyncio.run(chat_loop())
+def start(project: str = "default"):
+    """启动 Polymath 并进入特定项目环境"""
+    asyncio.run(chat_loop(project=project))
 
 def entry_point():
     app()

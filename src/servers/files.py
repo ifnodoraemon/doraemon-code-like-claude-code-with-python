@@ -21,9 +21,14 @@ ALLOWED_ROOTS = [
 ]
 
 def validate_path(path: str) -> str:
-    """Validate that path is within allowed roots."""
+    """Validate that path is within the current working directory."""
     abs_path = os.path.abspath(path)
-    # 简单放行，但在真实场景应检查 commonprefix
+    base_dir = os.getcwd()
+    
+    # 如果 abs_path 不是以 base_dir 开头，说明试图越权访问
+    if not abs_path.startswith(base_dir):
+        raise PermissionError(f"Access Denied: Path {path} is outside of the workspace sandbox.")
+    
     return abs_path
 
 # --------------------------
