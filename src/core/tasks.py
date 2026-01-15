@@ -86,13 +86,63 @@ class TaskManager:
             try:
                 with open(self.tasks_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.tasks = {
-                        task_id: Task.from_dict(task_data)
-                        for task_id, task_data in data.items()
-                    }
+                    
+                    # Handle both list format (legacy) and dict format (new)
+                    if isinstance(data, list):
+                        # Legacy format: list of task dicts
+                        for task_data in data:
+                            task_id = task_data.get('id', '')
+                            if task_id:
+                                # Convert legacy format to new format
+                                converted = self._convert_legacy_task(task_data)
+                                self.tasks[task_id] = Task.from_dict(converted)
+                    elif isinstance(data, dict):
+                        # New format: dict keyed by task_id
+                        self.tasks = {
+                            task_id: Task.from_dict(task_data)
+                            for task_id, task_data in data.items()
+                        }
             except Exception as e:
                 print(f"Warning: Failed to load tasks: {e}")
                 self.tasks = {}
+    
+    def _convert_legacy_task(self, legacy_data: dict) -> dict:
+        """Convert legacy task format to new format"""
+        # Map old status values to new enum values
+        status_map = {
+            'todo': 'pending',
+            'in_progress': 'in_progress',
+            'done': 'completed',
+            'blocked': 'blocked',
+            'cancelled': 'cancelled'
+        }
+        
+        old_status = legacy_data.get('status', 'pending')
+        new_status = status_map.get(old_status, old_status)
+        
+        return {
+            'id': legacy_data.get('id', ''),
+            'title': legacy_data.get('title', ''),
+            'description': legacy_data.get('description', ''),
+            'status': new_status,
+            'priority': legacy_data.get('priority', 'medium'),
+            'parent_id': legacy_data.get('parent_id'),
+            'subtasks': legacy_data.get('subtasks', []),
+            'created_at': self._convert_timestamp(legacy_data.get('created_at')),
+            'updated_at': self._convert_timestamp(legacy_data.get('updated_at', legacy_data.get('created_at'))),
+            'tags': legacy_data.get('tags', []),
+            'metadata': legacy_data.get('metadata', {})
+        }
+    
+    def _convert_timestamp(self, ts) -> str:
+        """Convert timestamp to ISO format string"""
+        if ts is None:
+            return datetime.now().isoformat()
+        if isinstance(ts, str):
+            return ts
+        if isinstance(ts, (int, float)):
+            return datetime.fromtimestamp(ts).isoformat()
+        return datetime.now().isoformat()
     
     def _save_tasks(self):
         """Save tasks to disk"""

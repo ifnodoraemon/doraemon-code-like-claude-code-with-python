@@ -1,7 +1,7 @@
 """Configuration schema validation using Pydantic."""
 
 from typing import Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from pathlib import Path
 
 
@@ -60,8 +60,7 @@ class PolymathConfig(BaseModel):
         description="Additional instruction files to load (supports globs)"
     )
     
-    class Config:
-        populate_by_name = True  # Allow both snake_case and camelCase
+    model_config = ConfigDict(populate_by_name=True)  # Allow both snake_case and camelCase
     
     @model_validator(mode='after')
     def validate_required_servers(self):

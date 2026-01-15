@@ -48,8 +48,9 @@ class CommandRegistry:
         self.commands[command.name] = command
         
         # Register aliases
-        for alias in command.aliases:
-            self._alias_map[alias] = command.name
+        if command.aliases:
+            for alias in command.aliases:
+                self._alias_map[alias] = command.name
     
     def get(self, name: str) -> Optional[Command]:
         """Get command by name or alias"""
@@ -76,9 +77,9 @@ def register_command(
     name: str,
     description: str,
     category: CommandCategory = CommandCategory.GENERAL,
-    aliases: List[str] = None,
+    aliases: Optional[List[str]] = None,
     args_description: str = "",
-    examples: List[str] = None
+    examples: Optional[List[str]] = None
 ):
     """Decorator to register a command handler"""
     def decorator(handler: Callable):
@@ -87,9 +88,9 @@ def register_command(
             description=description,
             category=category,
             handler=handler,
-            aliases=aliases or [],
+            aliases=aliases if aliases is not None else [],
             args_description=args_description,
-            examples=examples or []
+            examples=examples if examples is not None else []
         )
         _registry.register(command)
         return handler

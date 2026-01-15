@@ -4,7 +4,7 @@ Event System (Pub/Sub)
 Provides a decoupled event-driven architecture for communication between components.
 """
 
-from typing import Callable, List, Dict, Any, TypeVar, Generic, Optional
+from typing import Callable, List, Dict, Any, TypeVar, Generic, Optional, Union, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -69,7 +69,7 @@ class TaskEvents:
 
 
 EventHandler = Callable[[Event], None]
-AsyncEventHandler = Callable[[Event], asyncio.coroutine]
+AsyncEventHandler = Callable[[Event], Coroutine[Any, Any, None]]
 
 
 @dataclass
