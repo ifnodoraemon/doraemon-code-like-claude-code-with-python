@@ -42,7 +42,7 @@
     },
     "task": {
       "command": "python3",
-      "args": ["src/servers/task.py"],
+      "args": ["src/servers/task_manager.py"],
       "env": {}
     }
   },

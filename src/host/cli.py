@@ -81,76 +81,32 @@ def init_chat_model(client: genai.Client, mode: str, tools: list, history: list 
 
 async def handle_slash_command(command: str, chat_session_ref: dict, mcp_client, active_tools, client) -> bool:
     """
-    Handle slash commands. 
-    chat_session_ref is a dict {"session": chat, "history": history} to allow modification.
+    Handle slash commands using the new command dispatch system.
+    chat_session_ref is a dict {"session": chat} to allow modification.
     """
     global CURRENT_MODE
-    cmd_parts = command.strip().split()
-    cmd = cmd_parts[0].lower()
-
-    if cmd == "/clear":
-        console.print("[yellow]Clearing session history...[/yellow]")
-        # Re-init with empty history
-        chat_session_ref["session"] = init_chat_model(client, CURRENT_MODE, active_tools, [])
-        return True
     
-    elif cmd == "/init":
-        console.print("[cyan]Initializing project rules (AGENTS.md)...[/cyan]")
-        
-        # Create AGENTS.md if it doesn't exist
-        if not os.path.exists("AGENTS.md"):
-            from pathlib import Path
-            create_default_agents_md(Path.cwd())
-            console.print("[green]✓ Created AGENTS.md[/green]")
-        else:
-            console.print("[yellow]AGENTS.md already exists, skipping creation[/yellow]")
-        
-        # Create default config if it doesn't exist
-        config_dir = Path.cwd() / ".polymath"
-        config_dir.mkdir(exist_ok=True)
-        
-        console.print("[green]✓ Project initialized successfully![/green]")
-        console.print("\n[dim]Tip: Edit AGENTS.md to customize project rules[/dim]")
-        
-        # Re-init chat to load the new rules
-        hist = [] 
-        if hasattr(chat_session_ref["session"], "_history"):
-             hist = chat_session_ref["session"]._history
-        chat_session_ref["session"] = init_chat_model(client, CURRENT_MODE, active_tools, hist)
-        return True
-
-    elif cmd == "/mode":
-        if len(cmd_parts) < 2:
-            console.print(f"[red]Usage: /mode <{', '.join(PROMPTS.keys())}>[/red]")
-            return True
-            
-        new_mode = cmd_parts[1].lower()
-        if new_mode not in PROMPTS:
-            console.print(f"[red]Invalid mode. Available: {', '.join(PROMPTS.keys())}[/red]")
-            return True
-            
-        console.print(f"[green]Switching to {new_mode.upper()} mode...[/green]")
-        CURRENT_MODE = new_mode
-        
-        # Preserve history but switch system prompt
-        hist = []
-        if hasattr(chat_session_ref["session"], "_history"):
-            hist = chat_session_ref["session"]._history
-        chat_session_ref["session"] = init_chat_model(client, new_mode, active_tools, hist)
-        return True
-
-    elif cmd == "/help":
-        table = Table(title="Available Commands")
-        table.add_column("Command", style="cyan")
-        table.add_column("Description")
-        table.add_row("/mode <name>", "Switch agent persona (default, coder, architect)")
-        table.add_row("/init", "Initialize project memory (POLYMATH.md)")
-        table.add_row("/clear", "Clear conversation history")
-        table.add_row("exit / quit", "End the session")
-        console.print(table)
-        return True
-
-    return False
+    # Import the command dispatcher
+    from src.host.cli_commands import dispatch_command
+    
+    # Build context for command execution
+    context = {
+        'chat': chat_session_ref,
+        'client': client,
+        'mode': CURRENT_MODE,
+        'tools': active_tools,
+        'mcp_client': mcp_client,
+        'mcp_servers': list(mcp_client.sessions.keys()) if mcp_client else []
+    }
+    
+    # Dispatch to command handler
+    result = await dispatch_command(command, context)
+    
+    # Update global mode if it changed
+    if context['mode'] != CURRENT_MODE:
+        CURRENT_MODE = context['mode']
+    
+    return result
 
 
 async def chat_loop(project: str = "default"):
