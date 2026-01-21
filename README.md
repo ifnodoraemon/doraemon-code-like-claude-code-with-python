@@ -27,7 +27,7 @@
 
 1.  **克隆仓库:**
     ```bash
-    git clone <repo-url>
+    git clone https://github.com/polymath-ai/polymath.git
     cd polymath
     ```
 

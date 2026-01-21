@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Polymath! This document provides 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/YOUR_ORG/polymath.git
+   git clone https://github.com/polymath-ai/polymath.git
    cd polymath
    ```
 

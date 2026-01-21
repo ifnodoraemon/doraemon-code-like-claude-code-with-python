@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polymath"
-version = "0.3.0"
+version = "0.4.0"
 description = "An extensible AI assistant powered by MCP architecture"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -73,9 +73,9 @@ polymath = "src.host.cli:entry_point"
 pl = "src.host.cli:entry_point"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/polymath"
-Repository = "https://github.com/yourusername/polymath"
-"Bug Tracker" = "https://github.com/yourusername/polymath/issues"
+Homepage = "https://github.com/polymath-ai/polymath"
+Repository = "https://github.com/polymath-ai/polymath"
+"Bug Tracker" = "https://github.com/polymath-ai/polymath/issues"
 
 # Ruff configuration
 [tool.ruff]
@@ -107,6 +107,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
 addopts = [
     "--verbose",
     "--strict-markers",

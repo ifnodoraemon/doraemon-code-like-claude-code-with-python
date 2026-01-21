@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-LABEL org.opencontainers.image.source=https://github.com/YOUR_ORG/polymath
+LABEL org.opencontainers.image.source=https://github.com/polymath-ai/polymath
 LABEL org.opencontainers.image.description="Polymath - AI Assistant powered by MCP"
 LABEL org.opencontainers.image.licenses=MIT
 

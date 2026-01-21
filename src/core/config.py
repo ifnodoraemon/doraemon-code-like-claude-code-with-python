@@ -1,34 +1,35 @@
-import os
 import json
-from typing import Dict, Any, Optional
+import os
 from pathlib import Path
-from .schema import validate_config_file, get_default_config, PolymathConfig
+from typing import Any
+
 from .logger import get_logger
+from .schema import get_default_config, validate_config_file
 
 logger = get_logger(__name__)
 
 
-def load_config(override_path: Optional[str] = None, validate: bool = True) -> Dict[str, Any]:
+def load_config(override_path: str | None = None, validate: bool = True) -> dict[str, Any]:
     """
     Cascading config loading with optional validation:
     1. Runtime override (if provided)
     2. Project specific: ./.polymath/config.json
     3. User global: ~/.polymath/config.json
     4. Package default: (Installed dir)/.polymath/config.json
-    
+
     Args:
         override_path: Optional path to override config file
         validate: Whether to validate configuration (default: True)
-        
+
     Returns:
         Configuration dictionary
-        
+
     Raises:
         ValueError: If validation is enabled and configuration is invalid
     """
     config_path = None
     config_data = None
-    
+
     # 1. Runtime override
     if override_path and os.path.exists(override_path):
         config_path = Path(override_path)
@@ -51,20 +52,20 @@ def load_config(override_path: Optional[str] = None, validate: bool = True) -> D
         else:
             logger.warning("No config file found, using defaults")
             return get_default_config()
-    
+
     # Load and optionally validate
     try:
         if validate:
             validated_config = validate_config_file(config_path)
             config_data = validated_config.model_dump(by_alias=True)
-            logger.info(f"Configuration validated successfully")
+            logger.info("Configuration validated successfully")
         else:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 config_data = json.load(f)
-                logger.info(f"Configuration loaded (validation skipped)")
-        
+                logger.info("Configuration loaded (validation skipped)")
+
         return config_data
-        
+
     except ValueError as e:
         logger.error(f"Configuration validation failed: {e}")
         raise

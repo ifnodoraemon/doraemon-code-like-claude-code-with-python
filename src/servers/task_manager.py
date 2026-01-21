@@ -13,10 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
-from src.core.tasks import TaskManager, TaskStatus, TaskPriority
-
+from src.core.tasks import TaskManager, TaskPriority, TaskStatus
 
 # Initialize task manager
 task_manager = TaskManager()
@@ -35,32 +34,26 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "title": {
-                        "type": "string",
-                        "description": "Task title (short, descriptive)"
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Detailed task description"
-                    },
+                    "title": {"type": "string", "description": "Task title (short, descriptive)"},
+                    "description": {"type": "string", "description": "Detailed task description"},
                     "priority": {
                         "type": "string",
                         "enum": ["low", "medium", "high", "critical"],
                         "description": "Task priority level",
-                        "default": "medium"
+                        "default": "medium",
                     },
                     "parent_id": {
                         "type": "string",
-                        "description": "Parent task ID (for creating subtasks)"
+                        "description": "Parent task ID (for creating subtasks)",
                     },
                     "tags": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Task tags for organization"
-                    }
+                        "description": "Task tags for organization",
+                    },
                 },
-                "required": ["title"]
-            }
+                "required": ["title"],
+            },
         ),
         Tool(
             name="task_list",
@@ -71,19 +64,19 @@ async def list_tools() -> list[Tool]:
                     "status": {
                         "type": "string",
                         "enum": ["pending", "in_progress", "completed", "blocked", "cancelled"],
-                        "description": "Filter by task status"
+                        "description": "Filter by task status",
                     },
                     "parent_id": {
                         "type": "string",
-                        "description": "Filter by parent task (omit for root tasks)"
+                        "description": "Filter by parent task (omit for root tasks)",
                     },
                     "show_tree": {
                         "type": "boolean",
                         "description": "Show hierarchical task tree",
-                        "default": False
-                    }
-                }
-            }
+                        "default": False,
+                    },
+                },
+            },
         ),
         Tool(
             name="task_update_status",
@@ -91,32 +84,24 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {
-                        "type": "string",
-                        "description": "Task ID to update"
-                    },
+                    "task_id": {"type": "string", "description": "Task ID to update"},
                     "status": {
                         "type": "string",
                         "enum": ["pending", "in_progress", "completed", "blocked", "cancelled"],
-                        "description": "New status for the task"
-                    }
+                        "description": "New status for the task",
+                    },
                 },
-                "required": ["task_id", "status"]
-            }
+                "required": ["task_id", "status"],
+            },
         ),
         Tool(
             name="task_get",
             description="Get details of a specific task",
             inputSchema={
                 "type": "object",
-                "properties": {
-                    "task_id": {
-                        "type": "string",
-                        "description": "Task ID to retrieve"
-                    }
-                },
-                "required": ["task_id"]
-            }
+                "properties": {"task_id": {"type": "string", "description": "Task ID to retrieve"}},
+                "required": ["task_id"],
+            },
         ),
         Tool(
             name="task_delete",
@@ -124,18 +109,15 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "task_id": {
-                        "type": "string",
-                        "description": "Task ID to delete"
-                    },
+                    "task_id": {"type": "string", "description": "Task ID to delete"},
                     "delete_subtasks": {
                         "type": "boolean",
                         "description": "Also delete all subtasks",
-                        "default": False
-                    }
+                        "default": False,
+                    },
                 },
-                "required": ["task_id"]
-            }
+                "required": ["task_id"],
+            },
         ),
         Tool(
             name="task_clear",
@@ -146,54 +128,50 @@ async def list_tools() -> list[Tool]:
                     "confirm": {
                         "type": "boolean",
                         "description": "Must be true to confirm deletion",
-                        "default": False
+                        "default": False,
                     }
                 },
-                "required": ["confirm"]
-            }
-        )
+                "required": ["confirm"],
+            },
+        ),
     ]
 
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     """Handle tool calls"""
-    
+
     if name == "task_create":
         title = arguments["title"]
         description = arguments.get("description", "")
         priority_str = arguments.get("priority", "medium")
         parent_id = arguments.get("parent_id")
         tags = arguments.get("tags", [])
-        
+
         # Convert priority string to enum
         priority = TaskPriority(priority_str)
-        
+
         # Create task
         task = task_manager.create_task(
-            title=title,
-            description=description,
-            priority=priority,
-            parent_id=parent_id,
-            tags=tags
+            title=title, description=description, priority=priority, parent_id=parent_id, tags=tags
         )
-        
+
         result = f"✓ Created task: {task.id}\n"
         result += f"  Title: {task.title}\n"
         result += f"  Priority: {task.priority.value}\n"
         if parent_id:
             result += f"  Parent: {parent_id}\n"
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "task_list":
         status_str = arguments.get("status")
         parent_id = arguments.get("parent_id")
         show_tree = arguments.get("show_tree", False)
-        
+
         # Convert status string to enum
         status = TaskStatus(status_str) if status_str else None
-        
+
         if show_tree:
             # Show hierarchical tree
             tree = task_manager.get_task_tree()
@@ -202,7 +180,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         else:
             # Show flat list
             tasks = task_manager.list_tasks(status=status, parent_id=parent_id)
-            
+
             if not tasks:
                 result = "No tasks found."
             else:
@@ -216,30 +194,30 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if task.subtasks:
                         result += f"\n  Subtasks: {len(task.subtasks)}"
                     result += "\n\n"
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "task_update_status":
         task_id = arguments["task_id"]
         status_str = arguments["status"]
-        
+
         # Convert status string to enum
         status = TaskStatus(status_str)
-        
+
         # Update task
         success = task_manager.update_task_status(task_id, status)
-        
+
         if success:
             result = f"✓ Updated task {task_id} to status: {status.value}"
         else:
             result = f"✗ Task not found: {task_id}"
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "task_get":
         task_id = arguments["task_id"]
         task = task_manager.get_task(task_id)
-        
+
         if task:
             result = f"Task: {task.id}\n"
             result += f"Title: {task.title}\n"
@@ -257,35 +235,35 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result += f"Updated: {task.updated_at}\n"
         else:
             result = f"✗ Task not found: {task_id}"
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "task_delete":
         task_id = arguments["task_id"]
         delete_subtasks = arguments.get("delete_subtasks", False)
-        
+
         success = task_manager.delete_task(task_id, delete_subtasks=delete_subtasks)
-        
+
         if success:
             result = f"✓ Deleted task: {task_id}"
             if delete_subtasks:
                 result += " (including subtasks)"
         else:
             result = f"✗ Task not found: {task_id}"
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "task_clear":
         confirm = arguments.get("confirm", False)
-        
+
         if confirm:
             task_manager.clear_all_tasks()
             result = "✓ Cleared all tasks"
         else:
             result = "✗ Must set confirm=true to clear all tasks"
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -300,26 +278,22 @@ def _format_task_tree(tree: list, indent: int = 0) -> str:
             "in_progress": "◐",
             "completed": "●",
             "blocked": "✗",
-            "cancelled": "⊘"
+            "cancelled": "⊘",
         }.get(task_dict["status"], "○")
-        
+
         result += f"{prefix}{status_icon} {task_dict['title']} ({task_dict['id']})\n"
-        
+
         # Recursively format children
         if task_dict.get("children"):
             result += _format_task_tree(task_dict["children"], indent + 1)
-    
+
     return result
 
 
 async def main():
     """Run the task management server"""
     async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            app.create_initialization_options()
-        )
+        await app.run(read_stream, write_stream, app.create_initialization_options())
 
 
 if __name__ == "__main__":

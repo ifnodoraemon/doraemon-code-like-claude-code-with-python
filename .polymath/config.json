@@ -10,9 +10,7 @@
       "args": ["src/servers/fs_read.py"],
       "env": {
         "VISION_PROVIDER": "google", 
-        "VISION_MODEL": "gemini-1.5-flash",
-        "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+        "VISION_MODEL": "gemini-2.0-flash"
       }
     },
     "fs_write": {
@@ -42,7 +40,7 @@
     },
     "task": {
       "command": "python3",
-      "args": ["src/servers/task_manager.py"],
+      "args": ["src/servers/task.py"],
       "env": {}
     }
   },

@@ -3,20 +3,22 @@ Precise file editing MCP server.
 Provides search/replace editing similar to Claude Code's Edit tool.
 """
 
+import logging
 import os
+
 from mcp.server.fastmcp import FastMCP
+
 from src.core.security import validate_path
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("PolymathFileSystemEditor")
 
 
 @mcp.tool()
-def edit_file(
-    path: str,
-    old_string: str,
-    new_string: str,
-    count: int = -1
-) -> str:
+def edit_file(path: str, old_string: str, new_string: str, count: int = -1) -> str:
     """
     Edit a file by replacing specific content with search/replace pattern.
 
@@ -32,18 +34,24 @@ def edit_file(
     Returns:
         Success message or error description
     """
-    valid_path = validate_path(path)
+    try:
+        valid_path = validate_path(path)
+    except (PermissionError, ValueError) as e:
+        logger.warning(f"Path validation failed for '{path}': {e}")
+        return f"Error: {e}"
 
     if not os.path.exists(valid_path):
+        logger.warning(f"File not found: {valid_path}")
         return f"Error: File not found: {path}"
 
     try:
         # Read current content
-        with open(valid_path, 'r', encoding='utf-8') as f:
+        with open(valid_path, encoding="utf-8") as f:
             content = f.read()
 
         # Check if search string exists
         if old_string not in content:
+            logger.debug(f"Search string not found in {path}")
             return f"Error: Search string not found in {path}:\n'{old_string[:100]}...'"
 
         # Count occurrences
@@ -63,20 +71,19 @@ def edit_file(
             replaced_count = min(count, occurrences)
 
         # Write back
-        with open(valid_path, 'w', encoding='utf-8') as f:
+        with open(valid_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
+        logger.info(f"Edited {path}: {replaced_count} replacement(s)")
         return f"Successfully edited {path} ({replaced_count} replacement(s) made)"
 
     except Exception as e:
+        logger.error(f"Failed to edit file '{path}': {e}")
         return f"Error editing file: {str(e)}"
 
 
 @mcp.tool()
-def edit_file_multiline(
-    path: str,
-    edits: list[dict]
-) -> str:
+def edit_file_multiline(path: str, edits: list[dict]) -> str:
     """
     Apply multiple search/replace edits in sequence.
 
@@ -103,28 +110,28 @@ def edit_file_multiline(
 
     try:
         # Read current content
-        with open(valid_path, 'r', encoding='utf-8') as f:
+        with open(valid_path, encoding="utf-8") as f:
             content = f.read()
 
         successful_edits = 0
 
         # Apply each edit in sequence
         for i, edit in enumerate(edits):
-            old_str = edit.get('old_string')
-            new_str = edit.get('new_string')
+            old_str = edit.get("old_string")
+            new_str = edit.get("new_string")
 
             if not old_str or new_str is None:
-                return f"Error: Edit #{i+1} missing 'old_string' or 'new_string'"
+                return f"Error: Edit #{i + 1} missing 'old_string' or 'new_string'"
 
             if old_str not in content:
-                return f"Error: Edit #{i+1} search string not found:\n'{old_str[:100]}...'"
+                return f"Error: Edit #{i + 1} search string not found:\n'{old_str[:100]}...'"
 
             # Apply the edit
             content = content.replace(old_str, new_str, 1)  # Replace first occurrence
             successful_edits += 1
 
         # Write back
-        with open(valid_path, 'w', encoding='utf-8') as f:
+        with open(valid_path, "w", encoding="utf-8") as f:
             f.write(content)
 
         return f"Successfully applied {successful_edits} edit(s) to {path}"

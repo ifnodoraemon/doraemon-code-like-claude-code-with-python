@@ -1,77 +1,89 @@
-import os
+"""
+Polymath Agent Definition for ADK Web Debugging.
+
+This module provides a standalone agent definition that can be used
+with Google ADK Web UI for debugging and development.
+
+Note: This is for development/debugging only. The main CLI uses
+the MCP client architecture defined in src/host/cli.py.
+"""
+
 import json
-import asyncio
-from adk import agent, tool
+import os
+from typing import Any
+
 from rich.console import Console
 
-# 导入所有 Server 的逻辑 (In-Process for ADK Web Debugging)
-# 这样 ADK Web 可以直接 inspect 到这些函数
-from src.servers.memory import save_note, search_notes, update_user_persona, get_user_persona
-from src.servers.web import search_internet, fetch_page
 from src.servers.computer import execute_python
-from src.servers.fs_read import read_file, list_directory
+from src.servers.fs_read import list_directory, read_file
 from src.servers.fs_write import write_file
+
+# Import tool implementations from servers (for in-process debugging)
+from src.servers.memory import get_user_persona, save_note, search_notes, update_user_persona
+from src.servers.web import fetch_page, search_internet
 
 console = Console()
 
-# --------------------------
-# 加载配置
-# --------------------------
-def load_config():
-    # 获取当前脚本所在目录 (src/) 的上一级目录 (项目根目录)
+
+def load_config() -> dict[str, Any]:
+    """Load configuration from .polymath/config.json."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config_path = os.path.join(base_dir, ".polymath", "config.json")
-    
+
     if not os.path.exists(config_path):
         return {"persona": {}}
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         return json.load(f)
+
 
 config = load_config()
 persona = config.get("persona", {})
 
-# --------------------------
-# Agent 定义
-# --------------------------
-@agent.define(
-    name=persona.get("name", "Polymath"),
-    model=os.getenv("MODEL_NAME", "gemini-1.5-pro"),
-    instructions=f"""
-    You are {persona.get('name', 'Polymath')}, a {persona.get('role', 'Generalist AI Assistant')}.
-    
+# Agent configuration for reference (used by external tools like ADK)
+AGENT_CONFIG = {
+    "name": persona.get("name", "Polymath"),
+    "model": os.getenv("MODEL_NAME", "gemini-2.0-flash"),
+    "description": f"A {persona.get('role', 'Generalist AI Assistant')} with access to memory, files, web, and code execution tools.",
+    "tools": [
+        # Memory Tools
+        {"name": "save_note", "function": save_note},
+        {"name": "search_notes", "function": search_notes},
+        {"name": "update_user_persona", "function": update_user_persona},
+        {"name": "get_user_persona", "function": get_user_persona},
+        # Web Tools
+        {"name": "search_internet", "function": search_internet},
+        {"name": "fetch_page", "function": fetch_page},
+        # Computer Tools
+        {"name": "execute_python", "function": execute_python},
+        # Filesystem Tools
+        {"name": "read_file", "function": read_file},
+        {"name": "list_directory", "function": list_directory},
+        {"name": "write_file", "function": write_file},
+    ],
+    "instructions": f"""
+    You are {persona.get("name", "Polymath")}, a {persona.get("role", "Generalist AI Assistant")}.
+
     You have access to a suite of powerful tools:
     1. [Memory]: You can save notes and recall user preferences.
-    2. [Files]: You can read files (PDFs, Images, Code) and list directories. 
+    2. [Files]: You can read files (PDFs, Images, Code) and list directories.
        Note: 'read_file' handles OCR automatically for images.
     3. [Web]: You can search and fetch internet content.
     4. [Computer]: Execute Python code.
-    
-    Always use the appropriate tool for the task. 
+
+    Always use the appropriate tool for the task.
     If asked to write something, check your memory for style guides first.
-    """
-)
-class PolymathAgent:
-    # --------------------------
-    # 注册所有工具 (Tools)
-    # --------------------------
-    
-    # [Memory Tools]
-    save_note = tool(save_note)
-    search_notes = tool(search_notes)
-    update_user_persona = tool(update_user_persona)
-    get_user_persona = tool(get_user_persona)
-    
-    # [Web Tools]
-    search_internet = tool(search_internet)
-    fetch_page = tool(fetch_page)
+    """,
+}
 
-    # [Computer Tools]
-    execute_python = tool(execute_python)
 
-    # [Filesystem Tools]
-    read_file = tool(read_file)
-    list_directory = tool(list_directory)
-    write_file = tool(write_file)
+def get_tool_functions() -> dict[str, callable]:
+    """Return a dictionary of tool name to function mappings."""
+    return {tool["name"]: tool["function"] for tool in AGENT_CONFIG["tools"]}
+
 
 if __name__ == "__main__":
-    console.print("[bold green]Polymath Agent Definition Loaded for ADK Web.[/bold green]")
+    console.print("[bold green]Polymath Agent Configuration Loaded.[/bold green]")
+    console.print(f"[dim]Agent Name: {AGENT_CONFIG['name']}[/dim]")
+    console.print(f"[dim]Available Tools: {len(AGENT_CONFIG['tools'])}[/dim]")
+    for tool in AGENT_CONFIG["tools"]:
+        console.print(f"  - {tool['name']}")

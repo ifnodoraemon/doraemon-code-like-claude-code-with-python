@@ -1,19 +1,39 @@
-import os
+"""
+Model-based Grader for Evaluation
+
+Uses LLM as a judge to evaluate agent outputs against rubrics.
+Implements structured grading with JSON responses.
+"""
+
 import json
-import google.generativeai as genai
-from typing import Dict, Any
+import os
+from typing import Any
+
+# Use new Google GenAI SDK (consistent with main CLI)
+from google import genai
+
 
 class ModelGrader:
+    """LLM-based grader for evaluating agent outputs."""
+
     def __init__(self, model_name: str = "gemini-1.5-pro"):
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not set for ModelGrader")
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
 
-    def grade(self, task: str, agent_output: str, rubric: str) -> Dict[str, Any]:
+    def grade(self, task: str, agent_output: str, rubric: str) -> dict[str, Any]:
         """
-        使用 LLM 作为裁判，对 Agent 的输出进行打分。
+        Use LLM as a judge to grade the Agent's output.
+
+        Args:
+            task: The original task description
+            agent_output: The agent's response to evaluate
+            rubric: Grading criteria
+
+        Returns:
+            Dictionary with score, reasoning, and pass status
         """
         prompt = f"""
         # Role
@@ -35,16 +55,26 @@ class ModelGrader:
         - "reasoning": (str) Explanation of the score
         - "pass": (bool) true if score >= 4
         """
-        
+
         try:
-            response = self.model.generate_content(prompt)
-            # 尝试提取 JSON
+            # Use new SDK API
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+            )
+            # Extract JSON from response
             text = response.text.strip()
             if text.startswith("```json"):
-                text = text[7:-3]
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
             return json.loads(text)
+        except json.JSONDecodeError as e:
+            return {"score": 0, "pass": False, "reasoning": f"JSON parsing failed: {str(e)}"}
         except Exception as e:
             return {"score": 0, "pass": False, "reasoning": f"Grading failed: {str(e)}"}
+
 
 if __name__ == "__main__":
     # Test
@@ -52,7 +82,6 @@ if __name__ == "__main__":
     res = grader.grade(
         task="Write a haiku about code.",
         agent_output="Code flows like a stream\nBugs vanish in the clear water\nSoftware is alive",
-        rubric="Must be a valid haiku (5-7-5 syllables). Must be about programming."
+        rubric="Must be a valid haiku (5-7-5 syllables). Must be about programming.",
     )
     print(res)
-
