@@ -2,557 +2,415 @@
 Polymath CLI - Main Command Line Interface
 
 Provides the primary interactive interface for Polymath AI agent.
-Supports multiple modes, slash commands, and tool execution with HITL approval.
+Features:
+- Multi-mode support (plan/build/coder/architect)
+- HITL (Human-in-the-loop) approval for sensitive operations
+- Rich terminal UI with markdown rendering
+- Vector memory (ChromaDB) for long-term recall
+- Direct tool calls (no subprocess overhead)
+- Automatic context summarization for unlimited conversation length
 """
 
 import asyncio
 import json
 import os
 import sys
-from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
-
-# 强制设置标准流编码，防止 UnicodeDecodeError
-if sys.stdin and hasattr(sys.stdin, "reconfigure"):
-    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
-if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-if sys.stderr and hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-
-# Google GenAI (New SDK)
 from google import genai
 from google.genai import types
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.table import Table
 
-# Core Imports
+# Direct imports (no DI container needed)
 from src.core.config import load_config
+from src.core.context_manager import ContextManager, ContextConfig
 from src.core.diff import print_diff
-
-# DI Container and Services
-from src.core.events import MessageEvents, SessionEvents, publish
 from src.core.prompts import get_system_prompt
-from src.core.rules import (
-    format_instructions_for_prompt,
-    load_all_instructions,
-)
-from src.core.services import initialize_services, resolve
-from src.core.telemetry import StructuredLogger, Tracer
+from src.core.rules import format_instructions_for_prompt, load_all_instructions
+from src.core.skills import SkillManager
+from src.host.tools import get_default_registry
 
-# 导入通用 MCP 客户端
-from src.host.client import MultiServerMCPClient
+# Fix encoding
+for stream in [sys.stdin, sys.stdout, sys.stderr]:
+    if stream and hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
 
-app = typer.Typer()
-
-# 加载 .env 环境变量
 load_dotenv()
 
-# Initialize services at module load (lazy initialization)
-_services_initialized = False
+app = typer.Typer()
+console = Console()
+
+# Mode colors (only two modes: plan and build)
+MODE_COLORS = {
+    "plan": "blue",
+    "build": "green",
+}
 
 
-def _ensure_services():
-    """Ensure services are initialized."""
-    global _services_initialized
-    if not _services_initialized:
-        initialize_services()
-        _services_initialized = True
-
-
-def get_console() -> Console:
-    """Get the console instance from DI container."""
-    _ensure_services()
-    console = resolve(Console)
-    return console if console else Console()
-
-
-def get_logger() -> StructuredLogger | None:
-    """Get the structured logger from DI container."""
-    _ensure_services()
-    return resolve(StructuredLogger)
-
-
-def get_tracer() -> Tracer | None:
-    """Get the tracer from DI container."""
-    _ensure_services()
-    return resolve(Tracer)
-
-
-# For backward compatibility
-console = Console()  # Will be replaced by DI when services are initialized
-
-
-@dataclass
-class SessionState:
-    """
-    Encapsulates the session state for the chat loop.
-
-    This replaces global variables with a proper state container,
-    making the code more testable and maintainable.
-    """
-
-    mode: str = "default"
-    project: str = "default"
-    turn_count: int = 0
-    chat_session: Any = None
-    tools: list = field(default_factory=list)
-    config: dict = field(default_factory=dict)
-
-    # Mode colors for display
-    MODE_COLORS: dict = field(
-        default_factory=lambda: {
-            "default": "green",
-            "plan": "blue",
-            "build": "green",
-            "coder": "cyan",
-            "architect": "magenta",
-        }
-    )
-
-    def get_mode_color(self) -> str:
-        """Get the display color for current mode."""
-        return self.MODE_COLORS.get(self.mode, "yellow")
-
-    def increment_turn(self) -> int:
-        """Increment and return turn count."""
-        self.turn_count += 1
-        return self.turn_count
-
-
-# Global session state (for backward compatibility with cli_commands)
-_session_state: SessionState | None = None
-
-
-def get_session_state() -> SessionState:
-    """Get the current session state."""
-    global _session_state
-    if _session_state is None:
-        _session_state = SessionState()
-    return _session_state
-
-
-def init_chat_model(client: genai.Client, mode: str, tools: list, history: list | None = None):
-    """Initialize the Gemini chat with a specific mode (system prompt)."""
+def create_chat(
+    client: genai.Client,
+    mode: str,
+    tools: list[types.FunctionDeclaration],
+    history: list | None = None,
+    skills_content: str = "",
+):
+    """Create a chat session with the given mode, tools, and skills."""
     config = load_config()
     persona = config.get("persona", {})
 
-    # Get prompt for mode
-    sys_instruction = get_system_prompt(mode, persona)
+    # Build system prompt
+    system_prompt = get_system_prompt(mode, persona)
 
-    # Load Project Rules (AGENTS.md)
+    # Add project rules (AGENTS.md)
     instructions = load_all_instructions(config)
     if instructions:
-        sys_instruction += format_instructions_for_prompt(instructions)
+        system_prompt += format_instructions_for_prompt(instructions)
 
-    # Load Project Memory if exists (legacy support for POLYMATH.md)
-    if os.path.exists("POLYMATH.md"):
-        try:
-            with open("POLYMATH.md") as f:
-                memory_content = f.read()
-            sys_instruction += f"\n\n=== PROJECT MEMORY (POLYMATH.md - DEPRECATED) ===\n{memory_content}\n=== Use AGENTS.md instead ===\n"
-        except Exception:
-            pass
+    # Add active skills (loaded on-demand based on context)
+    if skills_content:
+        system_prompt += f"\n\n{skills_content}"
 
-    # Create Chat with New SDK
-    # tools is a list of types.FunctionDeclaration
-    # We need to wrap them in types.Tool
-    tool_obj = types.Tool(function_declarations=tools)
-
-    # GenerateContentConfig
+    # Create chat
     gen_config = types.GenerateContentConfig(
-        tools=[tool_obj],
-        system_instruction=sys_instruction,
+        tools=[types.Tool(function_declarations=tools)],
+        system_instruction=system_prompt,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
 
-    # Check if history needs processing (New SDK expects list of Content objects or dicts)
-    # We assume 'history' passed here is compatible or empty
-    # Model can be configured via environment variable
-    if history is None:
-        history = []
-    model_name = os.getenv("POLYMATH_MODEL", os.getenv("MODEL_NAME", "gemini-2.0-flash"))
-    chat = client.chats.create(model=model_name, config=gen_config, history=history)
-    return chat
-
-
-async def handle_slash_command(
-    command: str,
-    chat_session_ref: dict,
-    mcp_client: MultiServerMCPClient,
-    active_tools: list,
-    client: genai.Client,
-    session: SessionState,
-) -> bool:
-    """
-    Handle slash commands using the new command dispatch system.
-
-    Args:
-        command: The slash command string
-        chat_session_ref: Dict containing the chat session (for modification)
-        mcp_client: MCP client instance
-        active_tools: List of available tools
-        client: GenAI client
-        session: Session state object
-
-    Returns:
-        True to continue, "EXIT" to quit, False on error
-    """
-    # Import the command dispatcher
-    from src.host.cli_commands import dispatch_command
-
-    # Build context for command execution
-    context = {
-        "chat": chat_session_ref,
-        "client": client,
-        "mode": session.mode,
-        "tools": active_tools,
-        "mcp_client": mcp_client,
-        "mcp_servers": list(mcp_client.sessions.keys()) if mcp_client else [],
-    }
-
-    # Dispatch to command handler
-    result = await dispatch_command(command, context)
-
-    # Update session mode if it changed
-    if context["mode"] != session.mode:
-        session.mode = context["mode"]
-
-    return result
+    model_name = os.getenv("POLYMATH_MODEL", "gemini-2.0-flash")
+    return client.chats.create(model=model_name, config=gen_config, history=history or [])
 
 
 async def chat_loop(project: str = "default"):
-    """
-    Main chat loop for interactive session.
+    """Main chat loop with automatic context management."""
 
-    Args:
-        project: Project name for memory isolation
-    """
-    global _session_state
-
-    # Initialize services (DI container)
-    _ensure_services()
-    output = get_console()
-    logger = get_logger()
-    _tracer = get_tracer()  # Reserved for future distributed tracing
-
-    # Log session start
-    if logger:
-        logger.info("Session starting", project=project)
-
-    # Publish session started event
-    publish(SessionEvents.STARTED, project=project)
-
-    # Initialize session state
-    session = SessionState(project=project)
-    _session_state = session
-
-    # 1. 环境检查
+    # 1. Check API key
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        if logger:
-            logger.error("Missing API key", key="GOOGLE_API_KEY")
-        output.print("[red]错误: 未设置 GOOGLE_API_KEY[/red]")
+        console.print("[red]Error: GOOGLE_API_KEY not set[/red]")
         return
 
-    # Initialize New Client
+    # 2. Initialize client
     try:
         client = genai.Client(api_key=api_key)
-        if logger:
-            logger.debug("GenAI client initialized")
     except Exception as e:
-        if logger:
-            logger.error("Failed to initialize GenAI client", exception=e)
-        output.print(f"[red]Failed to initialize Google GenAI Client: {e}[/red]")
+        console.print(f"[red]Failed to initialize client: {e}[/red]")
         return
 
-    output.print(f"[bold yellow]Project: {project}[/bold yellow]")
+    # 3. Initialize tools (direct function calls, no MCP)
+    registry = get_default_registry()
+    tools = registry.get_genai_tools()
+    sensitive_tools = registry.get_sensitive_tools()
 
-    # 2. 初始化 MCP 客户端
-    config = load_config()
-    session.config = config
-    mcp_client = MultiServerMCPClient()
+    # 4. Initialize context manager
+    ctx_config = ContextConfig(
+        max_context_tokens=100_000,
+        summarize_threshold=0.7,
+        keep_recent_messages=6,
+        auto_save=True,
+    )
+    ctx = ContextManager(project=project, config=ctx_config)
 
-    if logger:
-        logger.debug("Connecting to MCP servers")
+    # 5. Initialize skill manager
+    skill_mgr = SkillManager(project_dir=Path.cwd(), max_skill_tokens=5000)
+    active_skills_content = ""  # Will be populated based on context
 
-    await mcp_client.connect_to_config(config)
+    # Show startup info
+    console.print(f"[bold yellow]Project: {project}[/bold yellow]")
+    console.print(f"[dim]Tools loaded: {len(tools)}[/dim]")
 
-    # Show connection errors if any
-    if mcp_client.has_errors():
-        for err in mcp_client.get_connection_errors():
-            if logger:
-                logger.warning("MCP connection error", error=str(err))
-            output.print(f"[yellow]Warning: {err}[/yellow]")
-
-    if logger:
-        logger.info(
-            "MCP servers connected",
-            servers=list(mcp_client.sessions.keys()),
-            tool_count=len(mcp_client.tool_map),
+    stats = ctx.get_context_stats()
+    if stats["messages"] > 0 or stats["summaries"] > 0:
+        console.print(
+            f"[dim]Restored context: {stats['messages']} messages, "
+            f"{stats['summaries']} summaries[/dim]"
         )
 
-    # 敏感工具列表
-    sensitive_tools = config.get(
-        "sensitive_tools", ["execute_python", "write_file", "save_note", "move_file", "delete_file"]
+    # 6. State
+    mode = "build"  # Default to build mode
+    turn_count = 0
+
+    # Create initial chat with restored history
+    history = ctx.get_history_for_api()
+    chat = create_chat(client, mode, tools, history, active_skills_content)
+
+    console.print(
+        Panel.fit(
+            f"[bold blue]Polymath[/bold blue]\n"
+            f"[dim]Type /help for commands. Mode: {mode}[/dim]",
+            border_style="blue",
+        )
     )
 
-    try:
-        # 3. 准备工具
-        genai_tools = await mcp_client.get_genai_tools()
-        active_tools = genai_tools
-        session.tools = active_tools
+    # 5. Main loop
+    while True:
+        mode_color = MODE_COLORS.get(mode, "yellow")
+        user_input = Prompt.ask(f"\n[bold {mode_color}]You ({mode})[/bold {mode_color}]")
 
-        # 4. 初始化模型 (Initial Chat)
-        chat_ref = {"session": init_chat_model(client, session.mode, active_tools, [])}
-        session.chat_session = chat_ref["session"]
+        # Exit
+        if user_input.lower() in ["exit", "quit", "/exit"]:
+            break
 
-        output.print(
-            Panel.fit(
-                f"[bold blue]Polymath v0.4.0 (Multi-Mode + DI)[/bold blue]\n"
-                f"[dim]Servers: {', '.join(mcp_client.sessions.keys())}[/dim]\n"
-                f"[dim]Type /help for commands. Current Mode: {session.mode}[/dim]",
-                border_style="blue",
-            )
-        )
+        # Slash commands
+        if user_input.startswith("/"):
+            cmd = user_input[1:].split()[0].lower()
 
-        # 5. 聊天主循环
-        while True:
-            # Show current mode in prompt
-            mode_color = session.get_mode_color()
-            user_input = Prompt.ask(
-                f"\n[bold {mode_color}]You ({session.mode})[/bold {mode_color}]"
-            )
+            if cmd == "help":
+                console.print("""
+[bold]Commands:[/bold]
+  /mode <name>  - Switch mode (plan/build)
+  /context      - Show context/memory statistics
+  /skills       - Show loaded skills
+  /clear        - Clear conversation (keeps summaries)
+  /reset        - Full reset (clears everything)
+  /tools        - List available tools
+  /debug        - Show debug info
+  /exit         - Exit
 
-            if user_input.lower() in ["exit", "quit"]:
-                break
-
-            # 处理 Slash Commands
-            if user_input.startswith("/"):
-                result = await handle_slash_command(
-                    user_input, chat_ref, mcp_client, active_tools, client, session
-                )
-                if result == "EXIT":
-                    break
-                if result:
-                    continue
-
-            chat = chat_ref["session"]
-
-            # 发送消息
-            response = None
-            try:
-                with output.status(
-                    f"[bold {mode_color}]Thinking ({session.mode})...[/bold {mode_color}]",
-                    spinner="dots",
-                ):
-                    response = chat.send_message(user_input)
-            except Exception as e:
-                output.print(f"[red]API Error: {e}[/red]")
+[bold]Modes:[/bold]
+  plan   - Analyze requirements, investigate code, create plans (read-only)
+  build  - Implement solutions, write code, execute tasks
+""")
                 continue
 
-            # 处理多轮对话 (Tool Loop)
-            while True:
-                if not response.candidates:
-                    output.print("[red]Error: Empty response from model.[/red]")
-                    break
+            elif cmd == "mode":
+                parts = user_input.split()
+                if len(parts) > 1:
+                    new_mode = parts[1].lower()
+                    if new_mode in MODE_COLORS:
+                        mode = new_mode
+                        # Rebuild chat with new mode but KEEP context history
+                        history = ctx.get_history_for_api()
+                        chat = create_chat(client, mode, tools, history)
+                        console.print(f"[green]Switched to {mode} mode (context preserved)[/green]")
+                    else:
+                        console.print(f"[red]Unknown mode: {new_mode}[/red]")
+                else:
+                    console.print(f"Current mode: {mode}")
+                continue
 
-                # New SDK: response.candidates[0].content.parts
-                parts = response.candidates[0].content.parts
-                has_tool_call = False
-                tool_results = []
+            elif cmd == "context":
+                stats = ctx.get_context_stats()
+                table = Table(title="Context Statistics", show_header=False)
+                table.add_column("Key", style="cyan")
+                table.add_column("Value", style="green")
+                table.add_row("Session ID", stats["session_id"])
+                table.add_row("Messages", str(stats["messages"]))
+                table.add_row("Summaries", str(stats["summaries"]))
+                table.add_row("Total Ever", str(stats["total_messages_ever"]))
+                table.add_row("Est. Tokens", f"{stats['estimated_tokens']:,}")
+                table.add_row("Last Prompt", f"{stats['last_prompt_tokens']:,}")
+                table.add_row("Threshold", f"{stats['threshold_tokens']:,}")
+                table.add_row("Usage", f"{stats['usage_percent']}%")
+                active = skill_mgr.get_active_skills()
+                table.add_row("Active Skills", ", ".join(active) if active else "(none)")
+                if stats["needs_summary"]:
+                    table.add_row("Status", "[yellow]Summary needed[/yellow]")
+                console.print(table)
+                continue
 
-                for part in parts:
-                    # 1. 处理思考文本 (Text)
-                    if part.text:
-                        output.print(
-                            Panel(
-                                Markdown(part.text),
-                                title="[bold purple]Thought[/bold purple]",
-                                border_style="purple",
-                                expand=False,
-                            )
+            elif cmd == "skills":
+                # Show available and active skills
+                console.print("[bold]Skills System[/bold]")
+                active = skill_mgr.get_active_skills()
+                if active:
+                    console.print(f"  [green]Active:[/green] {', '.join(active)}")
+                else:
+                    console.print("  [dim]No skills currently active[/dim]")
+                console.print("\n[dim]Skills are loaded automatically based on conversation context.[/dim]")
+                console.print("[dim]Put SKILL.md files in .polymath/skills/<name>/ to add custom skills.[/dim]")
+                continue
+
+            elif cmd == "clear":
+                ctx.clear(keep_summaries=True)
+                history = ctx.get_history_for_api()
+                chat = create_chat(client, mode, tools, history, active_skills_content)
+                console.print("[green]Conversation cleared (summaries preserved)[/green]")
+                continue
+
+            elif cmd == "reset":
+                ctx.reset()
+                active_skills_content = ""  # Reset skills too
+                chat = create_chat(client, mode, tools, [], "")
+                turn_count = 0
+                console.print("[green]Full reset complete[/green]")
+                continue
+
+            elif cmd == "tools":
+                tool_names = registry.get_tool_names()
+                console.print(f"[bold]Available tools ({len(tool_names)}):[/bold]")
+                for name in sorted(tool_names):
+                    marker = "🔒" if name in sensitive_tools else "  "
+                    console.print(f"  {marker} {name}")
+                continue
+
+            elif cmd == "debug":
+                console.print(f"Mode: {mode}")
+                console.print(f"Turn: {turn_count}")
+                console.print(f"Tools: {len(tools)}")
+                console.print(f"Project: {project}")
+                stats = ctx.get_context_stats()
+                console.print(f"Context: {stats['messages']} msgs, {stats['summaries']} summaries")
+                continue
+
+            else:
+                console.print(f"[yellow]Unknown command: {cmd}[/yellow]")
+                continue
+
+        # Track user message in context
+        ctx.add_user_message(user_input)
+
+        # Check if we need to load/update skills based on user input
+        new_skills_content = skill_mgr.get_skills_for_context(user_input)
+        if new_skills_content != active_skills_content:
+            active_skills_content = new_skills_content
+            new_active = skill_mgr.get_active_skills()
+            if new_active:
+                console.print(f"[dim cyan]Skills loaded: {', '.join(new_active)}[/dim cyan]")
+            # Rebuild chat with new skills
+            history = ctx.get_history_for_api()
+            chat = create_chat(client, mode, tools, history, active_skills_content)
+
+        # Send message
+        try:
+            with console.status(f"[bold {mode_color}]Thinking...[/bold {mode_color}]"):
+                response = chat.send_message(user_input)
+        except Exception as e:
+            console.print(f"[red]API Error: {e}[/red]")
+            continue
+
+        # Process response (tool loop)
+        accumulated_text = ""  # Accumulate all text parts for context tracking
+
+        while True:
+            if not response.candidates:
+                console.print("[red]Empty response[/red]")
+                break
+
+            parts = response.candidates[0].content.parts
+            has_tool_call = False
+            tool_results = []
+
+            for part in parts:
+                # Text response
+                if part.text:
+                    accumulated_text += part.text
+                    console.print(
+                        Panel(
+                            Markdown(part.text),
+                            title="[bold purple]Response[/bold purple]",
+                            border_style="purple",
+                            expand=False,
                         )
-
-                    # 2. 处理工具调用 (Function Call)
-                    if part.function_call:
-                        has_tool_call = True
-                        fc = part.function_call
-                        tool_name = fc.name
-                        args = fc.args
-
-                        # Convert args to dict safely
-                        if hasattr(args, "items"):
-                            args_dict = dict(args.items())
-                        else:
-                            try:
-                                args_dict = dict(args)
-                            except (TypeError, ValueError):
-                                args_dict = {}
-
-                        # 注入当前项目上下文
-                        if tool_name in ["save_note", "search_notes"]:
-                            args_dict["collection_name"] = session.project
-
-                        # --- Transparency: Diff View ---
-                        if (
-                            tool_name == "write_file"
-                            and "content" in args_dict
-                            and "path" in args_dict
-                        ):
-                            output.print(
-                                f"\n[bold yellow]📝 Proposing changes to:[/bold yellow] {args_dict['path']}"
-                            )
-                            print_diff(args_dict["path"], args_dict["content"])
-
-                        # --- Security: Approval ---
-                        tool_result = None
-                        if tool_name in sensitive_tools:
-                            output.print(f"\n[bold red]⚠️  Sensitive Action:[/bold red] {tool_name}")
-                            if tool_name != "write_file":
-                                output.print(
-                                    f"[dim]Args: {json.dumps(args_dict, indent=2, ensure_ascii=False)}[/dim]"
-                                )
-
-                            confirm = Prompt.ask("Execute?", choices=["y", "n"], default="n")
-                            if confirm.lower() != "y":
-                                tool_result = "User denied the operation."
-                                if logger:
-                                    logger.info("Tool call denied by user", tool=tool_name)
-                                publish(
-                                    MessageEvents.TOOL_CALL,
-                                    tool_name=tool_name,
-                                    status="denied",
-                                )
-                                output.print("[red]Cancelled.[/red]")
-                            else:
-                                if logger:
-                                    logger.info("Executing sensitive tool", tool=tool_name)
-                                publish(
-                                    MessageEvents.TOOL_CALL,
-                                    tool_name=tool_name,
-                                    status="executing",
-                                    sensitive=True,
-                                )
-                                output.print(f"[cyan]Running {tool_name}...[/cyan]")
-                                tool_result = await mcp_client.call_tool(tool_name, args_dict)
-                                publish(
-                                    MessageEvents.TOOL_RESULT,
-                                    tool_name=tool_name,
-                                    success=True,
-                                )
-                        else:
-                            if logger:
-                                logger.debug("Executing tool", tool=tool_name)
-                            publish(
-                                MessageEvents.TOOL_CALL,
-                                tool_name=tool_name,
-                                status="executing",
-                            )
-                            output.print(f"[cyan]Running {tool_name}...[/cyan]")
-                            tool_result = await mcp_client.call_tool(tool_name, args_dict)
-                            publish(
-                                MessageEvents.TOOL_RESULT,
-                                tool_name=tool_name,
-                                success=True,
-                            )
-
-                        tool_results.append({"name": tool_name, "result": {"result": tool_result}})
-
-                if not has_tool_call:
-                    turn = session.increment_turn()
-                    usage = response.usage_metadata
-                    if usage:
-                        output.print(
-                            f"\n[dim italic]Turn {turn} | Input: {usage.prompt_token_count} | Output: {usage.candidates_token_count}[/dim italic]"
-                        )
-                    break
-
-                # 发回结果 (New SDK Style)
-                response_parts = []
-                for tr in tool_results:
-                    response_parts.append(
-                        types.Part.from_function_response(name=tr["name"], response=tr["result"])
                     )
 
-                with output.status("[bold cyan]Processing Results...[/bold cyan]", spinner="dots"):
-                    response = chat.send_message(response_parts)
+                # Tool call
+                if part.function_call:
+                    has_tool_call = True
+                    fc = part.function_call
+                    tool_name = fc.name
+                    args = dict(fc.args.items()) if hasattr(fc.args, "items") else {}
 
-    finally:
-        if logger:
-            logger.info(
-                "Session ending",
-                project=project,
-                turns=session.turn_count,
-                mode=session.mode,
-            )
-        # Publish session ended event
-        publish(
-            SessionEvents.ENDED,
-            project=project,
-            turns=session.turn_count,
-            mode=session.mode,
-        )
-        await mcp_client.cleanup()
+                    # Inject project context for memory tools
+                    if tool_name in ["save_note", "search_notes"]:
+                        args["collection_name"] = project
 
+                    # Show diff for write operations
+                    if tool_name == "write_file" and "content" in args and "path" in args:
+                        console.print(
+                            f"\n[bold yellow]📝 Proposing changes:[/bold yellow] {args['path']}"
+                        )
+                        print_diff(args["path"], args["content"])
 
-@app.command()
-def setup():
-    """初始化环境并安装依赖"""
-    import subprocess
+                    # HITL approval for sensitive tools
+                    tool_result = None
+                    if tool_name in sensitive_tools:
+                        console.print(f"\n[bold red]⚠️ Sensitive:[/bold red] {tool_name}")
+                        if tool_name != "write_file":
+                            console.print(
+                                f"[dim]{json.dumps(args, indent=2, ensure_ascii=False)}[/dim]"
+                            )
 
-    console.print("[bold cyan]正在启动自动设置流程...[/bold cyan]")
-    try:
-        # 运行 shell 脚本
-        subprocess.run(["bash", "scripts/setup.sh"], check=True)
-    except Exception as e:
-        console.print(f"[bold red]设置失败: {e}[/bold red]")
+                        if Prompt.ask("Execute?", choices=["y", "n"], default="n") != "y":
+                            tool_result = "User denied the operation."
+                            console.print("[red]Cancelled[/red]")
+                        else:
+                            console.print(f"[cyan]Running {tool_name}...[/cyan]")
+                            tool_result = await registry.call_tool(tool_name, args)
+                    else:
+                        console.print(f"[cyan]Running {tool_name}...[/cyan]")
+                        tool_result = await registry.call_tool(tool_name, args)
 
+                    tool_results.append({"name": tool_name, "result": {"result": tool_result}})
 
-@app.command()
-def tui(project: str = "default"):
-    """启动 Polymath TUI (Textual界面)"""
-    try:
-        from .tui import run_tui
+            # No more tool calls - done with this turn
+            if not has_tool_call:
+                turn_count += 1
+                usage = response.usage_metadata
 
-        console.print("[cyan]Launching Polymath TUI...[/cyan]")
-        run_tui()
-    except ImportError as e:
-        console.print("[red]Error: Textual not installed. Run: pip install textual[/red]")
-        console.print(f"[dim]{e}[/dim]")
-    except Exception as e:
-        console.print(f"[red]TUI Error: {e}[/red]")
+                # Track assistant response in context with actual token counts
+                prompt_tokens = usage.prompt_token_count if usage else None
+                completion_tokens = usage.candidates_token_count if usage else None
+
+                # Record messages before summary check
+                prev_summary_count = len(ctx.summaries)
+                ctx.add_assistant_message(
+                    accumulated_text,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+
+                # Check if summarization occurred - need to rebuild chat
+                if len(ctx.summaries) > prev_summary_count:
+                    console.print(
+                        "[dim yellow]Context summarized to save memory. "
+                        "Rebuilding conversation...[/dim yellow]"
+                    )
+                    history = ctx.get_history_for_api()
+                    chat = create_chat(client, mode, tools, history, active_skills_content)
+
+                # Show usage stats
+                if usage:
+                    stats = ctx.get_context_stats()
+                    console.print(
+                        f"\n[dim]Turn {turn_count} | "
+                        f"In: {usage.prompt_token_count:,} | "
+                        f"Out: {usage.candidates_token_count:,} | "
+                        f"Ctx: {stats['usage_percent']}%[/dim]"
+                    )
+                break
+
+            # Send tool results back
+            response_parts = [
+                types.Part.from_function_response(name=tr["name"], response=tr["result"])
+                for tr in tool_results
+            ]
+
+            with console.status("[cyan]Processing...[/cyan]"):
+                response = chat.send_message(response_parts)
 
 
 @app.command()
 def start(project: str = "default"):
-    """启动 Polymath CLI（命令行界面）"""
-    # 依赖检查 - use find_spec to avoid unused import warnings
-    import importlib.util
-
-    missing_deps = []
-    if importlib.util.find_spec("google.genai") is None:
-        missing_deps.append("google-genai")
-    if importlib.util.find_spec("mcp") is None:
-        missing_deps.append("mcp")
-
-    if missing_deps:
-        console.print(
-            f"[yellow]警告: 核心依赖未安装: {', '.join(missing_deps)}。"
-            f"请运行 'pip install {' '.join(missing_deps)}' 或 'pl setup'。[/yellow]"
-        )
-        if not Prompt.ask("是否继续启动？", choices=["y", "n"], default="n") == "y":
-            return
-
+    """Start Polymath CLI."""
     asyncio.run(chat_loop(project=project))
 
 
+@app.command()
+def version():
+    """Show version information."""
+    console.print("[bold]Polymath v0.5.0[/bold]")
+    console.print("[dim]Simplified architecture with direct tool calls[/dim]")
+
+
 def entry_point():
+    """Entry point for the CLI."""
     app()
 
 

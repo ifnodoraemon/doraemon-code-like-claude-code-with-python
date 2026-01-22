@@ -1,8 +1,8 @@
 """Rules and instructions loading system for Polymath.
 
 This module handles loading project rules from:
-1. AGENTS.md in project directory
-2. AGENTS.md in ~/.polymath/
+1. POLYMATH.md in project directory (project-specific rules)
+2. POLYMATH.md in ~/.polymath/ (global user rules)
 3. Additional instruction files specified in config
 """
 
@@ -12,54 +12,57 @@ from .logger import get_logger
 
 logger = get_logger(__name__)
 
+# The rules file name
+RULES_FILE = "POLYMATH.md"
 
-def load_agents_md(project_dir: Path | None = None) -> str | None:
+
+def load_project_rules(project_dir: Path | None = None) -> str | None:
     """
-    Load AGENTS.md file from project directory.
+    Load POLYMATH.md file from project directory.
 
     Args:
         project_dir: Project directory to search in (defaults to cwd)
 
     Returns:
-        Content of AGENTS.md or None if not found
+        Content of POLYMATH.md or None if not found
     """
     if project_dir is None:
         project_dir = Path.cwd()
 
-    agents_file = project_dir / "AGENTS.md"
+    rules_file = project_dir / RULES_FILE
 
-    if agents_file.exists():
+    if rules_file.exists():
         try:
-            content = agents_file.read_text(encoding="utf-8")
-            logger.info(f"Loaded project AGENTS.md: {agents_file}")
+            content = rules_file.read_text(encoding="utf-8")
+            logger.info(f"Loaded project rules: {rules_file}")
             return content
         except Exception as e:
-            logger.error(f"Failed to read AGENTS.md: {e}")
+            logger.error(f"Failed to read {RULES_FILE}: {e}")
             return None
 
-    logger.debug("No project AGENTS.md found")
+    logger.debug(f"No project {RULES_FILE} found")
     return None
 
 
-def load_global_agents_md() -> str | None:
+def load_global_rules() -> str | None:
     """
-    Load AGENTS.md from user's home directory.
+    Load POLYMATH.md from user's home directory.
 
     Returns:
-        Content of global AGENTS.md or None if not found
+        Content of global POLYMATH.md or None if not found
     """
-    global_agents = Path.home() / ".polymath" / "AGENTS.md"
+    global_rules = Path.home() / ".polymath" / RULES_FILE
 
-    if global_agents.exists():
+    if global_rules.exists():
         try:
-            content = global_agents.read_text(encoding="utf-8")
-            logger.info(f"Loaded global AGENTS.md: {global_agents}")
+            content = global_rules.read_text(encoding="utf-8")
+            logger.info(f"Loaded global rules: {global_rules}")
             return content
         except Exception as e:
-            logger.error(f"Failed to read global AGENTS.md: {e}")
+            logger.error(f"Failed to read global {RULES_FILE}: {e}")
             return None
 
-    logger.debug("No global AGENTS.md found")
+    logger.debug(f"No global {RULES_FILE} found")
     return None
 
 
@@ -122,8 +125,8 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     Load all instructions from various sources and combine them.
 
     Loading order:
-    1. Project AGENTS.md
-    2. Global AGENTS.md
+    1. Project POLYMATH.md (highest priority)
+    2. Global POLYMATH.md
     3. Additional instruction files from config
 
     Args:
@@ -135,15 +138,15 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     """
     instructions = []
 
-    # 1. Project AGENTS.md (highest priority)
-    project_agents = load_agents_md(project_dir)
-    if project_agents:
-        instructions.append("# Project Rules (AGENTS.md)\n\n" + project_agents)
+    # 1. Project POLYMATH.md (highest priority)
+    project_rules = load_project_rules(project_dir)
+    if project_rules:
+        instructions.append(f"# Project Rules ({RULES_FILE})\n\n" + project_rules)
 
-    # 2. Global AGENTS.md
-    global_agents = load_global_agents_md()
-    if global_agents:
-        instructions.append("# Global Rules (~/.polymath/AGENTS.md)\n\n" + global_agents)
+    # 2. Global POLYMATH.md
+    global_rules = load_global_rules()
+    if global_rules:
+        instructions.append(f"# Global Rules (~/.polymath/{RULES_FILE})\n\n" + global_rules)
 
     # 3. Additional instruction files from config
     instruction_files = config.get("instructions", [])
@@ -167,24 +170,24 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     return combined
 
 
-def create_default_agents_md(project_dir: Path | None = None) -> Path:
+def create_default_rules(project_dir: Path | None = None) -> Path:
     """
-    Create a default AGENTS.md file in the project directory.
+    Create a default POLYMATH.md file in the project directory.
 
     Args:
         project_dir: Project directory (defaults to cwd)
 
     Returns:
-        Path to created AGENTS.md file
+        Path to created POLYMATH.md file
     """
     if project_dir is None:
         project_dir = Path.cwd()
 
-    agents_file = project_dir / "AGENTS.md"
+    rules_file = project_dir / RULES_FILE
 
-    default_content = """# Polymath Project Rules
+    default_content = """# Project Rules
 
-This file contains project-specific rules and conventions that Polymath will follow.
+This file contains project-specific rules and conventions for Polymath.
 
 ## Project Overview
 <!-- Brief description of what this project does -->
@@ -204,15 +207,12 @@ This file contains project-specific rules and conventions that Polymath will fol
 ## Important Notes
 <!-- Any project-specific conventions, gotchas, or important information -->
 
-## Example Usage
-<!-- Show how to use your project's main features -->
-
 """
 
-    agents_file.write_text(default_content, encoding="utf-8")
-    logger.info(f"Created default AGENTS.md: {agents_file}")
+    rules_file.write_text(default_content, encoding="utf-8")
+    logger.info(f"Created default {RULES_FILE}: {rules_file}")
 
-    return agents_file
+    return rules_file
 
 
 def format_instructions_for_prompt(instructions: str) -> str:
