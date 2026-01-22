@@ -42,8 +42,41 @@
       "command": "python3",
       "args": ["src/servers/task.py"],
       "env": {}
+    },
+    "shell": {
+      "command": "python3",
+      "args": ["src/servers/shell.py"],
+      "env": {}
+    },
+    "git": {
+      "command": "python3",
+      "args": ["src/servers/git.py"],
+      "env": {}
+    },
+    "lint": {
+      "command": "python3",
+      "args": ["src/servers/lint.py"],
+      "env": {}
+    },
+    "semantic_search": {
+      "command": "python3",
+      "args": ["src/servers/semantic_search.py"],
+      "env": {}
     }
   },
+  "sensitive_tools": [
+    "execute_python",
+    "execute_command",
+    "execute_command_background",
+    "write_file",
+    "edit_file",
+    "save_note",
+    "move_file",
+    "delete_file",
+    "git_commit",
+    "git_push",
+    "gh_pr_create"
+  ],
   "persona": {
     "name": "Polymath",
     "role": "Generalist AI Assistant & Coder"

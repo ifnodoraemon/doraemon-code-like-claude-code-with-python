@@ -4,9 +4,7 @@ Unit tests for Error Handling and Retry Mechanisms.
 Tests error categorization, retry policies, and circuit breaker pattern.
 """
 
-import asyncio
 import time
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,6 +24,12 @@ from src.core.errors import (
     get_error_handler,
     retry,
 )
+
+
+class _CircuitBreakerError(Exception):
+    """Custom exception for circuit breaker tests."""
+
+    pass
 
 
 class TestPolymathExceptions:
@@ -84,7 +88,7 @@ class TestRetryPolicy:
         config = RetryConfig(
             max_attempts=3,
             initial_delay=0.01,  # Fast for testing
-            retryable_exceptions=(TransientError,)
+            retryable_exceptions=(TransientError,),
         )
         policy = RetryPolicy(config)
         call_count = 0
@@ -104,9 +108,7 @@ class TestRetryPolicy:
     def test_max_attempts_exceeded(self):
         """Test that max attempts are enforced"""
         config = RetryConfig(
-            max_attempts=3,
-            initial_delay=0.01,
-            retryable_exceptions=(TransientError,)
+            max_attempts=3, initial_delay=0.01, retryable_exceptions=(TransientError,)
         )
         policy = RetryPolicy(config)
         call_count = 0
@@ -124,9 +126,7 @@ class TestRetryPolicy:
     def test_non_retryable_exception(self):
         """Test that non-retryable exceptions are raised immediately"""
         config = RetryConfig(
-            max_attempts=3,
-            initial_delay=0.01,
-            retryable_exceptions=(TransientError,)
+            max_attempts=3, initial_delay=0.01, retryable_exceptions=(TransientError,)
         )
         policy = RetryPolicy(config)
         call_count = 0
@@ -144,11 +144,7 @@ class TestRetryPolicy:
     def test_exponential_backoff(self):
         """Test exponential backoff delay calculation"""
         config = RetryConfig(
-            max_attempts=4,
-            initial_delay=1.0,
-            exponential_base=2.0,
-            jitter=False,
-            max_delay=100.0
+            max_attempts=4, initial_delay=1.0, exponential_base=2.0, jitter=False, max_delay=100.0
         )
         policy = RetryPolicy(config)
 
@@ -160,10 +156,7 @@ class TestRetryPolicy:
     def test_max_delay_cap(self):
         """Test that delay is capped at max_delay"""
         config = RetryConfig(
-            initial_delay=10.0,
-            exponential_base=10.0,
-            max_delay=50.0,
-            jitter=False
+            initial_delay=10.0, exponential_base=10.0, max_delay=50.0, jitter=False
         )
         policy = RetryPolicy(config)
 
@@ -172,10 +165,7 @@ class TestRetryPolicy:
 
     def test_retry_after_from_exception(self):
         """Test that retry_after from exception is respected"""
-        config = RetryConfig(
-            initial_delay=1.0,
-            jitter=False
-        )
+        config = RetryConfig(initial_delay=1.0, jitter=False)
         policy = RetryPolicy(config)
         exc = TransientError("Error", retry_after=10.0)
 
@@ -245,11 +235,11 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(config)
 
         def fail():
-            raise Exception("Failure")
+            raise _CircuitBreakerError("Failure")
 
         # Cause failures up to threshold
         for _ in range(3):
-            with pytest.raises(Exception):
+            with pytest.raises(_CircuitBreakerError):
                 breaker.call(fail)
 
         assert breaker.state == CircuitState.OPEN
@@ -260,8 +250,8 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(config)
 
         # Open the circuit
-        with pytest.raises(Exception):
-            breaker.call(lambda: (_ for _ in ()).throw(Exception("Failure")))
+        with pytest.raises(_CircuitBreakerError):
+            breaker.call(lambda: (_ for _ in ()).throw(_CircuitBreakerError("Failure")))
 
         # Should reject immediately
         with pytest.raises(CircuitBreakerOpenError):
@@ -272,13 +262,13 @@ class TestCircuitBreaker:
         config = CircuitBreakerConfig(
             failure_threshold=1,
             success_threshold=1,  # Close after 1 success in half-open
-            timeout=0.01
+            timeout=0.01,
         )
         breaker = CircuitBreaker(config)
 
         # Open the circuit
-        with pytest.raises(Exception):
-            breaker.call(lambda: (_ for _ in ()).throw(Exception("Failure")))
+        with pytest.raises(_CircuitBreakerError):
+            breaker.call(lambda: (_ for _ in ()).throw(_CircuitBreakerError("Failure")))
 
         assert breaker.state == CircuitState.OPEN
 
@@ -298,8 +288,8 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(config)
 
         # Open the circuit
-        with pytest.raises(Exception):
-            breaker.call(lambda: (_ for _ in ()).throw(Exception("Failure")))
+        with pytest.raises(_CircuitBreakerError):
+            breaker.call(lambda: (_ for _ in ()).throw(_CircuitBreakerError("Failure")))
 
         assert breaker.state == CircuitState.OPEN
 
@@ -319,13 +309,13 @@ class TestCircuitBreaker:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise Exception("Failure")
+                raise _CircuitBreakerError("Failure")
             return "success"
 
         # First two calls fail
-        with pytest.raises(Exception):
+        with pytest.raises(_CircuitBreakerError):
             protected_function()
-        with pytest.raises(Exception):
+        with pytest.raises(_CircuitBreakerError):
             protected_function()
 
         # Circuit should be open
