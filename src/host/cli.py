@@ -26,8 +26,6 @@ from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -59,6 +57,16 @@ from src.core.thinking import ThinkingManager, ThinkingMode
 from src.core.doctor import Doctor
 from src.core.themes import ThemeManager
 
+# Unified Model Client (supports Gateway and Direct modes)
+from src.core.model_client import (
+    ModelClient,
+    ClientConfig,
+    ClientMode,
+    Message,
+    ToolDefinition,
+    ChatResponse,
+)
+
 # Fix encoding
 for stream in [sys.stdin, sys.stdout, sys.stderr]:
     if stream and hasattr(stream, "reconfigure"):
@@ -76,14 +84,8 @@ MODE_COLORS = {
 }
 
 
-def create_chat(
-    client: genai.Client,
-    mode: str,
-    tools: list[types.FunctionDeclaration],
-    history: list | None = None,
-    skills_content: str = "",
-):
-    """Create a chat session with the given mode, tools, and skills."""
+def build_system_prompt(mode: str, skills_content: str = "") -> str:
+    """Build the system prompt with mode, rules, and skills."""
     config = load_config()
     persona = config.get("persona", {})
 
@@ -99,15 +101,27 @@ def create_chat(
     if skills_content:
         system_prompt += f"\n\n{skills_content}"
 
-    # Create chat
-    gen_config = types.GenerateContentConfig(
-        tools=[types.Tool(function_declarations=tools)],
-        system_instruction=system_prompt,
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-    )
+    return system_prompt
 
-    model_name = os.getenv("POLYMATH_MODEL", "gemini-3-flash-preview")
-    return client.chats.create(model=model_name, config=gen_config, history=history or [])
+
+def convert_tools_to_definitions(registry_tools: list) -> list[ToolDefinition]:
+    """Convert registry tools to ToolDefinition format."""
+    definitions = []
+    for tool in registry_tools:
+        # Handle both FunctionDeclaration and dict formats
+        if hasattr(tool, "name"):
+            definitions.append(ToolDefinition(
+                name=tool.name,
+                description=getattr(tool, "description", ""),
+                parameters=getattr(tool, "parameters", {}) or {},
+            ))
+        elif isinstance(tool, dict):
+            definitions.append(ToolDefinition(
+                name=tool.get("name", ""),
+                description=tool.get("description", ""),
+                parameters=tool.get("parameters", {}),
+            ))
+    return definitions
 
 
 async def chat_loop(
@@ -117,15 +131,26 @@ async def chat_loop(
 ):
     """Main chat loop with automatic context management."""
 
-    # 1. Check API key
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        console.print("[red]Error: GOOGLE_API_KEY not set[/red]")
-        return
+    # 1. Detect mode and check configuration
+    client_mode = ModelClient.get_mode()
+    mode_info = ModelClient.get_mode_info()
 
-    # 2. Initialize client
+    if client_mode == ClientMode.GATEWAY:
+        if not mode_info.get("gateway_url"):
+            console.print("[red]Error: POLYMATH_GATEWAY_URL not set[/red]")
+            return
+    else:
+        # Direct mode - check for at least one provider
+        providers = mode_info.get("providers", {})
+        if not any(providers.values()):
+            console.print("[red]Error: No API keys configured[/red]")
+            console.print("[dim]Set at least one of: GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY[/dim]")
+            console.print("[dim]Or configure Gateway mode: POLYMATH_GATEWAY_URL[/dim]")
+            return
+
+    # 2. Initialize unified model client
     try:
-        client = genai.Client(api_key=api_key)
+        model_client = await ModelClient.create()
     except Exception as e:
         console.print(f"[red]Failed to initialize client: {e}[/red]")
         return
@@ -208,11 +233,11 @@ async def chat_loop(
             console.print(f"[yellow]Session not found: {resume_session}[/yellow]")
 
     # Show startup info
-    gateway_url = os.getenv("POLYMATH_GATEWAY_URL")
-    if gateway_url:
-        console.print(f"[bold cyan]Mode: Gateway[/bold cyan] ({gateway_url})")
+    if client_mode == ClientMode.GATEWAY:
+        console.print(f"[bold cyan]Mode: Gateway[/bold cyan] ({mode_info.get('gateway_url')})")
     else:
-        console.print(f"[bold green]Mode: Direct[/bold green] (Google Gemini)")
+        active_providers = [p for p, v in mode_info.get("providers", {}).items() if v]
+        console.print(f"[bold green]Mode: Direct[/bold green] ({', '.join(active_providers)})")
     console.print(f"[bold yellow]Project: {project}[/bold yellow]")
 
     stats = ctx.get_context_stats()
@@ -225,16 +250,30 @@ async def chat_loop(
     # 8. State
     mode = "build"  # Default to build mode
     turn_count = 0
-    model_name = os.getenv("POLYMATH_MODEL", "gemini-3-flash-preview")
+    model_name = os.getenv("POLYMATH_MODEL", "gemini-2.5-flash-preview")
 
     # Get tools for current mode
     tool_names = tool_selector.get_tools_for_mode(mode)
-    tools = registry.get_genai_tools(tool_names)
-    console.print(f"[dim]Tools: {len(tools)} ({mode} mode)[/dim]")
+    genai_tools = registry.get_genai_tools(tool_names)
+    tool_definitions = convert_tools_to_definitions(genai_tools)
+    console.print(f"[dim]Tools: {len(tool_definitions)} ({mode} mode)[/dim]")
 
-    # Create initial chat with restored history
+    # Build system prompt
+    system_prompt = build_system_prompt(mode, active_skills_content)
+
+    # Conversation history for unified client
+    conversation_history: list[Message] = []
+
+    # Restore history from context
     history = ctx.get_history_for_api()
-    chat = create_chat(client, mode, tools, history, active_skills_content)
+    for msg in history:
+        if hasattr(msg, "role") and hasattr(msg, "parts"):
+            role = msg.role
+            content = ""
+            for part in msg.parts:
+                if hasattr(part, "text"):
+                    content += part.text
+            conversation_history.append(Message(role=role, content=content))
 
     # Trigger SessionStart hook
     await hook_mgr.trigger(
@@ -269,6 +308,8 @@ async def chat_loop(
         if user_input.lower() in ["exit", "quit", "/exit"]:
             # Trigger SessionEnd hook
             await hook_mgr.trigger(HookEvent.SESSION_END, message_count=len(ctx.messages))
+            # Close model client
+            await model_client.close()
             break
 
         # Bash mode (! prefix)
@@ -354,12 +395,12 @@ async def chat_loop(
                         mode = new_mode
                         # Update tools for new mode
                         tool_names = tool_selector.get_tools_for_mode(mode)
-                        tools = registry.get_genai_tools(tool_names)
+                        genai_tools = registry.get_genai_tools(tool_names)
+                        tool_definitions = convert_tools_to_definitions(genai_tools)
                         hook_mgr.permission_mode = mode
-                        # Rebuild chat with new mode but KEEP context history
-                        history = ctx.get_history_for_api()
-                        chat = create_chat(client, mode, tools, history, active_skills_content)
-                        console.print(f"[green]Switched to {mode} mode ({len(tools)} tools)[/green]")
+                        # Rebuild system prompt with new mode
+                        system_prompt = build_system_prompt(mode, active_skills_content)
+                        console.print(f"[green]Switched to {mode} mode ({len(tool_definitions)} tools)[/green]")
                     else:
                         console.print(f"[red]Unknown mode: {new_mode}[/red]")
                 else:
@@ -405,8 +446,8 @@ async def chat_loop(
 
             elif cmd == "clear":
                 ctx.clear(keep_summaries=True)
-                history = ctx.get_history_for_api()
-                chat = create_chat(client, mode, tools, history, active_skills_content)
+                # Clear conversation history but keep system prompt
+                conversation_history.clear()
                 console.print("[green]Conversation cleared (summaries preserved)[/green]")
                 continue
 
@@ -415,8 +456,10 @@ async def chat_loop(
                 active_skills_content = ""
                 mode = "build"
                 tool_names = tool_selector.get_tools_for_mode(mode)
-                tools = registry.get_genai_tools(tool_names)
-                chat = create_chat(client, mode, tools, [], "")
+                genai_tools = registry.get_genai_tools(tool_names)
+                tool_definitions = convert_tools_to_definitions(genai_tools)
+                system_prompt = build_system_prompt(mode, "")
+                conversation_history.clear()
                 turn_count = 0
                 console.print("[green]Full reset complete[/green]")
                 continue
@@ -638,9 +681,6 @@ async def chat_loop(
                     new_model = cmd_args[0]
                     if model_mgr.switch_model(new_model):
                         model_name = model_mgr.get_current_model()
-                        # Rebuild chat with new model
-                        history = ctx.get_history_for_api()
-                        chat = create_chat(client, mode, tools, history, active_skills_content)
                         console.print(f"[green]Switched to model: {model_name}[/green]")
                     else:
                         console.print(f"[red]Unknown model: {new_model}[/red]")
@@ -781,15 +821,27 @@ async def chat_loop(
             new_active = skill_mgr.get_active_skills()
             if new_active:
                 console.print(f"[dim cyan]Skills loaded: {', '.join(new_active)}[/dim cyan]")
-            history = ctx.get_history_for_api()
-            chat = create_chat(client, mode, tools, history, active_skills_content)
+            # Rebuild system prompt with new skills
+            system_prompt = build_system_prompt(mode, active_skills_content)
 
-        # Send message
+        # Add user message to conversation history
+        conversation_history.append(Message(role="user", content=user_input))
+
+        # Build messages with system prompt
+        messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
+
+        # Send message using unified client
         try:
             with console.status(f"[bold {mode_color}]Thinking...[/bold {mode_color}]"):
-                response = chat.send_message(user_input)
+                response = await model_client.chat(
+                    messages_for_api,
+                    tools=tool_definitions,
+                    model=model_name,
+                )
         except Exception as e:
             console.print(f"[red]API Error: {e}[/red]")
+            # Remove the user message we just added
+            conversation_history.pop()
             checkpoint_mgr.discard_checkpoint()
             continue
 
@@ -798,33 +850,39 @@ async def chat_loop(
         files_modified = []
 
         while True:
-            if not response.candidates:
+            # Check for empty response
+            if not response.content and not response.tool_calls:
                 console.print("[red]Empty response[/red]")
                 break
 
-            parts = response.candidates[0].content.parts
-            has_tool_call = False
+            has_tool_call = response.has_tool_calls
             tool_results = []
 
-            for part in parts:
-                # Text response
-                if part.text:
-                    accumulated_text += part.text
-                    console.print(
-                        Panel(
-                            Markdown(part.text),
-                            title="[bold purple]Response[/bold purple]",
-                            border_style="purple",
-                            expand=False,
-                        )
+            # Text response
+            if response.content:
+                accumulated_text += response.content
+                console.print(
+                    Panel(
+                        Markdown(response.content),
+                        title="[bold purple]Response[/bold purple]",
+                        border_style="purple",
+                        expand=False,
                     )
+                )
 
-                # Tool call
-                if part.function_call:
-                    has_tool_call = True
-                    fc = part.function_call
-                    tool_name = fc.name
-                    args = dict(fc.args.items()) if hasattr(fc.args, "items") else {}
+            # Tool calls
+            if response.tool_calls:
+                for tc in response.tool_calls:
+                    func = tc.get("function", {})
+                    tool_name = func.get("name", "")
+                    args_str = func.get("arguments", "{}")
+                    tool_call_id = tc.get("id", "")
+
+                    # Parse arguments
+                    try:
+                        args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                    except json.JSONDecodeError:
+                        args = {}
 
                     # Trigger PreToolUse hook
                     pre_hook = await hook_mgr.trigger(
@@ -834,7 +892,11 @@ async def chat_loop(
                     )
 
                     if pre_hook.decision.value == "deny":
-                        tool_results.append({"name": tool_name, "result": {"result": f"Blocked: {pre_hook.reason}"}})
+                        tool_results.append({
+                            "tool_call_id": tool_call_id,
+                            "name": tool_name,
+                            "result": f"Blocked: {pre_hook.reason}",
+                        })
                         continue
 
                     if pre_hook.modified_input:
@@ -883,25 +945,32 @@ async def chat_loop(
                         tool_output=tool_result,
                     )
 
-                    tool_results.append({"name": tool_name, "result": {"result": tool_result}})
+                    tool_results.append({
+                        "tool_call_id": tool_call_id,
+                        "name": tool_name,
+                        "result": str(tool_result) if tool_result else "",
+                    })
 
             # No more tool calls - done with this turn
             if not has_tool_call:
                 turn_count += 1
-                usage = response.usage_metadata
+                usage = response.usage
 
                 # Track usage and costs
                 if usage:
                     cost_tracker.track(
                         model=model_name,
-                        input_tokens=usage.prompt_token_count or 0,
-                        output_tokens=usage.candidates_token_count or 0,
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
                         session_id=ctx.session_id,
                     )
 
-                # Track assistant response in context with actual token counts
-                prompt_tokens = usage.prompt_token_count if usage else None
-                completion_tokens = usage.candidates_token_count if usage else None
+                # Track assistant response in context
+                prompt_tokens = usage.get("prompt_tokens") if usage else None
+                completion_tokens = usage.get("completion_tokens") if usage else None
+
+                # Add assistant message to conversation history
+                conversation_history.append(Message(role="assistant", content=accumulated_text))
 
                 # Record messages before summary check
                 prev_summary_count = len(ctx.summaries)
@@ -911,17 +980,22 @@ async def chat_loop(
                     completion_tokens=completion_tokens,
                 )
 
-                # Check if summarization occurred - need to rebuild chat
+                # Check if summarization occurred
                 if len(ctx.summaries) > prev_summary_count:
-                    # Trigger PreCompact hook
                     await hook_mgr.trigger(HookEvent.PRE_COMPACT)
-
                     console.print(
-                        "[dim yellow]Context summarized to save memory. "
-                        "Rebuilding conversation...[/dim yellow]"
+                        "[dim yellow]Context summarized to save memory.[/dim yellow]"
                     )
+                    # Rebuild conversation history from context
+                    conversation_history.clear()
                     history = ctx.get_history_for_api()
-                    chat = create_chat(client, mode, tools, history, active_skills_content)
+                    for msg in history:
+                        if hasattr(msg, "role") and hasattr(msg, "parts"):
+                            content = ""
+                            for part in msg.parts:
+                                if hasattr(part, "text"):
+                                    content += part.text
+                            conversation_history.append(Message(role=msg.role, content=content))
 
                 # Finalize checkpoint if files were modified
                 if files_modified:
@@ -932,36 +1006,49 @@ async def chat_loop(
                     checkpoint_mgr.discard_checkpoint()
 
                 # Trigger Stop hook
-                await hook_mgr.trigger(
-                    HookEvent.STOP,
-                    message_count=len(ctx.messages),
-                )
+                await hook_mgr.trigger(HookEvent.STOP, message_count=len(ctx.messages))
 
                 # Show usage stats
                 if usage:
                     stats = ctx.get_context_stats()
                     cost = cost_tracker.calculate_cost(
                         model_name,
-                        usage.prompt_token_count or 0,
-                        usage.candidates_token_count or 0,
+                        usage.get("prompt_tokens", 0),
+                        usage.get("completion_tokens", 0),
                     )
                     console.print(
                         f"\n[dim]Turn {turn_count} | "
-                        f"In: {usage.prompt_token_count:,} | "
-                        f"Out: {usage.candidates_token_count:,} | "
+                        f"In: {usage.get('prompt_tokens', 0):,} | "
+                        f"Out: {usage.get('completion_tokens', 0):,} | "
                         f"Cost: ${cost:.4f} | "
                         f"Ctx: {stats['usage_percent']}%[/dim]"
                     )
                 break
 
-            # Send tool results back
-            response_parts = [
-                types.Part.from_function_response(name=tr["name"], response=tr["result"])
-                for tr in tool_results
-            ]
+            # Send tool results back - add assistant message with tool calls, then tool results
+            conversation_history.append(Message(
+                role="assistant",
+                content=response.content,
+                tool_calls=response.tool_calls,
+            ))
+
+            for tr in tool_results:
+                conversation_history.append(Message(
+                    role="tool",
+                    content=tr["result"],
+                    tool_call_id=tr["tool_call_id"],
+                    name=tr["name"],
+                ))
+
+            # Continue the conversation
+            messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
 
             with console.status("[cyan]Processing...[/cyan]"):
-                response = chat.send_message(response_parts)
+                response = await model_client.chat(
+                    messages_for_api,
+                    tools=tool_definitions,
+                    model=model_name,
+                )
 
 
 @app.command()
