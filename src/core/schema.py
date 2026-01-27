@@ -56,6 +56,10 @@ class DoraemonConfig(BaseModel):
     instructions: list[str] = Field(
         default_factory=list, description="Additional instruction files to load (supports globs)"
     )
+    tool_timeouts: dict[str, float] = Field(
+        default_factory=dict,
+        description="Timeout overrides for specific tools in seconds"
+    )
 
     model_config = ConfigDict(populate_by_name=True)  # Allow both snake_case and camelCase
 

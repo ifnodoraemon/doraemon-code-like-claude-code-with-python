@@ -192,25 +192,19 @@ def execute_command(
     """
     Execute a shell command and return the output.
 
-    This is similar to running commands in a terminal. Use for:
-    - Git operations (git status, git commit, etc.)
-    - Package management (npm install, pip install, etc.)
-    - Build commands (make, cargo build, etc.)
-    - System commands (ls, cat, grep, etc.)
+    This uses "Active Detection" (Smart Timeout):
+    - The process is allowed to run as long as it produces output.
+    - It is only killed if it is silent (no output) for the duration of the 'timeout'.
+    - This is ideal for long-running builds or downloads that continually log progress.
 
     Args:
         command: The shell command to execute
         working_directory: Directory to run the command in (default: current directory)
-        timeout: Maximum execution time in seconds (default: 30, max: 600)
+        timeout: Idle timeout in seconds (default: 30). Process is killed if silent for this long.
         env: Additional environment variables to set
 
     Returns:
         Command output (stdout and stderr combined) or error message
-
-    Examples:
-        execute_command("git status")
-        execute_command("npm install", working_directory="frontend")
-        execute_command("python -m pytest tests/", timeout=120)
     """
     logger.info(f"Executing command: {command}")
 
@@ -227,57 +221,89 @@ def execute_command(
     except (PermissionError, ValueError) as e:
         return f"Error: Invalid working directory: {e}"
 
-    # Clamp timeout
-    timeout = min(max(1, timeout), DEFAULT_CONFIG.max_timeout)
+    # Clamp timeout (minimum 1s, max 1 hour for active processes)
+    timeout = min(max(1, timeout), 3600)
 
     # Prepare environment with safety checks
     process_env = os.environ.copy()
     if env:
-        # Filter out dangerous environment variable overrides
         dangerous_env_vars = {'PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES'}
         safe_env = {k: v for k, v in env.items() if k.upper() not in dangerous_env_vars}
-        if len(safe_env) < len(env):
-            filtered = set(env.keys()) - set(safe_env.keys())
-            logger.warning(f"Filtered dangerous env vars: {filtered}")
         process_env.update(safe_env)
 
     try:
-        # Execute the command
-        result = subprocess.run(
+        # Start process with Popen
+        process = subprocess.Popen(
             command,
             shell=True,
             executable=DEFAULT_CONFIG.shell,
             cwd=resolved_dir,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Combine stdout/stderr
             text=True,
-            timeout=timeout,
             env=process_env,
+            bufsize=1,  # Line buffered
+            universal_newlines=True,
         )
+        
+        # Use a thread to read output to avoid blocking/buffering issues with select
+        import queue
+        output_queue = queue.Queue()
+        
+        def reader_thread():
+            try:
+                for line in iter(process.stdout.readline, ''):
+                    output_queue.put(line)
+                process.stdout.close()
+            except Exception:
+                pass
 
-        # Combine stdout and stderr
-        output = ""
-        if result.stdout:
-            output += result.stdout
-        if result.stderr:
-            if output:
-                output += "\n"
-            output += f"[stderr]:\n{result.stderr}"
+        t = threading.Thread(target=reader_thread, daemon=True)
+        t.start()
 
-        # Add exit code info if non-zero
-        if result.returncode != 0:
-            output += f"\n\n[Exit code: {result.returncode}]"
+        output_lines = []
+        last_activity_time = time.time()
+        
+        while True:
+            # Check if process has finished
+            return_code = process.poll()
+            
+            # Read all available output from queue
+            has_new_output = False
+            while True:
+                try:
+                    line = output_queue.get_nowait()
+                    output_lines.append(line)
+                    last_activity_time = time.time()
+                    has_new_output = True
+                except queue.Empty:
+                    break
+            
+            if return_code is not None and not t.is_alive() and output_queue.empty():
+                # Process finished and thread finished
+                break
 
-        # Truncate if needed
+            # Check Idle Timeout
+            if time.time() - last_activity_time > timeout:
+                process.kill()
+                logger.warning(f"Command timed out due to inactivity ({timeout}s): {command}")
+                return "".join(output_lines) + f"\n\nError: Command timed out. No output for {timeout} seconds."
+
+            # Sleep briefly to avoid busy loop
+            time.sleep(0.1)
+
+        # Process finished
+        output = "".join(output_lines)
+        if return_code != 0:
+            output += f"\n\n[Exit code: {return_code}]"
+
         output = _truncate_output(output)
-
+        
         if not output.strip():
-            return f"Command completed successfully (exit code: {result.returncode})"
+            return f"Command completed successfully (exit code: {return_code})"
 
         return output
 
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Command timed out after {timeout}s: {command}")
-        return f"Error: Command timed out after {timeout} seconds."
     except Exception as e:
         logger.error(f"Command execution failed: {e}")
         return f"Error executing command: {str(e)}"

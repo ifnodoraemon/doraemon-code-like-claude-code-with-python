@@ -23,6 +23,7 @@ Usage:
     result = await registry.call_tool("read_file", {"path": "main.py"})
 """
 
+import asyncio
 import inspect
 import logging
 from collections.abc import Callable
@@ -30,6 +31,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from google.genai import types
+
+from google.genai import types
+from src.core.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +46,9 @@ class ToolDefinition:
     description: str
     function: Callable
     parameters: dict[str, Any]
+    parameters: dict[str, Any]
     sensitive: bool = False  # Requires HITL approval
+    timeout: float = 60.0    # Default timeout in seconds
 
 
 class ToolRegistry:
@@ -66,6 +72,7 @@ class ToolRegistry:
         name: str | None = None,
         description: str | None = None,
         sensitive: bool = False,
+        timeout: float = 60.0,
     ) -> None:
         """
         Register a tool function.
@@ -75,6 +82,7 @@ class ToolRegistry:
             name: Tool name (defaults to function name)
             description: Tool description (defaults to docstring)
             sensitive: Whether this tool requires HITL approval
+            timeout: Timeout in seconds (default 60.0)
         """
         tool_name = name or func.__name__
         tool_desc = description or (func.__doc__ or "").strip()
@@ -88,6 +96,7 @@ class ToolRegistry:
             function=func,
             parameters=parameters,
             sensitive=sensitive,
+            timeout=timeout,
         )
 
         logger.debug(f"Registered tool: {tool_name}")
@@ -208,11 +217,20 @@ class ToolRegistry:
 
         try:
             # Call the function
-            result = tool.function(**arguments)
-
-            # Handle async functions
-            if inspect.iscoroutine(result):
-                result = await result
+            if inspect.iscoroutinefunction(tool.function):
+                # Async function - use wait_for
+                # Async function - use wait_for
+                try:
+                    result = await asyncio.wait_for(tool.function(**arguments), timeout=tool.timeout)
+                except asyncio.TimeoutError:
+                    error_msg = f"Tool '{name}' timed out after {tool.timeout} seconds."
+                    logger.error(error_msg)
+                    return error_msg
+            else:
+                # Sync function - run directly (cannot timeout easily without threads/processes)
+                # For critical safety, we might want to run this in a thread executor with timeout,
+                # but for now we'll just run it. Most heavy tools should be async.
+                result = tool.function(**arguments)
 
             return str(result) if result is not None else "Success"
 
@@ -246,6 +264,18 @@ def get_default_registry() -> ToolRegistry:
 def _create_default_registry() -> ToolRegistry:
     """Create and populate the default tool registry."""
     registry = ToolRegistry()
+    
+    # Load configuration
+    try:
+        config = load_config(validate=False)
+        tool_timeouts = config.get("tool_timeouts", {})
+    except Exception as e:
+        logger.warning(f"Failed to load config for tool timeouts: {e}")
+        tool_timeouts = {}
+
+    def _get_timeout(tool_name: str, default: float) -> float:
+        """Get timeout from config or default."""
+        return float(tool_timeouts.get(tool_name, default))
 
     # Import tool functions directly from servers
     # These are the actual implementations, bypassing MCP
@@ -263,15 +293,15 @@ def _create_default_registry() -> ToolRegistry:
             edit_file,
         )
 
-        registry.register(read_file, sensitive=False)
-        registry.register(read_file_outline, sensitive=False)
-        registry.register(list_directory, sensitive=False)
-        registry.register(glob_files, sensitive=False)
-        registry.register(grep_search, sensitive=False)
-        registry.register(find_symbol, sensitive=False)
+        registry.register(read_file, sensitive=False, timeout=_get_timeout("read_file", 60.0))
+        registry.register(read_file_outline, sensitive=False, timeout=_get_timeout("read_file_outline", 60.0))
+        registry.register(list_directory, sensitive=False, timeout=_get_timeout("list_directory", 60.0))
+        registry.register(glob_files, sensitive=False, timeout=_get_timeout("glob_files", 60.0))
+        registry.register(grep_search, sensitive=False, timeout=_get_timeout("grep_search", 120.0))  # Grep can be slow
+        registry.register(find_symbol, sensitive=False, timeout=_get_timeout("find_symbol", 60.0))
         
-        registry.register(write_file, sensitive=True)
-        registry.register(edit_file, sensitive=True)
+        registry.register(write_file, sensitive=True, timeout=_get_timeout("write_file", 60.0))
+        registry.register(edit_file, sensitive=True, timeout=_get_timeout("edit_file", 120.0))  # Edits might involve processing
     except ImportError as e:
         logger.warning(f"Failed to import filesystem tools: {e}")
 
@@ -279,8 +309,8 @@ def _create_default_registry() -> ToolRegistry:
         # Computer/Execution Tools
         from src.servers.computer import execute_python, install_package
 
-        registry.register(execute_python, sensitive=True)
-        registry.register(install_package, sensitive=True)
+        registry.register(execute_python, sensitive=True, timeout=_get_timeout("execute_python", 300.0))  # Allow 5 mins for scripts
+        registry.register(install_package, sensitive=True, timeout=_get_timeout("install_package", 300.0))  # Installations take time
     except ImportError as e:
         logger.warning(f"Failed to import computer tools: {e}")
 
@@ -288,8 +318,8 @@ def _create_default_registry() -> ToolRegistry:
         # Memory Tools
         from src.servers.memory import save_note, search_notes
 
-        registry.register(save_note, sensitive=True)
-        registry.register(search_notes, sensitive=False)
+        registry.register(save_note, sensitive=True, timeout=_get_timeout("save_note", 60.0))
+        registry.register(search_notes, sensitive=False, timeout=_get_timeout("search_notes", 60.0))
     except ImportError as e:
         logger.warning(f"Failed to import memory tools: {e}")
 
@@ -297,8 +327,8 @@ def _create_default_registry() -> ToolRegistry:
         # Web Tools
         from src.servers.web import fetch_page, search_internet
 
-        registry.register(fetch_page, name="fetch_url", sensitive=False)
-        registry.register(search_internet, name="web_search", sensitive=False)
+        registry.register(fetch_page, name="fetch_url", sensitive=False, timeout=_get_timeout("fetch_url", 30.0))  # Web should be fast
+        registry.register(search_internet, name="web_search", sensitive=False, timeout=_get_timeout("web_search", 30.0))
     except ImportError as e:
         logger.warning(f"Failed to import web tools: {e}")
 
@@ -306,9 +336,9 @@ def _create_default_registry() -> ToolRegistry:
         # Task Tools
         from src.servers.task import add_task, list_tasks, update_task_status
 
-        registry.register(add_task, name="task_create", sensitive=False)
-        registry.register(list_tasks, name="task_list", sensitive=False)
-        registry.register(update_task_status, name="task_update_status", sensitive=False)
+        registry.register(add_task, name="task_create", sensitive=False, timeout=_get_timeout("task_create", 60.0))
+        registry.register(list_tasks, name="task_list", sensitive=False, timeout=_get_timeout("task_list", 60.0))
+        registry.register(update_task_status, name="task_update_status", sensitive=False, timeout=_get_timeout("task_update_status", 60.0))
     except ImportError as e:
         logger.warning(f"Failed to import task tools: {e}")
 
@@ -316,8 +346,8 @@ def _create_default_registry() -> ToolRegistry:
         # Shell Tools
         from src.servers.shell import execute_command, execute_command_background
 
-        registry.register(execute_command, name="shell_execute", sensitive=True)
-        registry.register(execute_command_background, name="shell_background", sensitive=True)
+        registry.register(execute_command, name="shell_execute", sensitive=True, timeout=_get_timeout("shell_execute", 300.0))  # Allow 5 mins
+        registry.register(execute_command_background, name="shell_background", sensitive=True, timeout=_get_timeout("shell_background", 60.0))
     except ImportError as e:
         logger.warning(f"Failed to import shell tools: {e}")
 
@@ -325,11 +355,11 @@ def _create_default_registry() -> ToolRegistry:
         # Git Tools
         from src.servers.git import git_add, git_commit, git_diff, git_log, git_status
 
-        registry.register(git_status, sensitive=False)
-        registry.register(git_diff, sensitive=False)
-        registry.register(git_log, sensitive=False)
-        registry.register(git_add, sensitive=False)
-        registry.register(git_commit, sensitive=True)
+        registry.register(git_status, sensitive=False, timeout=_get_timeout("git_status", 60.0))
+        registry.register(git_diff, sensitive=False, timeout=_get_timeout("git_diff", 60.0))
+        registry.register(git_log, sensitive=False, timeout=_get_timeout("git_log", 60.0))
+        registry.register(git_add, sensitive=False, timeout=_get_timeout("git_add", 60.0))
+        registry.register(git_commit, sensitive=True, timeout=_get_timeout("git_commit", 60.0))
     except ImportError as e:
         logger.warning(f"Failed to import git tools: {e}")
 

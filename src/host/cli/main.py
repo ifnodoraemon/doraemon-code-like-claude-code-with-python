@@ -437,8 +437,18 @@ async def chat_loop(
             # Process response (tool loop)
             accumulated_text = ""
             files_modified = []
-
+            tool_steps = 0
+            MAX_TOOL_STEPS = 15  # Prevent infinite tool loops
+            previous_tool_calls = []  # Specific for loop detection
+            
             while True:
+                if tool_steps >= MAX_TOOL_STEPS:
+                    console.print(f"[red]⚠️ Max tool steps ({MAX_TOOL_STEPS}) reached. Stopping to prevent infinite loop.[/red]")
+                    # Add a system message to context explaining why it stopped
+                    ctx.add_system_message(f"System: Execution stopped because maximum tool steps ({MAX_TOOL_STEPS}) were exceeded.")
+                    break
+
+                tool_steps += 1
                 if not response.content and not response.tool_calls:
                     console.print("[red]Empty response[/red]")
                     break
@@ -463,14 +473,38 @@ async def chat_loop(
                     for tc in response.tool_calls:
                         func = tc.get("function", {})
                         tool_name = func.get("name", "")
-                        args_str = func.get("arguments", "{}")
                         tool_call_id = tc.get("id", "")
 
                         try:
-                            args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                            # Extract arguments
+                            args_raw = func.get("arguments", {})
+                            if isinstance(args_raw, str):
+                                args = json.loads(args_raw)
+                            else:
+                                args = args_raw
+
+                            # Normalize for comparison
+                            args_str_normalized = json.dumps(args, sort_keys=True)
                         except json.JSONDecodeError as e:
-                            logger.warning(f"Failed to parse tool arguments for {tool_name}: {args_str}, error: {e}")
+                            logger.warning(f"Failed to parse tool arguments for {tool_name}: {args_raw}, error: {e}")
                             args = {}
+                            args_str_normalized = "{}"
+
+                        # Loop Detection
+                        current_call_signature = f"{tool_name}:{args_str_normalized}"
+                        previous_tool_calls.append(current_call_signature)
+                        
+                        # Check last 3 calls
+                        if len(previous_tool_calls) >= 3:
+                            last_three = previous_tool_calls[-3:]
+                            if all(s == current_call_signature for s in last_three):
+                                console.print(f"[red]⚠️ Loop detected: {tool_name} called repeatedly with same args.[/red]")
+                                tool_results.append({
+                                    "tool_call_id": tool_call_id,
+                                    "name": tool_name,
+                                    "result": "Error: Loop detected. You have called this tool with the same arguments 3 times in a row. Stop and rethink your approach.",
+                                })
+                                continue
 
                         # Trigger PreToolUse hook
                         pre_hook = await hook_mgr.trigger(
