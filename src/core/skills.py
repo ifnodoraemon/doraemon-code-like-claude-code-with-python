@@ -1,5 +1,5 @@
 """
-Skills System for Polymath
+Skills System for Doraemon
 
 Inspired by Anthropic's Agent Skills (October 2025):
 - Skills are reusable, structured packages of instructions and resources
@@ -281,29 +281,19 @@ class SkillLoader:
     def _parse_skill_file(self, content: str) -> tuple[SkillMetadata | None, str]:
         """
         Parse a SKILL.md file into metadata and body.
-
-        Expected format:
-            ---
-            name: ...
-            description: ...
-            triggers: [...]
-            ---
-
-            Body content...
         """
         # Check for YAML frontmatter
         if not content.startswith("---"):
-            # No frontmatter, treat entire content as body
             return SkillMetadata(name="Unknown", description=""), content
 
-        # Find end of frontmatter
-        end_match = re.search(r"\n---\s*\n", content[3:])
-        if not end_match:
+        # Use split to find frontmatter
+        # We expect the file to start with --- and have another --- later
+        parts = content.split("---", 2)
+        if len(parts) < 3:
             return SkillMetadata(name="Unknown", description=""), content
 
-        frontmatter_end = end_match.end() + 3
-        frontmatter = content[3 : frontmatter_end - 4]
-        body = content[frontmatter_end:].strip()
+        frontmatter = parts[1].strip()
+        body = parts[2].strip()
 
         try:
             data = yaml.safe_load(frontmatter)

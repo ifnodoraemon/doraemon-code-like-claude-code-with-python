@@ -2,65 +2,89 @@
   "mcpServers": {
     "memory": {
       "command": "python3",
-      "args": ["src/servers/memory.py"],
+      "args": [
+        "src/servers/memory.py"
+      ],
       "env": {}
     },
     "fs_read": {
       "command": "python3",
-      "args": ["src/servers/fs_read.py"],
+      "args": [
+        "src/servers/fs_read.py"
+      ],
       "env": {
-        "VISION_PROVIDER": "google", 
+        "VISION_PROVIDER": "google",
         "VISION_MODEL": "gemini-2.0-flash"
       }
     },
     "fs_write": {
       "command": "python3",
-      "args": ["src/servers/fs_write.py"],
+      "args": [
+        "src/servers/fs_write.py"
+      ],
       "env": {}
     },
     "fs_edit": {
       "command": "python3",
-      "args": ["src/servers/fs_edit.py"],
+      "args": [
+        "src/servers/fs_edit.py"
+      ],
       "env": {}
     },
     "fs_ops": {
       "command": "python3",
-      "args": ["src/servers/fs_ops.py"],
+      "args": [
+        "src/servers/fs_ops.py"
+      ],
       "env": {}
     },
     "web": {
       "command": "python3",
-      "args": ["src/servers/web.py"],
+      "args": [
+        "src/servers/web.py"
+      ],
       "env": {}
     },
     "computer": {
       "command": "python3",
-      "args": ["src/servers/computer.py"],
+      "args": [
+        "src/servers/computer.py"
+      ],
       "env": {}
     },
     "task": {
       "command": "python3",
-      "args": ["src/servers/task.py"],
+      "args": [
+        "src/servers/task.py"
+      ],
       "env": {}
     },
     "shell": {
       "command": "python3",
-      "args": ["src/servers/shell.py"],
+      "args": [
+        "src/servers/shell.py"
+      ],
       "env": {}
     },
     "git": {
       "command": "python3",
-      "args": ["src/servers/git.py"],
+      "args": [
+        "src/servers/git.py"
+      ],
       "env": {}
     },
     "lint": {
       "command": "python3",
-      "args": ["src/servers/lint.py"],
+      "args": [
+        "src/servers/lint.py"
+      ],
       "env": {}
     },
     "semantic_search": {
       "command": "python3",
-      "args": ["src/servers/semantic_search.py"],
+      "args": [
+        "src/servers/semantic_search.py"
+      ],
       "env": {}
     }
   },
@@ -78,7 +102,7 @@
     "gh_pr_create"
   ],
   "persona": {
-    "name": "Polymath",
-    "role": "Generalist AI Assistant & Coder"
+    "name": "Doraemon",
+    "role": "Intelligent AI Coding Assistant"
   }
 }

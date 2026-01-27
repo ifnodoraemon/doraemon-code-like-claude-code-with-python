@@ -59,15 +59,14 @@ dependencies = [
     "trafilatura>=1.6.0",
     "requests>=2.31.0",
     
-    # Storage & Search
-    "chromadb>=0.4.0",
-    "sentence-transformers>=2.2.0",
-    
     # File Watching
     "watchdog>=3.0.0",              # File system monitoring
 ]
 
 [project.optional-dependencies]
+local-ai = [
+    "chromadb>=0.4.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",

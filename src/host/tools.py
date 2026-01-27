@@ -251,14 +251,16 @@ def _create_default_registry() -> ToolRegistry:
     # These are the actual implementations, bypassing MCP
 
     try:
-        # File Reading Tools
-        from src.servers.fs_read import (
+        # Filesystem Tools (Unified)
+        from src.servers.filesystem import (
             find_symbol,
             glob_files,
             grep_search,
             list_directory,
             read_file,
             read_file_outline,
+            write_file,
+            edit_file,
         )
 
         registry.register(read_file, sensitive=False)
@@ -267,24 +269,11 @@ def _create_default_registry() -> ToolRegistry:
         registry.register(glob_files, sensitive=False)
         registry.register(grep_search, sensitive=False)
         registry.register(find_symbol, sensitive=False)
-    except ImportError as e:
-        logger.warning(f"Failed to import fs_read tools: {e}")
-
-    try:
-        # File Writing Tools
-        from src.servers.fs_write import write_file
-
+        
         registry.register(write_file, sensitive=True)
-    except ImportError as e:
-        logger.warning(f"Failed to import fs_write tools: {e}")
-
-    try:
-        # File Editing Tools
-        from src.servers.fs_edit import edit_file
-
         registry.register(edit_file, sensitive=True)
     except ImportError as e:
-        logger.warning(f"Failed to import fs_edit tools: {e}")
+        logger.warning(f"Failed to import filesystem tools: {e}")
 
     try:
         # Computer/Execution Tools

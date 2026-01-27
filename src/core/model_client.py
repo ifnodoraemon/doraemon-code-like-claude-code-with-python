@@ -56,6 +56,7 @@ class Message:
     """Unified message format."""
     role: str
     content: str | None = None
+    thought: str | None = None  # Reasoning/thought process
     tool_calls: list[dict] | None = None
     tool_call_id: str | None = None
     name: str | None = None
@@ -64,6 +65,8 @@ class Message:
         result = {"role": self.role}
         if self.content is not None:
             result["content"] = self.content
+        if self.thought is not None:
+            result["thought"] = self.thought
         if self.tool_calls:
             result["tool_calls"] = self.tool_calls
         if self.tool_call_id:
@@ -104,6 +107,7 @@ class ToolDefinition:
 class ChatResponse:
     """Unified chat response."""
     content: str | None = None
+    thought: str | None = None  # Reasoning/thought process
     tool_calls: list[dict] | None = None
     finish_reason: str | None = None
     usage: dict | None = None
@@ -497,7 +501,10 @@ class DirectModelClient(BaseModelClient):
             parts = []
 
             if msg.get("content"):
-                parts.append({"text": msg["content"]})
+                parts.append(types.Part(text=msg["content"]))
+
+            if msg.get("thought"):
+                parts.append(types.Part(thought=msg["thought"]))
 
             if msg.get("tool_calls"):
                 for tc in msg["tool_calls"]:
@@ -508,23 +515,30 @@ class DirectModelClient(BaseModelClient):
                     except json.JSONDecodeError:
                         logger.warning(f"Failed to parse tool arguments: {args_str}")
                         args = {}
-                    parts.append({
-                        "function_call": {
-                            "name": func.get("name"),
-                            "args": args,
-                        }
-                    })
+                    
+                    fc_obj = types.FunctionCall(
+                        name=func.get("name"),
+                        args=args,
+                    )
+                    
+                    # SDK Part constructor handles thought_signature
+                    thought_sig = tc.get("thought_signature") or func.get("thought_signature")
+                    
+                    parts.append(types.Part(
+                        function_call=fc_obj,
+                        thought_signature=thought_sig
+                    ))
 
             if role == "tool" and msg.get("tool_call_id"):
-                parts.append({
-                    "function_response": {
-                        "name": msg.get("name", "function"),
-                        "response": {"result": msg.get("content", "")},
-                    }
-                })
+                parts.append(types.Part(
+                    function_response=types.FunctionResponse(
+                        name=msg.get("name", "function"),
+                        response={"result": msg.get("content", "")},
+                    )
+                ))
 
             if parts:
-                contents.append({"role": gemini_role, "parts": parts})
+                contents.append(types.Content(role=gemini_role, parts=parts))
 
         # Build config
         gen_config_dict = {
@@ -581,9 +595,12 @@ class DirectModelClient(BaseModelClient):
 
         candidate = response.candidates[0]
         texts = []
+        thoughts = []
         for part in candidate.content.parts:
             if hasattr(part, "text") and part.text:
                 texts.append(part.text)
+            elif hasattr(part, "thought") and part.thought:
+                thoughts.append(part.thought)
             elif hasattr(part, "function_call") and part.function_call:
                 if tool_calls is None:
                     tool_calls = []
@@ -594,16 +611,25 @@ class DirectModelClient(BaseModelClient):
                 except (TypeError, ValueError):
                     logger.warning(f"Failed to convert function call args: {fc.args}")
                     args = {}
-                tool_calls.append({
+                tc_dict = {
                     "id": f"call_{uuid.uuid4().hex[:8]}",
                     "type": "function",
                     "function": {
                         "name": fc.name,
                         "arguments": json.dumps(args),
                     },
-                })
+                }
+                # Capture thought_signature if present in the PART (neighbor to function_call)
+                if hasattr(part, "thought_signature") and part.thought_signature:
+                    tc_dict["thought_signature"] = part.thought_signature
+                elif isinstance(part, dict) and part.get("thought_signature"):
+                    tc_dict["thought_signature"] = part.get("thought_signature")
+                
+                tool_calls.append(tc_dict)
         if texts:
             content = "".join(texts)
+        
+        thought = "".join(thoughts) if thoughts else None
 
         if tool_calls:
             finish_reason = "tool_calls"
@@ -618,6 +644,7 @@ class DirectModelClient(BaseModelClient):
 
         return ChatResponse(
             content=content,
+            thought=thought,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             usage=usage,
