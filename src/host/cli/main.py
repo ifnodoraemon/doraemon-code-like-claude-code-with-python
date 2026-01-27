@@ -416,24 +416,99 @@ async def chat_loop(
 
             # Add user message to conversation history
             conversation_history.append(Message(role="user", content=user_input))
-
-            # Build messages with system prompt
+    # Build messages with system prompt
             messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
 
-            # Send message using unified client
+            # Helper function for streaming chat with UI
+            async def stream_chat_with_ui(messages, tools=None, model=None):
+                """Streaming chat with real-time UI updates."""
+                from rich.live import Live
+                from rich.console import Group
+                from rich.panel import Panel
+                from rich.markdown import Markdown
+
+                full_content = ""
+                full_thought = ""
+                tool_calls = []
+                current_tool_call = None
+                
+                # Initial UI state - empty panels
+                # We use a closure to generate the renderable so it picks up the latest data
+                def generate_group():
+                    renderables = []
+                    if full_thought:
+                        renderables.append(
+                            Panel(Markdown(full_thought), title="[bold dim]Thinking[/bold dim]", border_style="dim white", expand=False)
+                        )
+                    if full_content:
+                        renderables.append(
+                            Panel(Markdown(full_content), title="[bold purple]Response[/bold purple]", border_style="purple", expand=False)
+                        )
+                    return Group(*renderables)
+
+                # Start streaming
+                with Live(generate_group(), console=console, refresh_per_second=10) as live:
+                    async for chunk in model_client.chat_stream(messages, tools=tools, model=model):
+                        update_needed = False
+                        
+                        if chunk.thought:
+                            full_thought += chunk.thought
+                            update_needed = True
+                            
+                        if chunk.content:
+                            full_content += chunk.content
+                            update_needed = True
+                            
+                        if chunk.tool_calls:
+                            # Handle streaming tool calls (accumulate arguments)
+                            for tc_chunk in chunk.tool_calls:
+                                index = tc_chunk.get("index", 0) # Some providers use index
+                                # If this is a new tool call (id is present), add it
+                                if tc_chunk.get("id"):
+                                    tool_calls.append({
+                                        "id": tc_chunk["id"],
+                                        "type": "function",
+                                        "function": {
+                                            "name": tc_chunk["function"]["name"],
+                                            "arguments": tc_chunk["function"]["arguments"]
+                                        }
+                                    })
+                                else:
+                                    # Append arguments to the last tool call (or specific index if supported)
+                                    # Simplifying assumption: sequential chunks for now or simple appending
+                                    if tool_calls:
+                                        last_tc = tool_calls[-1]
+                                        if "function" in tc_chunk and "arguments" in tc_chunk["function"]:
+                                            last_tc["function"]["arguments"] += tc_chunk["function"]["arguments"]
+                        
+                        if update_needed:
+                            live.update(generate_group())
+
+                # Return final response object
+                return ChatResponse(
+                    content=full_content,
+                    thought=full_thought,
+                    tool_calls=tool_calls if tool_calls else None,
+                    finish_reason="stop",
+                    usage=None
+                )
+            
+            # Send message using unified client with streaming UI
             try:
-                with console.status(f"[bold {mode_color}]Thinking...[/bold {mode_color}]"):
-                    response = await model_client.chat(
-                        messages_for_api,
-                        tools=tool_definitions,
-                        model=model_name,
-                    )
+                response = await stream_chat_with_ui(
+                    messages_for_api,
+                    tools=tool_definitions,
+                    model=model_name,
+                )
             except Exception as e:
                 console.print(f"[red]API Error: {e}[/red]")
                 conversation_history.pop()
                 checkpoint_mgr.discard_checkpoint()
                 continue
-
+            
+            # Remove previous blocking call block
+            # (Note: response is already assigned above)
+            
             # Process response (tool loop)
             accumulated_text = ""
             files_modified = []
@@ -455,6 +530,17 @@ async def chat_loop(
 
                 has_tool_call = response.has_tool_calls
                 tool_results = []
+
+                # Thought display
+                if response.thought:
+                    console.print(
+                        Panel(
+                            Markdown(response.thought),
+                            title="[bold dim]Thinking[/bold dim]",
+                            border_style="dim white",
+                            expand=False,
+                        )
+                    )
 
                 # Text response
                 if response.content:
@@ -543,7 +629,14 @@ async def chat_loop(
                         if tool_name in sensitive_tools:
                             console.print(f"\n[bold red]⚠️ Sensitive:[/bold red] {tool_name}")
                             if tool_name != "write_file":
-                                console.print(f"[dim]{json.dumps(args, indent=2, ensure_ascii=False)}[/dim]")
+                                # Pretty print content if present
+                                if "content" in args and isinstance(args["content"], str):
+                                    display_args = args.copy()
+                                    content = display_args.pop("content")
+                                    console.print(f"[dim]{json.dumps(display_args, indent=2, ensure_ascii=False)}[/dim]")
+                                    console.print(Panel(Markdown(content), title="[bold]Content Preview[/bold]", border_style="dim"))
+                                else:
+                                    console.print(f"[dim]{json.dumps(args, indent=2, ensure_ascii=False)}[/dim]")
 
                             if headless:
                                 console.print("[red]Headless mode: Sensitive tool denied[/red]")
@@ -575,6 +668,19 @@ async def chat_loop(
                             "name": tool_name,
                             "result": str(tool_result) if tool_result else "",
                         })
+
+                        # Special handling for switch_mode
+                        if tool_name == "switch_mode" and "mode" in args:
+                            new_mode = args["mode"]
+                            if new_mode in ["plan", "build"]:
+                                mode = new_mode
+                                console.print(f"[bold cyan]🔄 Automatic mode switch to: {mode}[/bold cyan]")
+                                # Update available tools immediately
+                                tool_names = tool_selector.get_tools_for_mode(mode)
+                                genai_tools = registry.get_genai_tools(tool_names)
+                                tool_definitions = convert_tools_to_definitions(genai_tools)
+                                system_prompt = build_system_prompt(mode, active_skills_content)
+                                console.print(f"[dim]Tools updated for {mode} mode ({len(tool_definitions)} tools)[/dim]")
 
                 # No more tool calls - done with this turn
                 if not has_tool_call:

@@ -363,6 +363,67 @@ def _create_default_registry() -> ToolRegistry:
     except ImportError as e:
         logger.warning(f"Failed to import git tools: {e}")
 
+    try:
+        # LSP Tools
+        from src.servers.lsp import (
+            lsp_diagnostics,
+            lsp_completions,
+            lsp_hover,
+            lsp_references,
+            lsp_rename,
+            lsp_definition,
+        )
+
+        registry.register(lsp_diagnostics, sensitive=False, timeout=_get_timeout("lsp_diagnostics", 120.0))
+        registry.register(lsp_completions, sensitive=False, timeout=_get_timeout("lsp_completions", 30.0))
+        registry.register(lsp_hover, sensitive=False, timeout=_get_timeout("lsp_hover", 30.0))
+        registry.register(lsp_references, sensitive=False, timeout=_get_timeout("lsp_references", 60.0))
+        registry.register(lsp_rename, sensitive=True, timeout=_get_timeout("lsp_rename", 60.0))
+        registry.register(lsp_definition, sensitive=False, timeout=_get_timeout("lsp_definition", 30.0))
+    except ImportError as e:
+        logger.warning(f"Failed to import LSP tools: {e}")
+
+    try:
+        # Linting Tools
+        from src.servers.lint import (
+            lint_python_ruff,
+            format_python_ruff,
+            typecheck_python_mypy,
+            lint_javascript_eslint,
+            lint_all,
+            code_complexity,
+            check_security,
+            get_lint_summary,
+        )
+
+        registry.register(lint_python_ruff, sensitive=False, timeout=_get_timeout("lint_python_ruff", 60.0))
+        registry.register(format_python_ruff, sensitive=True, timeout=_get_timeout("format_python_ruff", 60.0))
+        registry.register(typecheck_python_mypy, sensitive=False, timeout=_get_timeout("typecheck_python_mypy", 120.0))
+        registry.register(lint_javascript_eslint, sensitive=False, timeout=_get_timeout("lint_javascript_eslint", 60.0))
+        registry.register(lint_all, sensitive=False, timeout=_get_timeout("lint_all", 180.0))
+        registry.register(code_complexity, sensitive=False, timeout=_get_timeout("code_complexity", 60.0))
+        registry.register(check_security, sensitive=False, timeout=_get_timeout("check_security", 60.0))
+        registry.register(get_lint_summary, sensitive=False, timeout=_get_timeout("get_lint_summary", 60.0))
+    except ImportError as e:
+        logger.warning(f"Failed to import lint tools: {e}")
+
+    try:
+        # Semantic Search Tools
+        from src.servers.semantic_search import semantic_search, index_codebase
+
+        registry.register(semantic_search, sensitive=False, timeout=_get_timeout("semantic_search", 120.0))
+        registry.register(index_codebase, sensitive=False, timeout=_get_timeout("index_codebase", 300.0))
+    except ImportError as e:
+        logger.warning(f"Failed to import semantic search tools: {e}")
+
+    try:
+        # System Tools
+        from src.servers.system import switch_mode
+
+        registry.register(switch_mode, sensitive=False, timeout=_get_timeout("switch_mode", 10.0))
+    except ImportError as e:
+        logger.warning(f"Failed to import system tools: {e}")
+
     logger.info(f"Tool registry initialized with {len(registry.get_tool_names())} tools")
     return registry
 

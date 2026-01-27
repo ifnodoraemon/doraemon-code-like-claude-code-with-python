@@ -43,6 +43,7 @@ AUX_TOOLS = [
     "fetch_url",       # 获取网页
     "save_note",       # 保存笔记
     "search_notes",    # 搜索笔记
+    "switch_mode",     # 切换模式 (plan/build)
 ]
 
 # 高级工具 - 特殊场景

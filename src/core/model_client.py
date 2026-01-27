@@ -122,6 +122,7 @@ class ChatResponse:
 class StreamChunk:
     """Streaming response chunk."""
     content: str | None = None
+    thought: str | None = None  # Streaming thought content
     tool_calls: list[dict] | None = None
     finish_reason: str | None = None
     usage: dict | None = None
@@ -354,8 +355,14 @@ class GatewayModelClient(BaseModelClient):
                         continue
                     choice = choices[0]
                     delta = choice.get("delta", {})
+                    # For Gemini via Gateway, thought might be in delta if we updated Gateway?
+                    # Or maybe we need to update _chat_google in DIRECT mode?
+                    # The code above (lines 342-365) is inside GatewayModelClient implementation for OpenAI compatible API.
+                    # If Gateway supports thought, it should be in delta.
+                    
                     yield StreamChunk(
                         content=delta.get("content"),
+                        thought=delta.get("thought"), # Add thought
                         tool_calls=delta.get("tool_calls"),
                         finish_reason=choice.get("finish_reason"),
                         usage=chunk.get("usage"),

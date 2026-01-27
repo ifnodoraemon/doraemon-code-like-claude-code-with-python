@@ -28,8 +28,8 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
                 import google.generativeai as genai
                 genai.configure(api_key=self.api_key)
                 self.client = genai
-            except ImportError:
-                logger.warning("google-genai package not found. Install it to use Google embeddings.")
+            except ImportError as e:
+                logger.warning(f"google-genai package not found or failed to load: {e}. Install it to use Google embeddings.")
                 self.provider = "none"
                 
         # Check for OpenAI API Key (fallback or preference)
@@ -39,8 +39,8 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
             try:
                 from openai import OpenAI
                 self.client = OpenAI(api_key=self.api_key)
-            except ImportError:
-                logger.warning("openai package not found. Install it to use OpenAI embeddings.")
+            except ImportError as e:
+                logger.warning(f"openai package not found or failed to load: {e}. Install it to use OpenAI embeddings.")
                 self.provider = "none"
 
     def __call__(self, input: Documents) -> Embeddings:
