@@ -420,7 +420,7 @@ def _create_default_registry() -> ToolRegistry:
         # System Tools
         from src.servers.system import switch_mode
 
-        registry.register(switch_mode, sensitive=False, timeout=_get_timeout("switch_mode", 10.0))
+        registry.register(switch_mode, sensitive=True, timeout=_get_timeout("switch_mode", 10.0))
     except ImportError as e:
         logger.warning(f"Failed to import system tools: {e}")
 
