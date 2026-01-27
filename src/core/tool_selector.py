@@ -70,17 +70,17 @@ class ToolSelector:
     
     按模式分配工具，不做动态搜索
     """
-    
+
     def __init__(self):
         # plan 模式：只读 + 辅助
         self.plan_tools = READ_TOOLS + AUX_TOOLS
-        
+
         # build 模式：全部工具
         self.build_tools = READ_TOOLS + WRITE_TOOLS + AUX_TOOLS + ADVANCED_TOOLS
-        
+
         # MCP 扩展工具（运行时加载）
         self.mcp_tools: list[str] = []
-        
+
     def get_tools_for_mode(self, mode: str) -> list[str]:
         """
         根据模式获取可用工具
@@ -95,12 +95,12 @@ class ToolSelector:
             tools = self.plan_tools.copy()
         else:  # build
             tools = self.build_tools.copy()
-        
+
         # 添加 MCP 扩展工具
         tools.extend(self.mcp_tools)
-        
+
         return tools
-    
+
     def register_mcp_tools(self, tool_names: list[str]) -> None:
         """
         注册 MCP 扩展工具
@@ -112,7 +112,7 @@ class ToolSelector:
             if name not in self.mcp_tools:
                 self.mcp_tools.append(name)
                 logger.info(f"Registered MCP tool: {name}")
-    
+
     def unregister_mcp_tools(self, tool_names: list[str] | None = None) -> None:
         """
         注销 MCP 扩展工具
@@ -126,12 +126,12 @@ class ToolSelector:
             for name in tool_names:
                 if name in self.mcp_tools:
                     self.mcp_tools.remove(name)
-    
+
     def get_all_builtin_tools(self) -> list[str]:
         """获取所有内置工具"""
         all_tools = set(READ_TOOLS + WRITE_TOOLS + AUX_TOOLS + ADVANCED_TOOLS)
         return list(all_tools)
-    
+
     def get_tool_categories(self) -> dict[str, list[str]]:
         """获取工具分类（用于显示）"""
         return {

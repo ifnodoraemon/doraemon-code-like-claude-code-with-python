@@ -11,15 +11,14 @@ Features:
 - Notification channels
 """
 
-import asyncio
 import logging
 import platform
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +117,6 @@ class DesktopNotifier:
         elif self._system == "Windows":
             try:
                 # Check for Windows 10+ toast notifications
-                import ctypes
                 return True
             except Exception:
                 return False

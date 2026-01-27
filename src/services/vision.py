@@ -85,6 +85,18 @@ class OpenAIAdapter(VisionAdapter):
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
 
+    def _get_mime_type(self, image_path: str) -> str:
+        """Get MIME type based on file extension."""
+        ext = image_path.lower().split(".")[-1] if "." in image_path else ""
+        mime_types = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "gif": "image/gif",
+            "webp": "image/webp",
+        }
+        return mime_types.get(ext, "image/jpeg")
+
     def process(self, image_path: str, prompt: str) -> str:
         if not self.client:
             logger.warning("OPENAI_API_KEY not set, cannot process image")
@@ -100,7 +112,7 @@ class OpenAIAdapter(VisionAdapter):
                             {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
-                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                                "image_url": {"url": f"data:{self._get_mime_type(image_path)};base64,{base64_image}"},
                             },
                         ],
                     }

@@ -7,11 +7,11 @@ Translates unified API to Ollama format for local models.
 import json
 import logging
 import uuid
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
-from .base import AdapterConfig, BaseAdapter
 from ..schema import (
     ChatMessage,
     ChatRequest,
@@ -24,6 +24,7 @@ from ..schema import (
     ToolCall,
     Usage,
 )
+from .base import AdapterConfig, BaseAdapter
 
 logger = logging.getLogger(__name__)
 

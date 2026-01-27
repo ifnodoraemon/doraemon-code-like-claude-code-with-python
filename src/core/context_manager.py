@@ -264,7 +264,7 @@ class ContextManager:
             "estimated_tokens": estimated_tokens,
             "last_prompt_tokens": self._last_prompt_tokens,
             "threshold_tokens": threshold,
-            "usage_percent": round(estimated_tokens / self.config.max_context_tokens * 100, 1),
+            "usage_percent": round(estimated_tokens / max(self.config.max_context_tokens, 1) * 100, 1),
             "session_id": self.session_id,
             "needs_summary": estimated_tokens > threshold,
         }

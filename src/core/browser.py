@@ -11,10 +11,8 @@ Features:
 - Cookie and storage management
 """
 
-import asyncio
-import base64
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 

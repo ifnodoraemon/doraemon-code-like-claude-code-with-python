@@ -217,8 +217,9 @@ class ToolRegistry:
             return str(result) if result is not None else "Success"
 
         except Exception as e:
-            logger.error(f"Tool {name} failed: {e}")
-            return f"Error: {e}"
+            logger.error(f"Tool {name} failed: {e}", exc_info=True)
+            # Return error message for graceful handling in chat loop
+            return f"Error executing {name}: {type(e).__name__}: {e}"
 
 
 # ========================================

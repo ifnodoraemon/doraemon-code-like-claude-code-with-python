@@ -43,10 +43,13 @@ class EvaluationHarness:
         os.makedirs(output_dir, exist_ok=True)
 
     def load_tasks(self) -> list[dict]:
-        with open(self.dataset_path) as f:
-            if self.dataset_path.endswith(".jsonl"):
-                return [json.loads(line) for line in f]
-            return json.load(f)
+        try:
+            with open(self.dataset_path) as f:
+                if self.dataset_path.endswith(".jsonl"):
+                    return [json.loads(line) for line in f]
+                return json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            raise ValueError(f"Failed to load dataset from {self.dataset_path}: {e}") from e
 
     def check_assertions(
         self, assertions: list[dict], trace: list[dict], final_output: str, sandbox_dir: str
@@ -106,7 +109,10 @@ class EvaluationHarness:
 
         try:
             # 切换到沙箱
-            os.chdir(sandbox_dir)
+            try:
+                os.chdir(sandbox_dir)
+            except OSError as e:
+                raise RuntimeError(f"Failed to change to sandbox directory: {e}") from e
 
             mcp_client = MultiServerMCPClient(tracer=tracer)
             # 注意：这里需要确保 connect_to_config 能在沙箱中找到 server 脚本
@@ -193,9 +199,16 @@ class EvaluationHarness:
             tracer.log("system_error", "fatal", error)
         finally:
             # 恢复环境
-            os.chdir(original_cwd)
+            try:
+                os.chdir(original_cwd)
+            except OSError:
+                pass  # Best effort recovery
             # 可选：保留沙箱以供调试，或者删除
-            # shutil.rmtree(sandbox_dir)
+            # import shutil
+            # try:
+            #     shutil.rmtree(sandbox_dir)
+            # except Exception as e:
+            #     logger.warning(f"Failed to cleanup sandbox {sandbox_dir}: {e}")
 
         duration = time.time() - start_time
 

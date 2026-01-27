@@ -171,6 +171,38 @@ def list_installed_packages() -> str:
         return f"Error listing packages: {str(e)}"
 
 
+def _validate_package_name(name: str) -> tuple[bool, str]:
+    """Validate package name for safety."""
+    import re
+
+    # Basic sanitization
+    name = name.strip()
+
+    # Check for empty name
+    if not name:
+        return False, "Package name cannot be empty"
+
+    # Check for path traversal or shell injection attempts
+    dangerous_patterns = ['..', '/', '\\', ';', '|', '&', '$', '`', '>', '<', '(', ')']
+    for pattern in dangerous_patterns:
+        if pattern in name:
+            return False, f"Package name contains invalid character: {pattern}"
+
+    # Valid PyPI package name pattern (PEP 508)
+    # Allows letters, numbers, underscores, hyphens, dots
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$', name):
+        return False, "Package name must start with alphanumeric and contain only letters, numbers, dots, underscores, and hyphens"
+
+    # Check for suspicious patterns (potential typosquatting indicators)
+    suspicious_patterns = ['eval', 'exec', 'system', 'subprocess']
+    name_lower = name.lower()
+    for pattern in suspicious_patterns:
+        if pattern in name_lower and name_lower != pattern:
+            logger.warning(f"Package name contains suspicious pattern: {pattern}")
+
+    return True, ""
+
+
 @mcp.tool()
 def install_package(package_name: str) -> str:
     """
@@ -178,6 +210,12 @@ def install_package(package_name: str) -> str:
     If the package name is incorrect, I will provide suggestions based on PyPI search.
     """
     logger.info(f"Attempting to install package: {package_name}")
+
+    # Validate package name for security
+    is_valid, error_msg = _validate_package_name(package_name)
+    if not is_valid:
+        return f"❌ Invalid package name: {error_msg}"
+
     try:
         # First, check if package exists to provide better feedback
         check_url = f"https://pypi.org/pypi/{package_name}/json"
@@ -244,6 +282,10 @@ def execute_python(
     """
     logger.info(f"Executing Python code ({len(code)} chars, sandbox={sandbox})")
     logger.debug(f"Code:\n{code}")
+
+    # Warn about sandbox=False usage
+    if not sandbox:
+        logger.warning("Running code with sandbox=False - no resource limits applied!")
 
     # Configure resource limits
     limits = ResourceLimits(

@@ -126,8 +126,28 @@ def _is_command_blocked(command: str, config: ShellConfig = DEFAULT_CONFIG) -> b
     """Check if a command is blocked for safety."""
     command_lower = command.lower().strip()
 
+    # Remove quotes and escape sequences for better detection
+    # This helps prevent simple bypass attempts
+    normalized = command_lower.replace('"', '').replace("'", '').replace('\\', '')
+
     for blocked in config.blocked_commands:
-        if blocked.lower() in command_lower:
+        blocked_lower = blocked.lower()
+        if blocked_lower in command_lower or blocked_lower in normalized:
+            return True
+
+    # Additional checks for dangerous patterns
+    dangerous_patterns = [
+        r'>\s*/dev/sd',  # Writing to disk devices
+        r'>\s*/dev/null.*2>&1.*&',  # Hiding output and backgrounding
+        r'\|\s*bash',  # Piping to bash
+        r'\|\s*sh\b',  # Piping to sh
+        r'\$\(.*\)',  # Command substitution (potential injection)
+        r'`.*`',  # Backtick command substitution
+    ]
+
+    import re
+    for pattern in dangerous_patterns:
+        if re.search(pattern, command_lower):
             return True
 
     return False
@@ -210,10 +230,16 @@ def execute_command(
     # Clamp timeout
     timeout = min(max(1, timeout), DEFAULT_CONFIG.max_timeout)
 
-    # Prepare environment
+    # Prepare environment with safety checks
     process_env = os.environ.copy()
     if env:
-        process_env.update(env)
+        # Filter out dangerous environment variable overrides
+        dangerous_env_vars = {'PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES'}
+        safe_env = {k: v for k, v in env.items() if k.upper() not in dangerous_env_vars}
+        if len(safe_env) < len(env):
+            filtered = set(env.keys()) - set(safe_env.keys())
+            logger.warning(f"Filtered dangerous env vars: {filtered}")
+        process_env.update(safe_env)
 
     try:
         # Execute the command
@@ -296,7 +322,10 @@ def execute_command_background(
 
     process_env = os.environ.copy()
     if env:
-        process_env.update(env)
+        # Filter out dangerous environment variable overrides
+        dangerous_env_vars = {'PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES'}
+        safe_env = {k: v for k, v in env.items() if k.upper() not in dangerous_env_vars}
+        process_env.update(safe_env)
 
     try:
         # Start the process

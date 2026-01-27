@@ -15,16 +15,16 @@ Features:
 - Plugin isolation
 """
 
-import hashlib
 import json
 import logging
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

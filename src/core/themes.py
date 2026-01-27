@@ -12,7 +12,7 @@ Features:
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -405,17 +405,17 @@ class ThemeManager:
 
         c = theme.colors
         lines = [
-            f"",
+            "",
             f"[{c.panel_title}]━━━ {theme.name} ━━━[/{c.panel_title}]",
             f"[{c.dim}]{theme.description}[/{c.dim}]",
-            f"",
+            "",
             f"[{c.user_message}]User message example[/{c.user_message}]",
             f"[{c.assistant_message}]Assistant response example[/{c.assistant_message}]",
             f"[{c.error_message}]Error message example[/{c.error_message}]",
             f"[{c.warning_message}]Warning message example[/{c.warning_message}]",
             f"[{c.success_message}]Success message example[/{c.success_message}]",
             f"[{c.code_block}]Code block example[/{c.code_block}]",
-            f"",
+            "",
         ]
 
         return "\n".join(lines)

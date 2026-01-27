@@ -14,11 +14,10 @@ import asyncio
 import json
 import logging
 import subprocess
-import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -274,9 +273,9 @@ class MCPConnection:
         # Wait for response with timeout
         try:
             return await asyncio.wait_for(future, timeout=self.config.timeout)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as e:
             self._pending_requests.pop(request_id, None)
-            raise Exception(f"Request timeout: {method}")
+            raise Exception(f"Request timeout: {method}") from e
 
     async def _notify(self, method: str, params: dict):
         """Send a notification (no response expected)."""
@@ -296,6 +295,8 @@ class MCPConnection:
     async def list_tools(self) -> list[MCPTool]:
         """List available tools."""
         result = await self._request("tools/list", {})
+        if result is None:
+            return []
         tools = []
 
         for tool_data in result.get("tools", []):
@@ -326,19 +327,24 @@ class MCPConnection:
             {"name": name, "arguments": arguments},
         )
 
-        # Extract content
+        # Extract content - safely handle empty content
+        if result is None:
+            return None
         content = result.get("content", [])
-        if content and len(content) > 0:
-            first = content[0]
-            if first.get("type") == "text":
-                return first.get("text")
-            return first
+        if content:
+            first = content[0] if len(content) > 0 else None
+            if first:
+                if first.get("type") == "text":
+                    return first.get("text", "")
+                return first
 
         return result
 
     async def list_resources(self) -> list[MCPResource]:
         """List available resources."""
         result = await self._request("resources/list", {})
+        if result is None:
+            return []
         resources = []
 
         for res_data in result.get("resources", []):
@@ -365,9 +371,11 @@ class MCPConnection:
             Resource content
         """
         result = await self._request("resources/read", {"uri": uri})
+        if result is None:
+            return ""
         contents = result.get("contents", [])
 
-        if contents and len(contents) > 0:
+        if contents:
             return contents[0].get("text", "")
 
         return ""
@@ -375,6 +383,8 @@ class MCPConnection:
     async def list_prompts(self) -> list[MCPPrompt]:
         """List available prompts."""
         result = await self._request("prompts/list", {})
+        if result is None:
+            return []
         prompts = []
 
         for prompt_data in result.get("prompts", []):
@@ -405,6 +415,8 @@ class MCPConnection:
             {"name": name, "arguments": arguments},
         )
 
+        if result is None:
+            return ""
         messages = result.get("messages", [])
         if messages:
             return messages[0].get("content", {}).get("text", "")

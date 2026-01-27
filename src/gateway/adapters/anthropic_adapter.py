@@ -6,9 +6,9 @@ Translates unified API to Anthropic Claude format.
 
 import logging
 import uuid
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
-from .base import AdapterConfig, BaseAdapter
 from ..schema import (
     ChatMessage,
     ChatRequest,
@@ -21,6 +21,7 @@ from ..schema import (
     ToolCall,
     Usage,
 )
+from .base import BaseAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +96,8 @@ class AnthropicAdapter(BaseAdapter):
                 max_retries=self.config.max_retries,
             )
             logger.info("Anthropic adapter initialized")
-        except ImportError:
-            raise ImportError("anthropic package required: pip install anthropic")
+        except ImportError as e:
+            raise ImportError("anthropic package required: pip install anthropic") from e
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """Send chat request to Claude."""

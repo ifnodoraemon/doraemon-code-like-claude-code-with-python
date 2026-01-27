@@ -15,10 +15,11 @@ import fnmatch
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +314,7 @@ class PermissionManager:
         ):
             return PermissionResult(
                 level=PermissionLevel.DENY,
-                message=f"Write operations not allowed in plan mode",
+                message="Write operations not allowed in plan mode",
             )
 
         # Check if already approved in this session

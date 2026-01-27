@@ -29,9 +29,10 @@ import logging
 import os
 import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, AsyncIterator, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,30 @@ class StreamChunk:
     tool_calls: list[dict] | None = None
     finish_reason: str | None = None
     usage: dict | None = None
+
+
+@dataclass
+class ToolCall:
+    """A tool/function call from the model."""
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "arguments": self.arguments,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ToolCall":
+        return cls(
+            id=data.get("id", ""),
+            name=data.get("name", ""),
+            arguments=data.get("arguments", {}),
+        )
+
 
 
 @dataclass
@@ -263,8 +288,17 @@ class GatewayModelClient(BaseModelClient):
         response.raise_for_status()
         data = response.json()
 
-        # Extract response
-        choice = data.get("choices", [{}])[0]
+        # Extract response - safely handle empty choices
+        choices = data.get("choices", [])
+        if not choices:
+            return ChatResponse(
+                content=None,
+                tool_calls=None,
+                finish_reason="error",
+                usage=data.get("usage"),
+                raw=data,
+            )
+        choice = choices[0]
         message = choice.get("message", {})
 
         return ChatResponse(
@@ -311,7 +345,10 @@ class GatewayModelClient(BaseModelClient):
                     break
                 try:
                     chunk = json.loads(data)
-                    choice = chunk.get("choices", [{}])[0]
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    choice = choices[0]
                     delta = choice.get("delta", {})
                     yield StreamChunk(
                         content=delta.get("content"),
@@ -407,6 +444,8 @@ class DirectModelClient(BaseModelClient):
                     if provider in self._providers:
                         return provider
         # Default to first available
+        if not self._providers:
+            raise RuntimeError("No providers available. Check your API keys.")
         return next(iter(self._providers.keys()))
 
     async def chat(
@@ -463,10 +502,16 @@ class DirectModelClient(BaseModelClient):
             if msg.get("tool_calls"):
                 for tc in msg["tool_calls"]:
                     func = tc.get("function", {})
+                    args_str = func.get("arguments", "{}")
+                    try:
+                        args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse tool arguments: {args_str}")
+                        args = {}
                     parts.append({
                         "function_call": {
                             "name": func.get("name"),
-                            "args": json.loads(func.get("arguments", "{}")),
+                            "args": args,
                         }
                     })
 
@@ -519,34 +564,49 @@ class DirectModelClient(BaseModelClient):
             config=gen_config,
         )
 
-        # Extract response
+        # Extract response - safely handle empty candidates
         content = None
         tool_calls = None
         finish_reason = "stop"
 
-        if response.candidates:
-            candidate = response.candidates[0]
-            texts = []
-            for part in candidate.content.parts:
-                if hasattr(part, "text") and part.text:
-                    texts.append(part.text)
-                elif hasattr(part, "function_call") and part.function_call:
-                    if tool_calls is None:
-                        tool_calls = []
-                    fc = part.function_call
-                    tool_calls.append({
-                        "id": f"call_{uuid.uuid4().hex[:8]}",
-                        "type": "function",
-                        "function": {
-                            "name": fc.name,
-                            "arguments": json.dumps(dict(fc.args) if fc.args else {}),
-                        },
-                    })
-            if texts:
-                content = "".join(texts)
+        if not response.candidates:
+            logger.warning("No candidates in Gemini response")
+            return ChatResponse(
+                content=None,
+                tool_calls=None,
+                finish_reason="error",
+                usage=None,
+                raw=response,
+            )
 
-            if tool_calls:
-                finish_reason = "tool_calls"
+        candidate = response.candidates[0]
+        texts = []
+        for part in candidate.content.parts:
+            if hasattr(part, "text") and part.text:
+                texts.append(part.text)
+            elif hasattr(part, "function_call") and part.function_call:
+                if tool_calls is None:
+                    tool_calls = []
+                fc = part.function_call
+                # Safely convert args to dict
+                try:
+                    args = dict(fc.args) if fc.args else {}
+                except (TypeError, ValueError):
+                    logger.warning(f"Failed to convert function call args: {fc.args}")
+                    args = {}
+                tool_calls.append({
+                    "id": f"call_{uuid.uuid4().hex[:8]}",
+                    "type": "function",
+                    "function": {
+                        "name": fc.name,
+                        "arguments": json.dumps(args),
+                    },
+                })
+        if texts:
+            content = "".join(texts)
+
+        if tool_calls:
+            finish_reason = "tool_calls"
 
         usage = None
         if hasattr(response, "usage_metadata") and response.usage_metadata:
@@ -594,6 +654,17 @@ class DirectModelClient(BaseModelClient):
             params["max_tokens"] = self.config.max_tokens
 
         response = await client.chat.completions.create(**params)
+
+        # Safely handle empty choices
+        if not response.choices:
+            logger.warning("No choices in OpenAI response")
+            return ChatResponse(
+                content=None,
+                tool_calls=None,
+                finish_reason="error",
+                usage=None,
+                raw=response,
+            )
         choice = response.choices[0]
 
         tool_calls = None
@@ -659,11 +730,17 @@ class DirectModelClient(BaseModelClient):
                 if msg.get("tool_calls"):
                     for tc in msg["tool_calls"]:
                         func = tc.get("function", {})
+                        args_str = func.get("arguments", "{}")
+                        try:
+                            args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                        except json.JSONDecodeError:
+                            logger.warning(f"Failed to parse tool arguments: {args_str}")
+                            args = {}
                         content.append({
                             "type": "tool_use",
                             "id": tc.get("id"),
                             "name": func.get("name"),
-                            "input": json.loads(func.get("arguments", "{}")),
+                            "input": args,
                         })
                 msg_list.append({
                     "role": "assistant" if role == "assistant" else "user",

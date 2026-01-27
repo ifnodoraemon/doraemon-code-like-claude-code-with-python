@@ -1,13 +1,14 @@
 """Model Router - Routes requests to appropriate provider adapter."""
 
 import logging
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
+from .adapters.anthropic_adapter import AnthropicAdapter
 from .adapters.base import AdapterConfig, BaseAdapter
 from .adapters.google_adapter import GoogleAdapter
-from .adapters.openai_adapter import OpenAIAdapter
-from .adapters.anthropic_adapter import AnthropicAdapter
 from .adapters.ollama_adapter import OllamaAdapter
+from .adapters.openai_adapter import OpenAIAdapter
 from .schema import ChatRequest, ChatResponse, ErrorResponse, ModelInfo, StreamChunk
 
 logger = logging.getLogger(__name__)
@@ -87,8 +88,12 @@ class ModelRouter:
         if not adapter:
             yield ErrorResponse(error=f"Model not found: {request.model}", code="model_not_found")
             return
-        async for chunk in adapter.chat_stream(request):
-            yield chunk
+        try:
+            async for chunk in adapter.chat_stream(request):
+                yield chunk
+        except Exception as e:
+            logger.error(f"Stream error for {request.model}: {e}")
+            yield ErrorResponse(error=str(e), code="provider_error")
 
     def list_models(self, provider: str | None = None) -> list[ModelInfo]:
         models = []

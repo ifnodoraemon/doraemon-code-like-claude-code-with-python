@@ -16,26 +16,27 @@ import fnmatch
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Try to import watchdog
 try:
-    from watchdog.observers import Observer
     from watchdog.events import (
-        FileSystemEventHandler,
-        FileCreatedEvent,
-        FileModifiedEvent,
-        FileDeletedEvent,
-        FileMovedEvent,
         DirCreatedEvent,
         DirDeletedEvent,
         DirMovedEvent,
+        FileCreatedEvent,
+        FileDeletedEvent,
+        FileModifiedEvent,
+        FileMovedEvent,
+        FileSystemEventHandler,
     )
+    from watchdog.observers import Observer
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False

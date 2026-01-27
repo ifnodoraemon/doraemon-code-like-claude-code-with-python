@@ -42,7 +42,7 @@ class TestClientConfig:
 
             assert config.mode == ClientMode.GATEWAY
             assert config.gateway_url == "http://localhost:8000"
-            assert config.api_key == "test_gateway_key"
+            assert config.gateway_key == "test_gateway_key"
 
 
 class TestMessage:

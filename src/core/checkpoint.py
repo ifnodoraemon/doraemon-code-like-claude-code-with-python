@@ -15,7 +15,6 @@ import gzip
 import hashlib
 import json
 import logging
-import shutil
 import time
 from dataclasses import dataclass, field
 from datetime import datetime

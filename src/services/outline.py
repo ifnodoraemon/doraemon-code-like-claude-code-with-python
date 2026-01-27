@@ -53,9 +53,10 @@ def _parse_python(content: str) -> str:
             base_str = f"({', '.join(bases)})" if bases else ""
             lines.append(f"class {node.name}{base_str}:")
 
-            if ast.get_docstring(node):
-                doc = ast.get_docstring(node).splitlines()[0]
-                lines.append(f"    # {doc}")
+            doc = ast.get_docstring(node)
+            if doc:
+                doc_first_line = doc.splitlines()[0]
+                lines.append(f"    # {doc_first_line}")
 
             for item in node.body:
                 if isinstance(item, ast.FunctionDef):
@@ -65,9 +66,10 @@ def _parse_python(content: str) -> str:
         elif isinstance(node, ast.FunctionDef):
             args = get_args(node.args)
             lines.append(f"def {node.name}({args}):")
-            if ast.get_docstring(node):
-                doc = ast.get_docstring(node).splitlines()[0]
-                lines.append(f"    # {doc}")
+            doc = ast.get_docstring(node)
+            if doc:
+                doc_first_line = doc.splitlines()[0]
+                lines.append(f"    # {doc_first_line}")
 
     if not lines:
         return "[No top-level classes or functions found]"

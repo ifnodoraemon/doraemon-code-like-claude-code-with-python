@@ -20,6 +20,8 @@ Usage:
     POLYMATH_API_KEY=your-gateway-key
 """
 
+from .client import GatewayClient, GatewayConfig, create_client
+from .router import ModelRouter
 from .schema import (
     ChatMessage,
     ChatRequest,
@@ -29,8 +31,6 @@ from .schema import (
     ToolResult,
     Usage,
 )
-from .client import GatewayClient, GatewayConfig, create_client
-from .router import ModelRouter
 
 __all__ = [
     "ChatMessage",

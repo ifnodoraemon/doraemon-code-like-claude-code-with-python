@@ -15,10 +15,11 @@ import logging
 import os
 import stat
 import subprocess
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ fi
 
 exit 0
 ''',
-        GitHookType.COMMIT_MSG: '''#!/bin/bash
+        GitHookType.COMMIT_MSG: r'''#!/bin/bash
 # Polymath commit-msg hook
 
 # Check commit message format

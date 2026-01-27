@@ -7,22 +7,21 @@ Since our unified format is based on OpenAI's, this is mostly pass-through.
 
 import json
 import logging
-import uuid
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
-from .base import AdapterConfig, BaseAdapter
 from ..schema import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
     Choice,
-    FinishReason,
     ModelInfo,
     Role,
     StreamChunk,
     ToolCall,
     Usage,
 )
+from .base import BaseAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +96,8 @@ class OpenAIAdapter(BaseAdapter):
                 max_retries=self.config.max_retries,
             )
             logger.info("OpenAI adapter initialized")
-        except ImportError:
-            raise ImportError("openai package required: pip install openai")
+        except ImportError as e:
+            raise ImportError("openai package required: pip install openai") from e
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """Send chat request to OpenAI."""

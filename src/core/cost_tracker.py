@@ -14,7 +14,7 @@ Features:
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -348,7 +348,6 @@ class CostTracker:
 
     def get_project_stats(self, days: int = 30) -> UsageStats:
         """Get statistics for project over specified days."""
-        cutoff = datetime.now() - timedelta(days=days)
         all_records = []
 
         # Load records from each day
@@ -409,7 +408,7 @@ class CostTracker:
         }
 
         # Check daily limit
-        if self.budget.daily_limit_usd:
+        if self.budget.daily_limit_usd and self.budget.daily_limit_usd > 0:
             daily_pct = daily_stats.total_cost_usd / self.budget.daily_limit_usd
 
             if daily_pct >= 1.0:
@@ -425,7 +424,7 @@ class CostTracker:
                 )
 
         # Check session limit
-        if self.budget.session_limit_usd:
+        if self.budget.session_limit_usd and self.budget.session_limit_usd > 0:
             session_pct = session_stats.total_cost_usd / self.budget.session_limit_usd
 
             if session_pct >= 1.0:

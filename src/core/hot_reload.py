@@ -13,12 +13,11 @@ Features:
 import json
 import logging
 import threading
-import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
 
-from .file_watcher import FileWatcher, FileEvent, FileEventType
+from .file_watcher import FileEvent, FileEventType, FileWatcher
 
 logger = logging.getLogger(__name__)
 

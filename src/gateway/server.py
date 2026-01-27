@@ -18,13 +18,13 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .router import ModelRouter
-from .schema import ChatRequest, ChatMessage, ErrorResponse, ToolDefinition
+from .schema import ChatMessage, ChatRequest, ErrorResponse, ToolDefinition
 
 logger = logging.getLogger(__name__)
 

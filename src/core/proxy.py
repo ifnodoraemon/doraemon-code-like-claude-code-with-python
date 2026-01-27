@@ -13,7 +13,6 @@ Features:
 
 import logging
 import os
-import socket
 import urllib.parse
 from dataclasses import dataclass, field
 from enum import Enum

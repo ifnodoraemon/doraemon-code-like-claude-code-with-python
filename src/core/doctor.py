@@ -214,7 +214,7 @@ class Doctor:
             return CheckResult(
                 name="Optional Dependencies",
                 status=CheckStatus.WARNING,
-                message=f"Some features unavailable",
+                message="Some features unavailable",
                 details=f"Missing: {', '.join(missing)}",
                 fix_suggestion="Install with: pip install " + " ".join(
                     m.split(" ")[0] for m in missing
@@ -224,7 +224,7 @@ class Doctor:
         return CheckResult(
             name="Optional Dependencies",
             status=CheckStatus.OK,
-            message=f"All optional packages installed",
+            message="All optional packages installed",
             details=f"Features: {', '.join(installed)}",
         )
 
@@ -385,7 +385,7 @@ class Doctor:
                 message="Connected to Google API",
             )
 
-        except socket.timeout:
+        except TimeoutError:
             return CheckResult(
                 name="Network",
                 status=CheckStatus.ERROR,
@@ -393,7 +393,7 @@ class Doctor:
                 fix_suggestion="Check your internet connection",
             )
 
-        except socket.error as e:
+        except OSError as e:
             return CheckResult(
                 name="Network",
                 status=CheckStatus.ERROR,

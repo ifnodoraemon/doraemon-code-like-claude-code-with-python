@@ -4,12 +4,11 @@ Google Gemini Adapter
 Translates unified API to Google GenAI format.
 """
 
-import json
 import logging
 import uuid
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
-from .base import AdapterConfig, BaseAdapter
 from ..schema import (
     ChatMessage,
     ChatRequest,
@@ -22,6 +21,7 @@ from ..schema import (
     ToolCall,
     Usage,
 )
+from .base import BaseAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -79,25 +79,28 @@ class GoogleAdapter(BaseAdapter):
 
             self._client = genai.Client(api_key=self.config.api_key)
             logger.info("Google adapter initialized")
-        except ImportError:
-            raise ImportError("google-genai package required: pip install google-genai")
+        except ImportError as e:
+            raise ImportError("google-genai package required: pip install google-genai") from e
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """Send chat request to Gemini."""
-        from google.genai import types
 
         # Convert messages to Gemini format
-        contents = self._convert_messages(request.messages)
+        contents, system_instruction = self._convert_messages(request.messages)
 
         # Build config
-        gen_config = self._build_config(request)
+        gen_config = self._build_config(request, system_instruction)
 
-        # Make request
-        response = await self._client.aio.models.generate_content(
-            model=request.model,
-            contents=contents,
-            config=gen_config,
-        )
+        # Make request with error handling
+        try:
+            response = await self._client.aio.models.generate_content(
+                model=request.model,
+                contents=contents,
+                config=gen_config,
+            )
+        except Exception as e:
+            logger.error(f"Google API error: {e}")
+            raise RuntimeError(f"Google API request failed: {e}") from e
 
         # Convert response
         return self._convert_response(response, request.model)
@@ -106,18 +109,21 @@ class GoogleAdapter(BaseAdapter):
         self, request: ChatRequest
     ) -> AsyncIterator[StreamChunk]:
         """Stream chat response from Gemini."""
-        from google.genai import types
 
-        contents = self._convert_messages(request.messages)
-        gen_config = self._build_config(request)
+        contents, system_instruction = self._convert_messages(request.messages)
+        gen_config = self._build_config(request, system_instruction)
 
         response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
 
-        response = await self._client.aio.models.generate_content_stream(
-            model=request.model,
-            contents=contents,
-            config=gen_config,
-        )
+        try:
+            response = await self._client.aio.models.generate_content_stream(
+                model=request.model,
+                contents=contents,
+                config=gen_config,
+            )
+        except Exception as e:
+            logger.error(f"Google stream API error: {e}")
+            raise RuntimeError(f"Google stream API request failed: {e}") from e
 
         async for chunk in response:
             text = None
@@ -132,11 +138,17 @@ class GoogleAdapter(BaseAdapter):
                     for part in candidate.content.parts:
                         if hasattr(part, "function_call") and part.function_call:
                             fc = part.function_call
+                            # Safely convert args to dict
+                            try:
+                                args = dict(fc.args) if fc.args else {}
+                            except (TypeError, ValueError):
+                                logger.warning(f"Failed to convert function call args: {fc.args}")
+                                args = {}
                             tool_calls = [
                                 ToolCall(
                                     id=f"call_{uuid.uuid4().hex[:8]}",
                                     name=fc.name,
-                                    arguments=dict(fc.args) if fc.args else {},
+                                    arguments=args,
                                 )
                             ]
 
@@ -159,8 +171,12 @@ class GoogleAdapter(BaseAdapter):
         """Get available Google models."""
         return GOOGLE_MODELS
 
-    def _convert_messages(self, messages: list[ChatMessage]) -> list[dict]:
-        """Convert unified messages to Gemini format."""
+    def _convert_messages(self, messages: list[ChatMessage]) -> tuple[list[dict], str | None]:
+        """Convert unified messages to Gemini format.
+        
+        Returns:
+            Tuple of (contents, system_instruction)
+        """
         contents = []
         system_instruction = None
 
@@ -203,9 +219,9 @@ class GoogleAdapter(BaseAdapter):
             if parts:
                 contents.append({"role": gemini_role, "parts": parts})
 
-        return contents
+        return contents, system_instruction
 
-    def _build_config(self, request: ChatRequest) -> Any:
+    def _build_config(self, request: ChatRequest, system_instruction: str | None = None) -> Any:
         """Build Gemini generation config."""
         from google.genai import types
 
@@ -221,6 +237,10 @@ class GoogleAdapter(BaseAdapter):
 
         if request.top_p is not None:
             config_dict["top_p"] = request.top_p
+
+        # Add system instruction if present
+        if system_instruction:
+            config_dict["system_instruction"] = system_instruction
 
         # Add tools if present
         if request.tools:

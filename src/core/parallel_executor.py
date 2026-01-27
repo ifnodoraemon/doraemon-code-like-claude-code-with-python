@@ -14,9 +14,10 @@ Features:
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -318,7 +319,7 @@ class ParallelExecutor:
                 # Multiple tools, execute in parallel
                 tasks = [self._execute_single(call) for call in stage]
                 stage_results = await asyncio.gather(*tasks)
-                for call, result in zip(stage, stage_results):
+                for call, result in zip(stage, stage_results, strict=False):
                     results_map[call.id] = result
 
         # Return in original order
@@ -425,3 +426,97 @@ class ParallelExecutor:
             "speedup": total_duration / actual_time if actual_time > 0 else 1,
             "errors": [{"name": r.name, "error": r.error} for r in failed],
         }
+
+    async def execute_streaming(
+        self,
+        calls: list[ToolCall],
+        on_result: Callable[[ToolResult], None] | None = None,
+    ) -> list[ToolResult]:
+        """
+        Execute tools and stream results as they complete.
+
+        Unlike execute(), this yields results immediately as each tool finishes,
+        allowing the caller to process results incrementally.
+
+        Args:
+            calls: Tool calls to execute
+            on_result: Optional callback called for each result
+
+        Returns:
+            List of all results in order of completion
+        """
+        if not calls:
+            return []
+
+        stages = self.analyzer.analyze(calls)
+        results = []
+        call_to_result: dict[str, ToolResult] = {}
+
+        for stage in stages:
+            # Execute stage in parallel
+            stage_results = await self._execute_stage_streaming(stage, on_result)
+            results.extend(stage_results)
+
+            # Store for dependency injection
+            for r in stage_results:
+                call_to_result[r.id] = r
+
+        return results
+
+    async def _execute_stage_streaming(
+        self,
+        stage: list[ToolCall],
+        on_result: Callable[[ToolResult], None] | None,
+    ) -> list[ToolResult]:
+        """Execute a stage and stream results as they complete."""
+        if not stage:
+            return []
+
+        # Create queue for streaming results
+        result_queue: asyncio.Queue[ToolResult] = asyncio.Queue()
+
+        async def run_one(call: ToolCall):
+            result = await self._execute_single(call)
+            await result_queue.put(result)
+            if on_result:
+                on_result(result)
+            return result
+
+        # Start all tasks
+        tasks = [asyncio.create_task(run_one(call)) for call in stage]
+
+        # Collect results as they complete
+        results = []
+        for _ in range(len(stage)):
+            result = await result_queue.get()
+            results.append(result)
+
+        # Ensure all tasks are done
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        return results
+
+
+async def execute_tools_streaming(
+    tool_handler: Callable[[str, dict], Any],
+    tool_calls: list[tuple[str, dict[str, Any]]],
+    on_result: Callable[[ToolResult], None] | None = None,
+) -> list[ToolResult]:
+    """
+    Convenience function to execute tools with streaming results.
+
+    Args:
+        tool_handler: Function to execute a tool (name, args) -> result
+        tool_calls: List of (tool_name, arguments) tuples
+        on_result: Optional callback for each result
+
+    Returns:
+        List of results in completion order
+    """
+    calls = [
+        ToolCall(id=f"call_{i}", name=name, arguments=args)
+        for i, (name, args) in enumerate(tool_calls)
+    ]
+
+    executor = ParallelExecutor(tool_handler)
+    return await executor.execute_streaming(calls, on_result)

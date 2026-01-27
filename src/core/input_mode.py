@@ -12,10 +12,9 @@ Features:
 
 import logging
 import readline
-import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +82,8 @@ class InputManager:
 
             # Common bindings
             readline.parse_and_bind("tab: complete")
-            readline.parse_and_bind('"\e[A": history-search-backward')
-            readline.parse_and_bind('"\e[B": history-search-forward')
+            readline.parse_and_bind(r'"\e[A": history-search-backward')
+            readline.parse_and_bind(r'"\e[B": history-search-forward')
 
             # History size
             readline.set_history_length(self.config.history_size)

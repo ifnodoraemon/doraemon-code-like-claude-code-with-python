@@ -376,7 +376,7 @@ class SessionManager:
                 continue
 
             # Search in description
-            if query_lower in meta.description.lower():
+            if meta.description and query_lower in meta.description.lower():
                 results.append(meta)
                 continue
 

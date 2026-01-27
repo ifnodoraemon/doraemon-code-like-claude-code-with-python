@@ -15,14 +15,14 @@ import asyncio
 import atexit
 import json
 import logging
-import os
 import signal
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -552,7 +552,7 @@ class TaskRecoveryManager:
             prompt_parts.append("")
 
         if progress.current_action:
-            prompt_parts.append(f"### Was working on:")
+            prompt_parts.append("### Was working on:")
             prompt_parts.append(f"- ⏸️ {progress.current_action}")
             prompt_parts.append("")
 

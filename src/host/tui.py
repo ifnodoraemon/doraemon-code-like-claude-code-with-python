@@ -9,9 +9,7 @@ This provides a modern terminal user interface with:
 - AI chat integration via ModelClient
 """
 
-import asyncio
 import os
-from pathlib import Path
 
 from dotenv import load_dotenv
 from rich.markdown import Markdown
@@ -26,11 +24,8 @@ load_dotenv()
 
 # Import ModelClient for AI integration
 from src.core.model_client import (
-    ModelClient,
-    ClientConfig,
-    ClientMode,
     Message,
-    ToolDefinition,
+    ModelClient,
 )
 from src.core.prompts import get_system_prompt
 from src.host.tools import get_default_registry
@@ -327,6 +322,15 @@ class PolymathTUI(App):
         chat.log.clear()
         self.conversation_history.clear()
         chat.add_message("system", "Chat and history cleared")
+
+    async def on_unmount(self) -> None:
+        """Cleanup on app exit."""
+        # Close the model client to release resources
+        if self.model_client:
+            try:
+                await self.model_client.close()
+            except Exception:
+                pass  # Best effort cleanup
 
 
 def run_tui():

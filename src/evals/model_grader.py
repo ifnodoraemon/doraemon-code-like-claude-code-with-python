@@ -57,18 +57,32 @@ class ModelGrader:
         """
 
         try:
-            # Use new SDK API
+            # Use new SDK API - contents must be a list
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=prompt,
+                contents=[prompt],
             )
-            # Extract JSON from response
+            # Extract JSON from response - safely handle empty response
+            if not response or not hasattr(response, 'text') or not response.text:
+                return {"score": 0, "pass": False, "reasoning": "Empty response from model"}
             text = response.text.strip()
+            # More robust JSON extraction
+            import re
+            # Try to find JSON object in the response
             if text.startswith("```json"):
                 text = text[7:]
+            elif text.startswith("```"):
+                text = text[3:]
             if text.endswith("```"):
                 text = text[:-3]
             text = text.strip()
+
+            # If text doesn't start with {, try to find a JSON object
+            if not text.startswith("{"):
+                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
+                if json_match:
+                    text = json_match.group(0)
+
             return json.loads(text)
         except json.JSONDecodeError as e:
             return {"score": 0, "pass": False, "reasoning": f"JSON parsing failed: {str(e)}"}

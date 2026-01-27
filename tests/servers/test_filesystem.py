@@ -1,5 +1,5 @@
 """
-Unit tests for the File System Read Server.
+Unit tests for the Unified Filesystem Server.
 
 Tests file reading, directory listing, and code navigation functionality.
 """
@@ -10,7 +10,7 @@ import tempfile
 import pytest
 
 from src.core.security import validate_path
-from src.servers.fs_read import (
+from src.servers.filesystem import (
     glob_files,
     grep_search,
     list_directory,
@@ -18,6 +18,7 @@ from src.servers.fs_read import (
     read_file,
     read_file_outline,
 )
+
 
 # ========================================
 # Fixtures

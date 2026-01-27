@@ -20,11 +20,14 @@ Features:
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
 
 import typer
+
+logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
@@ -32,40 +35,39 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from src.core.background_tasks import get_task_manager
+
+# New feature imports
+from src.core.checkpoint import CheckpointConfig, CheckpointManager
+from src.core.command_history import BashModeExecutor, CommandHistory
+
 # Direct imports (no DI container needed)
 from src.core.config import load_config
 from src.core.context_manager import ContextConfig, ContextManager
+from src.core.cost_tracker import BudgetConfig, CostTracker
 from src.core.diff import print_diff
-from src.core.prompts import get_system_prompt
-from src.core.rules import format_instructions_for_prompt, load_all_instructions
-from src.core.skills import SkillManager
-from src.core.tool_selector import ToolSelector
-from src.host.tools import get_default_registry
-
-# New feature imports
-from src.core.checkpoint import CheckpointManager, CheckpointConfig
-from src.core.background_tasks import BackgroundTaskManager, TaskStatus, get_task_manager
-from src.core.hooks import HookManager, HookEvent
-from src.core.cost_tracker import CostTracker, BudgetConfig
-from src.core.command_history import CommandHistory, BashModeExecutor
-from src.core.session import SessionManager
-from src.core.plugins import PluginManager
-from src.core.workspace import WorkspaceManager
-from src.core.model_manager import ModelManager
-from src.core.input_mode import InputManager, InputMode
-from src.core.thinking import ThinkingManager, ThinkingMode
 from src.core.doctor import Doctor
-from src.core.themes import ThemeManager
+from src.core.hooks import HookEvent, HookManager
+from src.core.input_mode import InputManager, InputMode
 
 # Unified Model Client (supports Gateway and Direct modes)
 from src.core.model_client import (
-    ModelClient,
-    ClientConfig,
     ClientMode,
     Message,
+    ModelClient,
     ToolDefinition,
-    ChatResponse,
 )
+from src.core.model_manager import ModelManager
+from src.core.plugins import PluginManager
+from src.core.prompts import get_system_prompt
+from src.core.rules import format_instructions_for_prompt, load_all_instructions
+from src.core.session import SessionManager
+from src.core.skills import SkillManager
+from src.core.themes import ThemeManager
+from src.core.thinking import ThinkingManager
+from src.core.tool_selector import ToolSelector
+from src.core.workspace import WorkspaceManager
+from src.host.tools import get_default_registry
 
 # Fix encoding
 for stream in [sys.stdin, sys.stdout, sys.stderr]:
@@ -128,10 +130,34 @@ async def chat_loop(
     project: str = "default",
     resume_session: str | None = None,
     session_name: str | None = None,
+    prompt: str | None = None,
 ):
     """Main chat loop with automatic context management."""
 
     # 1. Detect mode and check configuration
+    # ... (existing detection code) ...
+
+    # Check for piped input (Headless detection)
+    piped_input = None
+    if not sys.stdin.isatty():
+        try:
+             # Check if there is actual content to read to avoid blocking
+             # simple read() might block if no EOF, but !isatty usually implies pipe or file
+             piped_input = sys.stdin.read().strip()
+        except Exception:
+             pass
+
+    initial_prompt = prompt
+    if piped_input:
+        if initial_prompt:
+            initial_prompt = f"{initial_prompt}\n{piped_input}"
+        else:
+            initial_prompt = piped_input
+
+    headless = bool(initial_prompt)
+    if headless:
+        console.print("[dim cyan]Running in headless mode[/dim cyan]")
+
     client_mode = ModelClient.get_mode()
     mode_info = ModelClient.get_mode_info()
 
@@ -222,13 +248,12 @@ async def chat_loop(
         session_data = session_mgr.resume_session(resume_session)
         if session_data:
             console.print(f"[green]Resumed session: {session_data.metadata.get_display_name()}[/green]")
-            # Restore messages to context
+            # Restore messages to context using Message class directly
             for msg in session_data.messages:
-                if msg.get("role") == "user":
-                    ctx.messages.append(ctx.messages[0].__class__(
-                        role="user",
-                        content=msg.get("content", ""),
-                    ))
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role and content:
+                    ctx.add_user_message(content) if role == "user" else ctx.add_assistant_message(content)
         else:
             console.print(f"[yellow]Session not found: {resume_session}[/yellow]")
 
@@ -289,7 +314,8 @@ async def chat_loop(
     )
 
     # 9. Main loop
-    while True:
+    try:
+      while True:
         mode_color = MODE_COLORS.get(mode, "yellow")
 
         # Show running tasks
@@ -302,7 +328,17 @@ async def chat_loop(
         if budget_status.get("warning"):
             console.print(f"[yellow]⚠️ {budget_status['warning']}[/yellow]")
 
-        user_input = Prompt.ask(f"\n[bold {mode_color}]You ({mode})[/bold {mode_color}]")
+        # Determine user input (Interactive vs Headless)
+        if initial_prompt:
+            user_input = initial_prompt
+            initial_prompt = None  # Clear it so we don't use it again
+            console.print(f"\n[bold {mode_color}]> {user_input}[/bold {mode_color}]")
+        elif headless:
+            # In headless mode, if we don't have an initial prompt (anymore), we are done.
+            # The loop finishes after the model has provided its full response to the prompt.
+            break
+        else:
+            user_input = Prompt.ask(f"\n[bold {mode_color}]You ({mode})[/bold {mode_color}]")
 
         # Exit
         if user_input.lower() in ["exit", "quit", "/exit"]:
@@ -881,7 +917,8 @@ async def chat_loop(
                     # Parse arguments
                     try:
                         args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse tool arguments for {tool_name}: {args_str}, error: {e}")
                         args = {}
 
                     # Trigger PreToolUse hook
@@ -927,7 +964,10 @@ async def chat_loop(
                                 f"[dim]{json.dumps(args, indent=2, ensure_ascii=False)}[/dim]"
                             )
 
-                        if Prompt.ask("Execute?", choices=["y", "n"], default="n") != "y":
+                        if headless:
+                            console.print("[red]Headless mode: Sensitive tool denied (no user to approve)[/red]")
+                            tool_result = "Headless mode: Sensitive tool execution denied."
+                        elif Prompt.ask("Execute?", choices=["y", "n"], default="n") != "y":
                             tool_result = "User denied the operation."
                             console.print("[red]Cancelled[/red]")
                         else:
@@ -935,7 +975,11 @@ async def chat_loop(
                             tool_result = await registry.call_tool(tool_name, args)
                     else:
                         console.print(f"[cyan]Running {tool_name}...[/cyan]")
-                        tool_result = await registry.call_tool(tool_name, args)
+                        try:
+                            tool_result = await registry.call_tool(tool_name, args)
+                        except Exception as e:
+                            logger.error(f"Tool {tool_name} failed: {e}", exc_info=True)
+                            tool_result = f"Error executing {tool_name}: {e}"
 
                     # Trigger PostToolUse hook
                     await hook_mgr.trigger(
@@ -1050,15 +1094,35 @@ async def chat_loop(
                     model=model_name,
                 )
 
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error in chat loop: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Ensure resources are cleaned up
+        try:
+            await hook_mgr.trigger(HookEvent.SESSION_END, message_count=len(ctx.messages))
+        except Exception:
+            pass
+        try:
+            if model_client:
+                await model_client.close()
+        except Exception:
+            pass
+        console.print("[dim]Session ended[/dim]")
+
 
 @app.command()
 def start(
     project: str = typer.Option("default", "--project", "-p", help="Project name"),
     resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID or name"),
     name: str = typer.Option(None, "--name", "-n", help="Name for new session"),
+    prompt: str = typer.Option(None, "--prompt", "-P", help="Initial prompt (enables headless mode)"),
 ):
     """Start Polymath CLI."""
-    asyncio.run(chat_loop(project=project, resume_session=resume, session_name=name))
+    asyncio.run(chat_loop(project=project, resume_session=resume, session_name=name, prompt=prompt))
 
 
 @app.command()

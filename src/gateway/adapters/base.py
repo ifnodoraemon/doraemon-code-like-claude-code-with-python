@@ -6,8 +6,9 @@ All provider adapters must implement this interface.
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 
 from ..schema import (
     ChatRequest,
