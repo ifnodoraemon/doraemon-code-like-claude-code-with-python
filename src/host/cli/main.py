@@ -55,6 +55,7 @@ from src.core.model_client import (
     Message,
     ModelClient,
     ToolDefinition,
+    ChatResponse,
 )
 from src.core.prompts import get_system_prompt
 from src.core.rules import format_instructions_for_prompt, load_all_instructions
@@ -419,95 +420,19 @@ async def chat_loop(
     # Build messages with system prompt
             messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
 
-            # Helper function for streaming chat with UI
-            async def stream_chat_with_ui(messages, tools=None, model=None):
-                """Streaming chat with real-time UI updates."""
-                from rich.live import Live
-                from rich.console import Group
-                from rich.panel import Panel
-                from rich.markdown import Markdown
-
-                full_content = ""
-                full_thought = ""
-                tool_calls = []
-                current_tool_call = None
-                
-                # Initial UI state - empty panels
-                # We use a closure to generate the renderable so it picks up the latest data
-                def generate_group():
-                    renderables = []
-                    if full_thought:
-                        renderables.append(
-                            Panel(Markdown(full_thought), title="[bold dim]Thinking[/bold dim]", border_style="dim white", expand=False)
-                        )
-                    if full_content:
-                        renderables.append(
-                            Panel(Markdown(full_content), title="[bold purple]Response[/bold purple]", border_style="purple", expand=False)
-                        )
-                    return Group(*renderables)
-
-                # Start streaming
-                with Live(generate_group(), console=console, refresh_per_second=10) as live:
-                    async for chunk in model_client.chat_stream(messages, tools=tools, model=model):
-                        update_needed = False
-                        
-                        if chunk.thought:
-                            full_thought += chunk.thought
-                            update_needed = True
-                            
-                        if chunk.content:
-                            full_content += chunk.content
-                            update_needed = True
-                            
-                        if chunk.tool_calls:
-                            # Handle streaming tool calls (accumulate arguments)
-                            for tc_chunk in chunk.tool_calls:
-                                index = tc_chunk.get("index", 0) # Some providers use index
-                                # If this is a new tool call (id is present), add it
-                                if tc_chunk.get("id"):
-                                    tool_calls.append({
-                                        "id": tc_chunk["id"],
-                                        "type": "function",
-                                        "function": {
-                                            "name": tc_chunk["function"]["name"],
-                                            "arguments": tc_chunk["function"]["arguments"]
-                                        }
-                                    })
-                                else:
-                                    # Append arguments to the last tool call (or specific index if supported)
-                                    # Simplifying assumption: sequential chunks for now or simple appending
-                                    if tool_calls:
-                                        last_tc = tool_calls[-1]
-                                        if "function" in tc_chunk and "arguments" in tc_chunk["function"]:
-                                            last_tc["function"]["arguments"] += tc_chunk["function"]["arguments"]
-                        
-                        if update_needed:
-                            live.update(generate_group())
-
-                # Return final response object
-                return ChatResponse(
-                    content=full_content,
-                    thought=full_thought,
-                    tool_calls=tool_calls if tool_calls else None,
-                    finish_reason="stop",
-                    usage=None
-                )
-            
-            # Send message using unified client with streaming UI
+            # Send message using unified client
             try:
-                response = await stream_chat_with_ui(
-                    messages_for_api,
-                    tools=tool_definitions,
-                    model=model_name,
-                )
+                with console.status(f"[bold {mode_color}]Thinking...[/bold {mode_color}]"):
+                    response = await model_client.chat(
+                        messages_for_api,
+                        tools=tool_definitions,
+                        model=model_name,
+                    )
             except Exception as e:
                 console.print(f"[red]API Error: {e}[/red]")
                 conversation_history.pop()
                 checkpoint_mgr.discard_checkpoint()
                 continue
-            
-            # Remove previous blocking call block
-            # (Note: response is already assigned above)
             
             # Process response (tool loop)
             accumulated_text = ""
