@@ -115,7 +115,7 @@ class Theme:
 BUILTIN_THEMES: dict[str, Theme] = {
     "default": Theme(
         name="default",
-        description="Default Polymath theme",
+        description="Default Doraemon theme",
         colors=ThemeColors(),
         syntax_theme="monokai",
     ),
@@ -254,7 +254,7 @@ class ThemeManager:
         Args:
             config_path: Path to theme config file
         """
-        self._config_path = config_path or Path.home() / ".polymath" / "theme.json"
+        self._config_path = config_path or Path.home() / ".doraemon" / "theme.json"
         self._current_theme: str = "default"
         self._custom_themes: dict[str, Theme] = {}
 

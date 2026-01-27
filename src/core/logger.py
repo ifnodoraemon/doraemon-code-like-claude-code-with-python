@@ -54,7 +54,7 @@ def setup_logger(name: str, level: str = "INFO", log_file: str | None = None) ->
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get or create a logger with default Polymath configuration."""
+    """Get or create a logger with default Doraemon configuration."""
     # Check if already configured
     logger = logging.getLogger(name)
     if logger.handlers:

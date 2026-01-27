@@ -1,4 +1,4 @@
-"""Core utilities for Polymath."""
+"""Core utilities for Doraemon."""
 
 from .background_tasks import BackgroundTaskManager, TaskStatus, get_task_manager
 from .browser import BrowserManager, get_browser_manager

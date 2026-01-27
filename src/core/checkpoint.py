@@ -92,7 +92,7 @@ class CheckpointConfig:
     """Configuration for checkpoint system."""
 
     enabled: bool = True
-    save_directory: str = ".polymath/checkpoints"
+    save_directory: str = ".doraemon/checkpoints"
     max_file_size: int = 1024 * 1024  # 1MB max per file
     retention_days: int = 30
     compress: bool = True  # Compress old checkpoints

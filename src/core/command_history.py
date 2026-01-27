@@ -85,7 +85,7 @@ class CommandHistory:
         if history_file:
             self._history_file = Path(history_file)
         else:
-            self._history_file = Path.home() / ".polymath" / "history" / f"{project}.json"
+            self._history_file = Path.home() / ".doraemon" / "history" / f"{project}.json"
 
         self._history_file.parent.mkdir(parents=True, exist_ok=True)
         self._entries: list[HistoryEntry] = []

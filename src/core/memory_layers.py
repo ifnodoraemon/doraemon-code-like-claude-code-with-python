@@ -126,7 +126,7 @@ class LayeredMemory:
             project_id: Project identifier
             user_id: User identifier
         """
-        self._storage_dir = storage_dir or Path.home() / ".polymath" / "memory"
+        self._storage_dir = storage_dir or Path.home() / ".doraemon" / "memory"
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
         self._organization_id = organization_id

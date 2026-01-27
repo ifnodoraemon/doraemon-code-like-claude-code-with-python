@@ -1,7 +1,7 @@
 """
 Language Server Protocol (LSP) MCP Server
 
-Provides IDE-level code intelligence for Polymath:
+Provides IDE-level code intelligence for Doraemon:
 - Code diagnostics (syntax errors, linting)
 - Code completions
 - Hover information
@@ -31,7 +31,7 @@ from src.core.security import validate_path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("PolymathLSP")
+mcp = FastMCP("DoraemonLSP")
 
 
 @dataclass

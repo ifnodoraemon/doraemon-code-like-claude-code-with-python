@@ -23,7 +23,7 @@ from src.core.security import validate_path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("PolymathGit")
+mcp = FastMCP("DoraemonGit")
 
 
 # ========================================

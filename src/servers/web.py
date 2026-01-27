@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("PolymathWeb")
+mcp = FastMCP("DoraemonWeb")
 
 
 @mcp.tool()

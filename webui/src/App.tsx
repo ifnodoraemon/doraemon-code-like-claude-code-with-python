@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Terminal, Settings, MessageSquare, Plus, Loader2 } from 'lucide-react'
+import { Send, Terminal, Settings, Plus, Loader2 } from 'lucide-react'
 
 // Simple ID generator
 const generateId = () => Math.random().toString(36).substr(2, 9)
@@ -209,8 +209,8 @@ function App() {
                             )}
 
                             <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${msg.role === 'user'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-slate-800 text-slate-100'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-800 text-slate-100'
                                 }`}>
                                 <div className="whitespace-pre-wrap">{msg.content}</div>
                                 {msg.tool_calls && (

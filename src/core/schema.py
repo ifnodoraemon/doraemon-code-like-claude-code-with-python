@@ -24,7 +24,7 @@ class ServerConfig(BaseModel):
 class PersonaConfig(BaseModel):
     """Agent persona configuration."""
 
-    name: str = Field(default="Polymath", description="Agent name")
+    name: str = Field(default="Doraemon", description="Agent name")
     role: str = Field(default="Generalist AI Assistant", description="Agent role")
 
     @field_validator("name", "role")
@@ -36,8 +36,8 @@ class PersonaConfig(BaseModel):
         return v.strip()
 
 
-class PolymathConfig(BaseModel):
-    """Main Polymath configuration."""
+class DoraemonConfig(BaseModel):
+    """Main Doraemon configuration."""
 
     mcpServers: dict[str, ServerConfig] = Field(
         ..., alias="mcpServers", description="MCP servers configuration"
@@ -89,7 +89,7 @@ class PolymathConfig(BaseModel):
         return v
 
 
-def validate_config_file(config_path: Path) -> PolymathConfig:
+def validate_config_file(config_path: Path) -> DoraemonConfig:
     """
     Validate a configuration file.
 
@@ -112,7 +112,7 @@ def validate_config_file(config_path: Path) -> PolymathConfig:
         config_data = json.load(f)
 
     try:
-        config = PolymathConfig.model_validate(config_data)
+        config = DoraemonConfig.model_validate(config_data)
         return config
     except Exception as e:
         raise ValueError(f"Invalid configuration: {e}") from e
@@ -135,7 +135,7 @@ def get_default_config() -> dict:
             "computer": {"command": "python3", "args": ["src/servers/computer.py"], "env": {}},
             "task": {"command": "python3", "args": ["src/servers/task.py"], "env": {}},
         },
-        "persona": {"name": "Polymath", "role": "Generalist AI Assistant & Coder"},
+        "persona": {"name": "Doraemon", "role": "Generalist AI Assistant & Coder"},
         "sensitive_tools": [
             "execute_python",
             "write_file",

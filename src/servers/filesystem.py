@@ -1,5 +1,5 @@
 """
-Polymath Unified Filesystem MCP Server
+Doraemon Unified Filesystem MCP Server
 
 A comprehensive filesystem server that combines all file operations:
 - Reading: read_file, read_file_outline, list_directory, list_directory_tree, glob_files, grep_search, find_symbol
@@ -28,7 +28,7 @@ from src.services import code_nav, document, outline, vision
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("PolymathFilesystem")
+mcp = FastMCP("DoraemonFilesystem")
 
 
 # ========================================

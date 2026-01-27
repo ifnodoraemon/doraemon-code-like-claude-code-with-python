@@ -1,5 +1,5 @@
 """
-Evaluation Harness for Polymath Agent
+Evaluation Harness for Doraemon Agent
 
 Provides automated testing and evaluation framework following Anthropic standards:
 - Multiple trials per task for statistical significance
@@ -147,7 +147,7 @@ class EvaluationHarness:
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             )
 
-            model_name = os.getenv("EVAL_MODEL", "gemini-1.5-pro")
+            model_name = os.getenv("EVAL_MODEL", "gemini-3-pro-preview")
             chat = client.chats.create(model=model_name, config=gen_config, history=[])
 
             # Run Loop
@@ -240,7 +240,7 @@ class EvaluationHarness:
 
     async def run(self):
         tasks = self.load_tasks()
-        console.print("[bold]Starting PolyEval v4.0 (Anthropic Standard)[/bold]")
+        console.print("[bold]Starting DoraemonEval v4.0 (Anthropic Standard)[/bold]")
         console.print(f"Tasks: {len(tasks)} | Trials per task: {self.n_trials}")
 
         run_timestamp = int(time.time())
@@ -290,7 +290,7 @@ class EvaluationHarness:
 
 
 if __name__ == "__main__":
-    dataset = "polymath/tests/evals/dataset_v3.json"
+    dataset = "tests/evals/dataset_v3.json"
     # Default k=2 for fast demo, typically k=10
     harness = EvaluationHarness(dataset, n_trials=2)
     asyncio.run(harness.run())

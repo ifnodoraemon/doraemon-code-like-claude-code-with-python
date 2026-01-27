@@ -1,7 +1,7 @@
 """
 Plugin System
 
-Enables extending Polymath with plugins that bundle:
+Enables extending Doraemon with plugins that bundle:
 - Custom slash commands
 - Custom tools
 - Hooks
@@ -55,7 +55,7 @@ class PluginManifest:
     agents: list[dict[str, Any]] = field(default_factory=list)
 
     # Requirements
-    polymath_version: str = ">=0.6.0"
+    doraemon_version: str = ">=0.6.0"
     dependencies: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -70,7 +70,7 @@ class PluginManifest:
             "tools": self.tools,
             "hooks": self.hooks,
             "agents": self.agents,
-            "polymath_version": self.polymath_version,
+            "doraemon_version": self.doraemon_version,
             "dependencies": self.dependencies,
         }
 
@@ -87,7 +87,7 @@ class PluginManifest:
             tools=data.get("tools", []),
             hooks=data.get("hooks", {}),
             agents=data.get("agents", []),
-            polymath_version=data.get("polymath_version", ">=0.6.0"),
+            doraemon_version=data.get("doraemon_version", ">=0.6.0"),
             dependencies=data.get("dependencies", []),
         )
 

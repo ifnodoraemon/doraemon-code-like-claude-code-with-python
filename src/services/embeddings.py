@@ -6,6 +6,10 @@ from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
 logger = logging.getLogger(__name__)
 
+# Suppress noisy HTTP logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("google.generativeai").setLevel(logging.WARNING)
+
 class RemoteEmbeddingFunction(EmbeddingFunction):
     """
     Embedding function that uses remote APIs (Google GenAI or OpenAI).

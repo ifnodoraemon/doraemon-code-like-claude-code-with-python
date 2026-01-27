@@ -1,5 +1,5 @@
 """
-Polymath Model Gateway
+Doraemon Model Gateway
 
 A unified API gateway for multiple AI model providers.
 

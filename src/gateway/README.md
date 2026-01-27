@@ -1,4 +1,4 @@
-# Polymath Model Gateway
+# Doraemon Model Gateway
 
 统一的 AI 模型网关，支持多家模型提供商。
 
@@ -9,7 +9,7 @@
 
 ```
 ┌─────────────────┐
-│  Polymath CLI   │
+│  Doraemon CLI   │
 │  ┌───────────┐  │
 │  │ModelClient│──┼──► Google API (GOOGLE_API_KEY)
 │  │ (Direct)  │──┼──► OpenAI API (OPENAI_API_KEY)
@@ -24,7 +24,7 @@
 
 ```
 ┌─────────────────┐     ┌─────────────────────────────────┐
-│  Polymath CLI   │     │       Model Gateway Server      │
+│  Doraemon CLI   │     │       Model Gateway Server      │
 │  ┌───────────┐  │     │  ┌─────────────────────────┐    │
 │  │ModelClient│──┼────►│  │  Provider Adapters      │    │
 │  │ (Gateway) │  │     │  │  ├─► Google (API Key)   │    │
@@ -40,7 +40,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Polymath CLI                                  │
+│                        Doraemon CLI                                  │
 │          只需配置: DORAEMON_GATEWAY_URL + DORAEMON_API_KEY           │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
@@ -101,8 +101,8 @@ CLI 只需要两个配置：
 
 ```bash
 # .env 文件
-POLYMATH_GATEWAY_URL=http://localhost:8000
-POLYMATH_API_KEY=your-gateway-key
+DORAEMON_GATEWAY_URL=http://localhost:8000
+DORAEMON_API_KEY=your-gateway-key
 ```
 
 ## API 使用

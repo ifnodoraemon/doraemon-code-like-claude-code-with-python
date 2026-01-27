@@ -29,7 +29,7 @@ class GatewayConfig:
 
 
 class GatewayClient:
-    """Client for the Polymath Model Gateway."""
+    """Client for the Doraemon Model Gateway."""
 
     def __init__(self, config: GatewayConfig | None = None):
         self.config = config or GatewayConfig.from_env()

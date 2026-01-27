@@ -48,9 +48,7 @@ src/
     end
     
     subgraph Servers [MCP Servers]
-        FSRead[fs_read]
-        FSWrite[fs_write]
-        FSEdit[fs_edit]
+        FS[Filesystem]
         Computer[computer]
         Memory[memory]
         Web[web]
@@ -64,9 +62,7 @@ src/
     end
     
     CLI --> Client
-    Client --> FSRead
-    Client --> FSWrite
-    Client --> FSEdit
+    Client --> FS
     Client --> Computer
     Client --> Memory
     Client --> Web
@@ -169,9 +165,7 @@ pl start --project "MyProject"
 
 | Server | Tools | Description |
 |--------|-------|-------------|
-| `fs_read` | `read_file`, `list_directory`, `glob_files`, `grep_search`, `find_symbol` | File reading and code navigation |
-| `fs_write` | `write_file` | File writing |
-| `fs_edit` | `edit_file` | File editing with diff |
+| `filesystem` | `read_file`, `write_file`, `edit_file`, `list_directory`, etc. | Unified filesystem operations |
 | `computer` | `execute_python`, `install_package` | Sandboxed code execution |
 | `memory` | `save_note`, `search_notes` | Vector-based long-term memory |
 | `web` | `fetch_url`, `web_search` | Web content fetching |
@@ -180,10 +174,9 @@ pl start --project "MyProject"
 ## Project Structure
 
 ```
-polymath/
+doraemon/
 ├── src/
 │   ├── core/           # Core infrastructure
-│   │   ├── container.py      # Dependency injection
 │   │   ├── configuration.py  # Hierarchical config
 │   │   ├── events.py         # Event bus (pub/sub)
 │   │   ├── metrics.py        # Metrics collection
@@ -263,7 +256,7 @@ See [docs/development.md](docs/development.md) for detailed development guide.
 ## Documentation
 
 - [API Reference](docs/api.md) - Complete API documentation
-- [Development Guide](docs/development.md) - How to extend Polymath
+- [Development Guide](docs/development.md) - How to extend Doraemon
 - [Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## License
@@ -281,7 +274,7 @@ See [docs/development.md](docs/development.md) for detailed development guide.
 ## Documentation
 
 - [API Reference](docs/api.md) - Complete API documentation
-- [Development Guide](docs/development.md) - How to extend Polymath
+- [Development Guide](docs/development.md) - How to extend Doraemon
 - [Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## License

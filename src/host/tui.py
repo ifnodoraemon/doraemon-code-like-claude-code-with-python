@@ -1,5 +1,5 @@
 """
-Textual-based TUI for Polymath.
+Textual-based TUI for Doraemon.
 
 This provides a modern terminal user interface with:
 - Split-screen layout (chat + sidebar)
@@ -60,7 +60,7 @@ class Sidebar(Vertical):
     server_count = reactive(0)
 
     def compose(self) -> ComposeResult:
-        yield Static("[bold]Polymath v0.7.0[/bold]", id="title")
+        yield Static("[bold]Doraemon v0.7.0[/bold]", id="title")
         yield Static("", id="mode-display")
         yield Static("", id="server-display")
         yield Static("[green]Ready[/green]", id="status")
@@ -74,8 +74,8 @@ class Sidebar(Vertical):
         self.query_one("#server-display", Static).update(f"Servers: {count}")
 
 
-class PolymathTUI(App):
-    """Polymath Textual User Interface."""
+class DoraemonTUI(App):
+    """Doraemon Textual User Interface."""
 
     CSS = """
     Screen {
@@ -125,7 +125,7 @@ class PolymathTUI(App):
         Binding("ctrl+l", "clear", "Clear Chat", show=False),
     ]
 
-    TITLE = "Polymath AI Assistant"
+    TITLE = "Doraemon AI Assistant"
     SUB_TITLE = "Powered by ModelClient"
 
     current_mode = reactive("build")
@@ -173,10 +173,10 @@ class PolymathTUI(App):
             # Show mode info
             mode_info = ModelClient.get_mode_info()
             if mode_info.get("mode") == "gateway":
-                chat.add_message("system", f"Polymath TUI v0.7.0 - Gateway Mode ({mode_info.get('gateway_url')})")
+                chat.add_message("system", f"Doraemon TUI v0.7.0 - Gateway Mode ({mode_info.get('gateway_url')})")
             else:
                 providers = [p for p, v in mode_info.get("providers", {}).items() if v]
-                chat.add_message("system", f"Polymath TUI v0.7.0 - Direct Mode ({', '.join(providers)})")
+                chat.add_message("system", f"Doraemon TUI v0.7.0 - Direct Mode ({', '.join(providers)})")
 
             chat.add_message("system", "Type /help for commands")
         except Exception as e:
@@ -335,7 +335,7 @@ class PolymathTUI(App):
 
 def run_tui():
     """Run the Textual UI."""
-    app = PolymathTUI()
+    app = DoraemonTUI()
     app.run()
 
 

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 BUILTIN_TRANSLATIONS = {
     "en": {
         # General
-        "welcome": "Welcome to Polymath!",
+        "welcome": "Welcome to Doraemon!",
         "goodbye": "Goodbye!",
         "yes": "Yes",
         "no": "No",
@@ -111,7 +111,7 @@ BUILTIN_TRANSLATIONS = {
 
     "zh": {
         # 通用
-        "welcome": "欢迎使用 Polymath！",
+        "welcome": "欢迎使用 Doraemon！",
         "goodbye": "再见！",
         "yes": "是",
         "no": "否",
@@ -196,7 +196,7 @@ BUILTIN_TRANSLATIONS = {
 
     "ja": {
         # 一般
-        "welcome": "Polymathへようこそ！",
+        "welcome": "Doraemonへようこそ！",
         "goodbye": "さようなら！",
         "yes": "はい",
         "no": "いいえ",

@@ -1,7 +1,7 @@
 """
 CLI Slash Commands Handler
 
-Handles all /command processing in the Polymath CLI.
+Handles all /command processing in the Doraemon CLI.
 Extracted from cli.py for better maintainability.
 """
 
@@ -337,7 +337,7 @@ Project specific rules for Doraemon Code.
         else:
             console.print("  [dim]No skills currently active[/dim]")
         console.print("\n[dim]Skills are loaded automatically based on conversation context.[/dim]")
-        console.print("[dim]Put SKILL.md files in .polymath/skills/<name>/ to add custom skills.[/dim]")
+        console.print("[dim]Put SKILL.md files in .doraemon/skills/<name>/ to add custom skills.[/dim]")
         
     def _show_tools(self, mode: str, tool_names: list, sensitive_tools: set):
         """Show available tools."""

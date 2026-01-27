@@ -167,7 +167,7 @@ class CostTracker:
         self,
         project: str = "default",
         session_id: str = "",
-        storage_dir: str = ".polymath/usage",
+        storage_dir: str = ".doraemon/usage",
         budget: BudgetConfig | None = None,
     ):
         """

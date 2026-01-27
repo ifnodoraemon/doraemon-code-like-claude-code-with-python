@@ -1,6 +1,6 @@
 # Doraemon Code Development Guide
 
-This guide covers how to extend and develop for the Polymath AI agent.
+This guide covers how to extend and develop for the Doraemon AI agent.
 
 ## Table of Contents
 
@@ -71,7 +71,7 @@ mypy src/ --ignore-missing-imports
 ## Project Structure
 
 ```
-polymath/
+doraemon/
 ├── src/
 │   ├── core/               # Core infrastructure
 │   │   ├── commands.py     # Slash command system

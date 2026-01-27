@@ -118,7 +118,7 @@ class ContextConfig:
 
     # Persistence
     auto_save: bool = True
-    save_directory: str = ".polymath/conversations"
+    save_directory: str = ".doraemon/conversations"
 
 
 DEFAULT_CONFIG = ContextConfig()

@@ -86,7 +86,7 @@ class GitHooksManager:
     # Default hook scripts
     DEFAULT_HOOKS = {
         GitHookType.PRE_COMMIT: '''#!/bin/bash
-# Polymath pre-commit hook
+# Doraemon pre-commit hook
 
 # Run linting
 if command -v ruff &> /dev/null; then
@@ -106,7 +106,7 @@ fi
 exit 0
 ''',
         GitHookType.POST_COMMIT: '''#!/bin/bash
-# Polymath post-commit hook
+# Doraemon post-commit hook
 
 # Notify completion (if notification available)
 if command -v notify-send &> /dev/null; then
@@ -116,7 +116,7 @@ fi
 exit 0
 ''',
         GitHookType.PRE_PUSH: '''#!/bin/bash
-# Polymath pre-push hook
+# Doraemon pre-push hook
 
 # Run full test suite before push
 if command -v pytest &> /dev/null; then
@@ -127,7 +127,7 @@ fi
 exit 0
 ''',
         GitHookType.COMMIT_MSG: r'''#!/bin/bash
-# Polymath commit-msg hook
+# Doraemon commit-msg hook
 
 # Check commit message format
 commit_msg_file=$1

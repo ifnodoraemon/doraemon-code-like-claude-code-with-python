@@ -132,7 +132,7 @@ def get_system_prompt(mode: str = DEFAULT_MODE, persona_config: dict | None = No
     base = PROMPTS.get(mode, PROMPTS[DEFAULT_MODE])
 
     if persona_config:
-        name = persona_config.get("name", "Polymath")
-        base = base.replace("Polymath", name)
+        name = persona_config.get("name", "Doraemon")
+        base = base.replace("Doraemon", name)
 
     return base

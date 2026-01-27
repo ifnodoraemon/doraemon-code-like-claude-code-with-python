@@ -13,9 +13,9 @@ def load_config(override_path: str | None = None, validate: bool = True) -> dict
     """
     Cascading config loading with optional validation:
     1. Runtime override (if provided)
-    2. Project specific: ./.polymath/config.json
-    3. User global: ~/.polymath/config.json
-    4. Package default: (Installed dir)/.polymath/config.json
+    2. Project specific: ./.doraemon/config.json
+    3. User global: ~/.doraemon/config.json
+    4. Package default: (Installed dir)/.doraemon/config.json
 
     Args:
         override_path: Optional path to override config file
@@ -35,17 +35,17 @@ def load_config(override_path: str | None = None, validate: bool = True) -> dict
         config_path = Path(override_path)
         logger.info(f"Loading config from override: {config_path}")
     # 2. Project Level
-    elif Path.cwd().joinpath(".polymath", "config.json").exists():
-        config_path = Path.cwd() / ".polymath" / "config.json"
+    elif Path.cwd().joinpath(".doraemon", "config.json").exists():
+        config_path = Path.cwd() / ".doraemon" / "config.json"
         logger.info(f"Loading config from project: {config_path}")
     # 3. User Level
-    elif Path.home().joinpath(".polymath", "config.json").exists():
-        config_path = Path.home() / ".polymath" / "config.json"
+    elif Path.home().joinpath(".doraemon", "config.json").exists():
+        config_path = Path.home() / ".doraemon" / "config.json"
         logger.info(f"Loading config from user home: {config_path}")
     # 4. Package Default
     else:
         base_dir = Path(__file__).parent.parent.parent
-        pkg_config = base_dir / ".polymath" / "config.json"
+        pkg_config = base_dir / ".doraemon" / "config.json"
         if pkg_config.exists():
             config_path = pkg_config
             logger.info(f"Loading config from package: {config_path}")

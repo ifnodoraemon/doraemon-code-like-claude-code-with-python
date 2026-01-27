@@ -1,7 +1,7 @@
 """
-Polymath CLI - Main Module Entry Point
+Doraemon CLI - Main Module Entry Point
 
-This package provides the CLI interface for Polymath.
+This package provides the CLI interface for Doraemon.
 """
 
 from src.host.cli.main import app, entry_point

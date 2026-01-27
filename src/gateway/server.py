@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Polymath Model Gateway",
+    title="Doraemon Model Gateway",
     description="Unified API for multiple AI model providers",
     version="1.0.0",
     lifespan=lifespan,
@@ -317,7 +317,7 @@ def main():
     host = os.getenv("GATEWAY_HOST", "0.0.0.0")
     port = int(os.getenv("GATEWAY_PORT", "8000"))
 
-    print(f"Starting Polymath Model Gateway on {host}:{port}")
+    print(f"Starting Doraemon Model Gateway on {host}:{port}")
     uvicorn.run(app, host=host, port=port)
 
 

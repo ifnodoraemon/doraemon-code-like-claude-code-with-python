@@ -8,7 +8,7 @@ Provides AI-powered task planning and decomposition:
 - Risk assessment
 - Checkpoint suggestions
 
-This enables smarter planning mode in Polymath.
+This enables smarter planning mode in Doraemon.
 """
 
 import hashlib

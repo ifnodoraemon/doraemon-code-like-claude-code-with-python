@@ -120,7 +120,7 @@ class Doctor:
                 name="Python Version",
                 status=CheckStatus.ERROR,
                 message=f"Python {version_str} is too old",
-                details="Polymath requires Python 3.10 or higher",
+                details="Doraemon requires Python 3.10 or higher",
                 fix_suggestion="Upgrade Python to 3.10+",
             )
 
@@ -195,7 +195,6 @@ class Doctor:
         """Check optional dependencies."""
         optional = [
             ("chromadb", "chromadb", "Vector memory"),
-            ("sentence_transformers", "sentence-transformers", "Semantic search"),
             ("playwright", "playwright", "Browser automation"),
             ("pdfplumber", "pdfplumber", "PDF parsing"),
         ]

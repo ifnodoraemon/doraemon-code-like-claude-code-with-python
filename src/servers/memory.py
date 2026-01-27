@@ -1,53 +1,80 @@
-import json
 import logging
 import os
+import json
+from typing import Any, List
+from src.services.embeddings import RemoteEmbeddingFunction
 
 import chromadb
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 from mcp.server.fastmcp import FastMCP
-from sentence_transformers import SentenceTransformer
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 初始化 FastMCP Server
-mcp = FastMCP("PolymathMemory")
+# Suppress noisy HTTP request logs from the Gemini/httpx SDK
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# Initialize FastMCP Server
+mcp = FastMCP("DoraemonMemory")
 
 # --------------------------
-# 核心数据结构
+# Core Data Structures
 # --------------------------
-PERSIST_DIR = ".polymath/chroma_db"
-MEMORY_FILE = ".polymath/memory.json"
+PERSIST_DIR = ".doraemon/chroma_db"
+MEMORY_FILE = ".doraemon/memory.json"
 
-# 确保目录存在
-os.makedirs(".polymath", exist_ok=True)
+# Ensure directory exists
+os.makedirs(".doraemon", exist_ok=True)
 
-# 初始化 ChromaDB
+
+# Initialize ChromaDB with Remote Embeddings
+embedding_fn = RemoteEmbeddingFunction()
 client = chromadb.PersistentClient(path=PERSIST_DIR)
-collection = client.get_or_create_collection(name="polymath_notes")
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# Note: If the collection was created with a different dimension (e.g. 384 from MiniLM), 
+# switching to OpenAI (1536) or Gemini (768) will cause errors.
+# We handle this by using a dynamic collection name based on the provider.
+PROVIDER = embedding_fn.provider
+COLLECTION_NAME = f"doraemon_notes_{PROVIDER}"
+
+try:
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME, 
+        embedding_function=embedding_fn
+    )
+except Exception as e:
+    logger.error(f"Failed to initialize ChromaDB collection: {e}")
+    collection = None
 
 
 @mcp.tool()
 def save_note(
     title: str, content: str, collection_name: str = "default", tags: list[str] | None = None
 ) -> str:
-    """保存一条笔记到特定项目的长期记忆库。"""
+    """Save a note to the long-term memory (Vector DB)."""
+    if collection is None:
+        return "Memory system is not initialized."
+        
     if tags is None:
         tags = []
+        
     try:
-        # 动态获取 collection
-        coll = client.get_or_create_collection(name=f"polymath_{collection_name}")
-        note_id = f"{title}_{len(content)}"
-        embedding = embedding_model.encode(content).tolist()
-
-        coll.add(
+        # We use a single shared collection for now with metadata filtering if needed, 
+        # or we could create potential sub-collections.
+        # To keep it simple and avoid model dimension mismatches across collections, we use the main one.
+        
+        note_id = f"{collection_name}_{title}_{hash(content)}"
+        
+        # Add metadata for filtering
+        metadatas = [{"title": title, "tags": ",".join(tags), "project": collection_name}]
+        
+        collection.add(
             documents=[content],
-            metadatas=[{"title": title, "tags": ",".join(tags)}],
-            ids=[note_id],
-            embeddings=[embedding],
+            metadatas=metadatas,
+            ids=[note_id]
         )
-        logger.info(f"Saved note '{title}' to collection '{collection_name}'")
+        logger.info(f"Saved note '{title}' to project '{collection_name}'")
         return f"笔记 '{title}' 已保存到项目 {collection_name}。"
     except Exception as e:
         logger.error(f"Failed to save note '{title}': {e}")
@@ -56,24 +83,33 @@ def save_note(
 
 @mcp.tool()
 def search_notes(query: str, collection_name: str = "default", n_results: int = 3) -> str:
-    """从特定项目的长期记忆库中搜索相关笔记。"""
-    coll = client.get_or_create_collection(name=f"polymath_{collection_name}")
-    query_embedding = embedding_model.encode(query).tolist()
-    results = coll.query(query_embeddings=[query_embedding], n_results=n_results)
+    """Search for notes in the long-term memory."""
+    if collection is None:
+        return "Memory system is not initialized."
 
-    if not results["documents"][0]:
-        return f"项目 {collection_name} 中未找到相关笔记。"
+    try:
+        # Filter by project/collection_name in metadata
+        results = collection.query(
+            query_texts=[query],
+            n_results=n_results,
+            where={"project": collection_name}
+        )
 
-    output = []
-    for doc, meta in zip(results["documents"][0], results["metadatas"][0], strict=False):
-        output.append(f"[标题: {meta['title']}]\n{doc}")
+        if not results["documents"] or not results["documents"][0]:
+            return f"项目 {collection_name} 中未找到相关笔记。"
 
-    return "\n---\n".join(output)
+        output = []
+        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
+            output.append(f"[标题: {meta.get('title', 'Untitled')}]\n{doc}")
+
+        return "\n---\n".join(output)
+    except Exception as e:
+        return f"搜索失败: {e}"
 
 
 @mcp.tool()
 def update_user_persona(key: str, value: str) -> str:
-    """更新用户画像（例如：用户的偏好、职业、常用术语）。"""
+    """Update user persona (preferences, job, etc.)."""
     data = {}
     if os.path.exists(MEMORY_FILE):
         try:
@@ -92,7 +128,7 @@ def update_user_persona(key: str, value: str) -> str:
 
 @mcp.tool()
 def get_user_persona() -> str:
-    """读取当前的用户画像。"""
+    """Read current user persona."""
     if not os.path.exists(MEMORY_FILE):
         return "暂无用户画像。"
     with open(MEMORY_FILE) as f:

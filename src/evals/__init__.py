@@ -1,1 +1,1 @@
-"""Evaluation tools for Polymath."""
+"""Evaluation tools for Doraemon."""

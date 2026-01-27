@@ -1,0 +1,75 @@
+{
+  "date": "2026-01-27",
+  "records": [
+    {
+      "timestamp": 1769488743.664858,
+      "model": "gemini-3-pro-preview",
+      "input_tokens": 3856,
+      "output_tokens": 109,
+      "cost_usd": 0.00902,
+      "session_id": "dedea9ce5756",
+      "project": "default",
+      "operation": "chat"
+    },
+    {
+      "timestamp": 1769488772.5249045,
+      "model": "gemini-3-pro-preview",
+      "input_tokens": 3896,
+      "output_tokens": 361,
+      "cost_usd": 0.012124,
+      "session_id": "dedea9ce5756",
+      "project": "default",
+      "operation": "chat"
+    },
+    {
+      "timestamp": 1769488821.4833794,
+      "model": "gemini-3-pro-preview",
+      "input_tokens": 5575,
+      "output_tokens": 299,
+      "cost_usd": 0.014738000000000001,
+      "session_id": "dedea9ce5756",
+      "project": "default",
+      "operation": "chat"
+    },
+    {
+      "timestamp": 1769488876.4678974,
+      "model": "gemini-3-pro-preview",
+      "input_tokens": 11265,
+      "output_tokens": 555,
+      "cost_usd": 0.02919,
+      "session_id": "dedea9ce5756",
+      "project": "default",
+      "operation": "chat"
+    },
+    {
+      "timestamp": 1769489371.0190287,
+      "model": "gemini-3-pro-preview",
+      "input_tokens": 33251,
+      "output_tokens": 598,
+      "cost_usd": 0.07367800000000001,
+      "session_id": "dedea9ce5756",
+      "project": "default",
+      "operation": "chat"
+    },
+    {
+      "timestamp": 1769489466.996231,
+      "model": "gemini-3-pro-preview",
+      "input_tokens": 31775,
+      "output_tokens": 418,
+      "cost_usd": 0.068566,
+      "session_id": "dedea9ce5756",
+      "project": "default",
+      "operation": "chat"
+    },
+    {
+      "timestamp": 1769489573.7096488,
+      "model": "gemini-3-pro-preview",
+      "input_tokens": 37331,
+      "output_tokens": 194,
+      "cost_usd": 0.07699,
+      "session_id": "dedea9ce5756",
+      "project": "default",
+      "operation": "chat"
+    }
+  ]
+}

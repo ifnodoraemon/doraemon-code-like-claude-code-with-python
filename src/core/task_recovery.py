@@ -171,7 +171,7 @@ class TaskRecoveryManager:
             storage_dir: Directory for task state storage
             auto_save_interval: Auto-save interval in seconds
         """
-        self._storage_dir = storage_dir or Path.home() / ".polymath" / "recovery"
+        self._storage_dir = storage_dir or Path.home() / ".doraemon" / "recovery"
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
         self._tasks: dict[str, RecoverableTask] = {}

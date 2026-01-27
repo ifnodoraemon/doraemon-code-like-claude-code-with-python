@@ -1,6 +1,6 @@
-# Polymath API Documentation
+# Doraemon API Documentation
 
-This document provides a comprehensive API reference for Polymath's core modules and MCP servers.
+This document provides a comprehensive API reference for Doraemon's core modules and MCP servers.
 
 ## Table of Contents
 
@@ -226,9 +226,9 @@ with metrics.timer("operation_duration", operation="fetch"):
 #### Doraemon Metrics
 
 ```python
-from src.core.metrics import get_polymath_metrics
+from src.core.metrics import get_doraemon_metrics
 
-pm = get_polymath_metrics()
+pm = get_doraemon_metrics()
 
 # Session metrics
 pm.session_started("my_project")
@@ -688,7 +688,7 @@ Location: `.doraemon/config.json`
     }
   },
   "persona": {
-    "name": "Polymath",
+    "name": "Doraemon",
     "role": "AI Assistant"
   },
   "sensitive_tools": [

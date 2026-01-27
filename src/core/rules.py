@@ -1,8 +1,8 @@
-"""Rules and instructions loading system for Polymath.
+"""Rules and instructions loading system for Doraemon.
 
 This module handles loading project rules from:
-1. POLYMATH.md in project directory (project-specific rules)
-2. POLYMATH.md in ~/.polymath/ (global user rules)
+1. DORAEMON.md in project directory (project-specific rules)
+2. DORAEMON.md in ~/.doraemon/ (global user rules)
 3. Additional instruction files specified in config
 """
 
@@ -18,13 +18,13 @@ RULES_FILE = "DORAEMON.md"
 
 def load_project_rules(project_dir: Path | None = None) -> str | None:
     """
-    Load POLYMATH.md file from project directory.
+    Load DORAEMON.md file from project directory.
 
     Args:
         project_dir: Project directory to search in (defaults to cwd)
 
     Returns:
-        Content of POLYMATH.md or None if not found
+        Content of DORAEMON.md or None if not found
     """
     if project_dir is None:
         project_dir = Path.cwd()
@@ -46,10 +46,10 @@ def load_project_rules(project_dir: Path | None = None) -> str | None:
 
 def load_global_rules() -> str | None:
     """
-    Load POLYMATH.md from user's home directory.
+    Load DORAEMON.md from user's home directory.
 
     Returns:
-        Content of global POLYMATH.md or None if not found
+        Content of global DORAEMON.md or None if not found
     """
     global_rules = Path.home() / ".doraemon" / RULES_FILE
 
@@ -125,8 +125,8 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     Load all instructions from various sources and combine them.
 
     Loading order:
-    1. Project POLYMATH.md (highest priority)
-    2. Global POLYMATH.md
+    1. Project DORAEMON.md (highest priority)
+    2. Global DORAEMON.md
     3. Additional instruction files from config
 
     Args:
@@ -138,12 +138,12 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     """
     instructions = []
 
-    # 1. Project POLYMATH.md (highest priority)
+    # 1. Project DORAEMON.md (highest priority)
     project_rules = load_project_rules(project_dir)
     if project_rules:
         instructions.append(f"# Project Rules ({RULES_FILE})\n\n" + project_rules)
 
-    # 2. Global POLYMATH.md
+    # 2. Global DORAEMON.md
     global_rules = load_global_rules()
     if global_rules:
         instructions.append(f"# Global Rules (~/.doraemon/{RULES_FILE})\n\n" + global_rules)
@@ -172,13 +172,13 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
 
 def create_default_rules(project_dir: Path | None = None) -> Path:
     """
-    Create a default POLYMATH.md file in the project directory.
+    Create a default DORAEMON.md file in the project directory.
 
     Args:
         project_dir: Project directory (defaults to cwd)
 
     Returns:
-        Path to created POLYMATH.md file
+        Path to created DORAEMON.md file
     """
     if project_dir is None:
         project_dir = Path.cwd()

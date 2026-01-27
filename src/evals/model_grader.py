@@ -16,7 +16,7 @@ from google import genai
 class ModelGrader:
     """LLM-based grader for evaluating agent outputs."""
 
-    def __init__(self, model_name: str = "gemini-1.5-pro"):
+    def __init__(self, model_name: str = "gemini-3-pro-preview"):
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not set for ModelGrader")

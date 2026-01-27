@@ -214,7 +214,7 @@ class DesktopNotifier:
             $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
             $xml.LoadXml($template)
             $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Polymath").Show($toast)
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Doraemon").Show($toast)
             '''
 
             subprocess.run(

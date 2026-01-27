@@ -109,7 +109,7 @@ class SessionManager:
     Manages multiple sessions with persistence.
 
     Usage:
-        mgr = SessionManager(base_dir=".polymath/sessions")
+        mgr = SessionManager(base_dir=".doraemon/sessions")
 
         # Create new session
         session = mgr.create_session(project="myproject", name="auth-refactor")
@@ -128,7 +128,7 @@ class SessionManager:
         mgr.export_session("abc123", format="markdown", path="session.md")
     """
 
-    def __init__(self, base_dir: str | Path = ".polymath/sessions"):
+    def __init__(self, base_dir: str | Path = ".doraemon/sessions"):
         """
         Initialize session manager.
 

@@ -170,7 +170,7 @@ class MCPConnection:
                         "roots": {"listChanged": True},
                     },
                     "clientInfo": {
-                        "name": "polymath",
+                        "name": "doraemon",
                         "version": "0.7.0",
                     },
                 },
