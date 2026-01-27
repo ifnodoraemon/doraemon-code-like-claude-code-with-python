@@ -167,7 +167,7 @@ class PolymathTUI(App):
 
         try:
             self.model_client = await ModelClient.create()
-            self.model_name = os.getenv("POLYMATH_MODEL", "gemini-2.5-flash-preview")
+            self.model_name = os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview")
             self.system_prompt = get_system_prompt(self.current_mode, {})
 
             # Show mode info

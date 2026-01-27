@@ -7,7 +7,7 @@ Inspired by Anthropic's Agent Skills (October 2025):
 - Uses progressive disclosure to avoid context bloat
 
 Directory Structure:
-    .polymath/skills/
+    .doraemon/skills/
     ├── python-dev/
     │   ├── SKILL.md          # Required: metadata and main instructions
     │   ├── style-guide.md    # Optional: additional resources
@@ -132,8 +132,8 @@ class SkillLoader:
     Loads and manages skills from the filesystem.
 
     Skills are discovered from:
-    1. .polymath/skills/ in project directory
-    2. ~/.polymath/skills/ for global skills
+    1. .doraemon/skills/ in project directory
+    2. ~/.doraemon/skills/ for global skills
     """
 
     SKILL_FILE = "SKILL.md"
@@ -144,7 +144,7 @@ class SkillLoader:
         global_dir: Path | None = None,
     ):
         self.project_dir = project_dir or Path.cwd()
-        self.global_dir = global_dir or Path.home() / ".polymath"
+        self.global_dir = global_dir or Path.home() / ".doraemon"
 
         self._skills: dict[str, Skill] = {}
         self._loaded = False
@@ -159,7 +159,7 @@ class SkillLoader:
         skills_metadata = []
 
         # Project skills (higher priority)
-        project_skills_dir = self.project_dir / ".polymath" / "skills"
+        project_skills_dir = self.project_dir / ".doraemon" / "skills"
         if project_skills_dir.exists():
             for skill_dir in project_skills_dir.iterdir():
                 if skill_dir.is_dir():
@@ -243,7 +243,7 @@ class SkillLoader:
             self._loaded = True
 
         # Load skills that might be relevant
-        project_skills_dir = self.project_dir / ".polymath" / "skills"
+        project_skills_dir = self.project_dir / ".doraemon" / "skills"
         global_skills_dir = self.global_dir / "skills"
 
         for skills_dir in [project_skills_dir, global_skills_dir]:

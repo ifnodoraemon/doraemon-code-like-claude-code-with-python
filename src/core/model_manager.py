@@ -205,7 +205,7 @@ class ModelManager:
             default_model: Default model ID
         """
         self._current_model = default_model or os.getenv(
-            "POLYMATH_MODEL", "gemini-3-flash-preview"
+            "DORAEMON_MODEL", "gemini-3-pro-preview"
         )
         self._model_history: list[str] = [self._current_model]
 

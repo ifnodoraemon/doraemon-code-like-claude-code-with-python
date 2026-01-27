@@ -43,7 +43,7 @@ class HotReloadManager:
 
         # Watch a JSON config
         manager.watch_json(
-            Path(".polymath/config.json"),
+            Path(".doraemon/config.json"),
             on_change=lambda cfg: print(f"Config changed: {cfg}")
         )
 
@@ -58,7 +58,7 @@ class HotReloadManager:
         manager.start()
 
         # Get current config
-        config = manager.get_config(".polymath/config.json")
+        config = manager.get_config(".doraemon/config.json")
 
         # Stop watching
         manager.stop()

@@ -85,7 +85,7 @@ app.add_middleware(
 )
 
 # Gateway API key (optional)
-GATEWAY_API_KEY = os.getenv("POLYMATH_GATEWAY_KEY")
+GATEWAY_API_KEY = os.getenv("DORAEMON_GATEWAY_KEY")
 
 
 def verify_api_key(authorization: str | None) -> bool:

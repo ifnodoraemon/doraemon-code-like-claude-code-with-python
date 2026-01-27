@@ -31,10 +31,10 @@ class ResourceLimits:
 
 # Default limits (can be overridden via environment variables)
 DEFAULT_LIMITS = ResourceLimits(
-    max_memory_mb=int(os.getenv("POLYMATH_MAX_MEMORY_MB", "512")),
-    max_cpu_time_seconds=int(os.getenv("POLYMATH_MAX_CPU_TIME", "30")),
-    max_file_size_mb=int(os.getenv("POLYMATH_MAX_FILE_SIZE_MB", "50")),
-    max_processes=int(os.getenv("POLYMATH_MAX_PROCESSES", "10")),
+    max_memory_mb=int(os.getenv("DORAEMON_MAX_MEMORY_MB", "512")),
+    max_cpu_time_seconds=int(os.getenv("DORAEMON_MAX_CPU_TIME", "30")),
+    max_file_size_mb=int(os.getenv("DORAEMON_MAX_FILE_SIZE_MB", "50")),
+    max_processes=int(os.getenv("DORAEMON_MAX_PROCESSES", "10")),
 )
 
 
@@ -275,10 +275,10 @@ def execute_python(
         Execution output or error message
 
     Environment Variables:
-        POLYMATH_MAX_MEMORY_MB: Default memory limit (512)
-        POLYMATH_MAX_CPU_TIME: Default CPU time limit (30)
-        POLYMATH_MAX_FILE_SIZE_MB: Default file size limit (50)
-        POLYMATH_MAX_PROCESSES: Default process limit (10)
+        DORAEMON_MAX_MEMORY_MB: Default memory limit (512)
+        DORAEMON_MAX_CPU_TIME: Default CPU time limit (30)
+        DORAEMON_MAX_FILE_SIZE_MB: Default file size limit (50)
+        DORAEMON_MAX_PROCESSES: Default process limit (10)
     """
     logger.info(f"Executing Python code ({len(code)} chars, sandbox={sandbox})")
     logger.debug(f"Code:\n{code}")

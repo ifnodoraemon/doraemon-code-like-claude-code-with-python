@@ -22,9 +22,9 @@ class GatewayConfig:
     @classmethod
     def from_env(cls) -> "GatewayConfig":
         return cls(
-            base_url=os.getenv("POLYMATH_GATEWAY_URL", "http://localhost:8000"),
-            api_key=os.getenv("POLYMATH_API_KEY"),
-            timeout=float(os.getenv("POLYMATH_GATEWAY_TIMEOUT", "120")),
+            base_url=os.getenv("DORAEMON_GATEWAY_URL", "http://localhost:8000"),
+            api_key=os.getenv("DORAEMON_API_KEY"),
+            timeout=float(os.getenv("DORAEMON_GATEWAY_TIMEOUT", "120")),
         )
 
 

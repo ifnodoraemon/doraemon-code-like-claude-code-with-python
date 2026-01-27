@@ -13,3 +13,6 @@ Project specific rules for Doraemon Code.
 ## Directory Structure
 - src/: Source code
 - tests/: Tests
+
+## Environment Variables
+- `DORAEMON_MODEL`: Override default model (default: gemini-3-pro-preview)

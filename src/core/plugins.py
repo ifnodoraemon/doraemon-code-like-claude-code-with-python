@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 class PluginScope(Enum):
     """Plugin installation scope."""
 
-    USER = "user"  # ~/.polymath/plugins
-    PROJECT = "project"  # .polymath/plugins
-    LOCAL = "local"  # .polymath/plugins.local (not committed)
+    USER = "user"  # ~/.doraemon/plugins
+    PROJECT = "project"  # .doraemon/plugins
+    LOCAL = "local"  # .doraemon/plugins.local (not committed)
 
 
 @dataclass
@@ -160,9 +160,9 @@ class PluginManager:
         self.project_dir = project_dir or Path.cwd()
 
         # Plugin directories
-        self._user_dir = Path.home() / ".polymath" / "plugins"
-        self._project_dir = self.project_dir / ".polymath" / "plugins"
-        self._local_dir = self.project_dir / ".polymath" / "plugins.local"
+        self._user_dir = Path.home() / ".doraemon" / "plugins"
+        self._project_dir = self.project_dir / ".doraemon" / "plugins"
+        self._local_dir = self.project_dir / ".doraemon" / "plugins.local"
 
         # Ensure directories exist
         self._user_dir.mkdir(parents=True, exist_ok=True)

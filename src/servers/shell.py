@@ -28,7 +28,7 @@ from src.core.security import validate_path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("PolymathShell")
+mcp = FastMCP("DoraemonShell")
 
 
 # ========================================
@@ -352,7 +352,7 @@ def execute_command_background(
 @mcp.tool()
 def list_background_processes() -> str:
     """
-    List all running background processes started by Polymath.
+    List all running background processes started by Doraemon Code.
 
     Returns:
         List of background processes with their PIDs, commands, and runtime

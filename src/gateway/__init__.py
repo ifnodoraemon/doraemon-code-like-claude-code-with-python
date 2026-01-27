@@ -16,8 +16,8 @@ Usage:
     python -m src.gateway.server
 
     # CLI only needs:
-    POLYMATH_GATEWAY_URL=http://localhost:8000
-    POLYMATH_API_KEY=your-gateway-key
+    DORAEMON_GATEWAY_URL=http://localhost:8000
+    DORAEMON_API_KEY=your-gateway-key
 """
 
 from .client import GatewayClient, GatewayConfig, create_client

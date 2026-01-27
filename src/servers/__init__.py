@@ -1,1 +1,1 @@
-"""MCP Servers for Polymath."""
+"""MCP Servers for Doraemon Code."""

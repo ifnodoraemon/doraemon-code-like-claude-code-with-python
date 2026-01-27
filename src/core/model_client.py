@@ -5,7 +5,7 @@ Provides a unified interface for both Gateway and Direct modes.
 
 Modes:
 1. Gateway Mode: Connect to a Model Gateway server
-   - Only needs: POLYMATH_GATEWAY_URL + POLYMATH_API_KEY
+   - Only needs: DORAEMON_GATEWAY_URL + DORAEMON_API_KEY
    - Supports all providers through the gateway
 
 2. Direct Mode: Connect directly to provider APIs
@@ -170,7 +170,7 @@ class ClientConfig:
     def from_env(cls) -> "ClientConfig":
         """Load configuration from environment variables."""
         # Check if gateway mode is configured
-        gateway_url = os.getenv("POLYMATH_GATEWAY_URL")
+        gateway_url = os.getenv("DORAEMON_GATEWAY_URL")
 
         if gateway_url:
             mode = ClientMode.GATEWAY
@@ -179,10 +179,10 @@ class ClientConfig:
 
         return cls(
             mode=mode,
-            model=os.getenv("POLYMATH_MODEL", "gemini-2.5-flash-preview"),
+            model=os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview"),
             # Gateway settings
             gateway_url=gateway_url,
-            gateway_key=os.getenv("POLYMATH_API_KEY"),
+            gateway_key=os.getenv("DORAEMON_API_KEY"),
             # Direct mode API keys
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),

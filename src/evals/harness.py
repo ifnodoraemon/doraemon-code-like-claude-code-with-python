@@ -137,7 +137,7 @@ class EvaluationHarness:
                     active_tools.append(func_decl)
 
             persona = config.get("persona", {})
-            sys_prompt = f"You are {persona.get('name', 'Polymath')}. Answer user request."
+            sys_prompt = f"You are {persona.get('name', 'Doraemon Code')}. Answer user request."
 
             # Create chat with new SDK
             tool_obj = types.Tool(function_declarations=active_tools)

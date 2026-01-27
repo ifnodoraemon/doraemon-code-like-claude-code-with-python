@@ -61,7 +61,7 @@ def get_logger(name: str) -> logging.Logger:
         return logger
 
     # Auto-configure
-    log_dir = Path.home() / ".polymath" / "logs"
+    log_dir = Path.home() / ".doraemon" / "logs"
     log_file = log_dir / f"{name.split('.')[-1]}.log"
 
     return setup_logger(name, level="INFO", log_file=str(log_file))

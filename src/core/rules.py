@@ -51,7 +51,7 @@ def load_global_rules() -> str | None:
     Returns:
         Content of global POLYMATH.md or None if not found
     """
-    global_rules = Path.home() / ".polymath" / RULES_FILE
+    global_rules = Path.home() / ".doraemon" / RULES_FILE
 
     if global_rules.exists():
         try:
@@ -146,7 +146,7 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     # 2. Global POLYMATH.md
     global_rules = load_global_rules()
     if global_rules:
-        instructions.append(f"# Global Rules (~/.polymath/{RULES_FILE})\n\n" + global_rules)
+        instructions.append(f"# Global Rules (~/.doraemon/{RULES_FILE})\n\n" + global_rules)
 
     # 3. Additional instruction files from config
     instruction_files = config.get("instructions", [])

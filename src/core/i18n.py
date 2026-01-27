@@ -275,7 +275,7 @@ class I18n:
     def _detect_locale(self):
         """Detect system locale."""
         # Check environment variable
-        lang = os.getenv("POLYMATH_LANG") or os.getenv("LANG") or os.getenv("LANGUAGE")
+        lang = os.getenv("DORAEMON_LANG") or os.getenv("LANG") or os.getenv("LANGUAGE")
 
         if lang:
             # Extract language code (e.g., "en_US.UTF-8" -> "en")

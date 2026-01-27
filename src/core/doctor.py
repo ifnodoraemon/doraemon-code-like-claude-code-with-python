@@ -269,7 +269,7 @@ class Doctor:
     def check_project_config(self) -> CheckResult:
         """Check project configuration."""
         config_paths = [
-            self.project_dir / ".polymath" / "config.json",
+            self.project_dir / ".doraemon" / "config.json",
             self.project_dir / "DORAEMON.md",
             self.project_dir / ".env",
         ]
@@ -304,8 +304,8 @@ class Doctor:
         """Check file system permissions."""
         test_paths = [
             self.project_dir,
-            self.project_dir / ".polymath",
-            Path.home() / ".polymath",
+            self.project_dir / ".doraemon",
+            Path.home() / ".doraemon",
         ]
 
         issues = []

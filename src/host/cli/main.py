@@ -256,7 +256,7 @@ async def chat_loop(
     # State
     mode = "build"
     turn_count = 0
-    model_name = os.getenv("DORAEMON_MODEL", "gemini-2.5-flash-preview")
+    model_name = os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview")
 
     # Get tools for current mode
     tool_names = tool_selector.get_tools_for_mode(mode)
