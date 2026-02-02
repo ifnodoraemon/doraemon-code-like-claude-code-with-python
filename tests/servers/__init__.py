@@ -1,1 +1,1 @@
-"""Unit tests for MCP servers."""
+"""Tests for server modules"""
