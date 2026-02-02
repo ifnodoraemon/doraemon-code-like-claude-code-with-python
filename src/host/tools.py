@@ -26,6 +26,7 @@ Usage:
 import asyncio
 import inspect
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -243,6 +244,7 @@ class ToolRegistry:
 # ========================================
 
 _default_registry: ToolRegistry | None = None
+_registry_lock = threading.Lock()
 
 
 def get_default_registry() -> ToolRegistry:
@@ -250,11 +252,15 @@ def get_default_registry() -> ToolRegistry:
     Get the default tool registry with all standard tools registered.
 
     This is a singleton that lazily initializes on first access.
+    Thread-safe using double-check locking pattern.
     """
     global _default_registry
 
     if _default_registry is None:
-        _default_registry = _create_default_registry()
+        with _registry_lock:
+            # Double-check locking to prevent race conditions
+            if _default_registry is None:
+                _default_registry = _create_default_registry()
 
     return _default_registry
 
@@ -277,6 +283,9 @@ def _create_default_registry() -> ToolRegistry:
 
     # Import tool functions directly from servers
     # These are the actual implementations, bypassing MCP
+
+    # Collect failed tool imports
+    failed_tools: list[tuple[str, str]] = []
 
     try:
         # Filesystem Tools (Unified)
@@ -301,7 +310,8 @@ def _create_default_registry() -> ToolRegistry:
         registry.register(write_file, sensitive=True, timeout=_get_timeout("write_file", 60.0))
         registry.register(edit_file, sensitive=True, timeout=_get_timeout("edit_file", 120.0))  # Edits might involve processing
     except ImportError as e:
-        logger.warning(f"Failed to import filesystem tools: {e}")
+        logger.error(f"Failed to import filesystem tools: {e}")
+        failed_tools.append(("filesystem", str(e)))
 
     try:
         # Computer/Execution Tools
@@ -347,7 +357,8 @@ def _create_default_registry() -> ToolRegistry:
         registry.register(execute_command, name="shell_execute", sensitive=True, timeout=_get_timeout("shell_execute", 300.0))  # Allow 5 mins
         registry.register(execute_command_background, name="shell_background", sensitive=True, timeout=_get_timeout("shell_background", 60.0))
     except ImportError as e:
-        logger.warning(f"Failed to import shell tools: {e}")
+        logger.error(f"Failed to import shell tools: {e}")
+        failed_tools.append(("shell", str(e)))
 
     try:
         # Git Tools
@@ -452,6 +463,19 @@ def _create_default_registry() -> ToolRegistry:
 
     except ImportError as e:
         logger.warning(f"Failed to import browser/github/database tools: {e}")
+
+    # Report failed tool imports
+    if failed_tools:
+        error_msg = "Failed to load tools:\n" + "\n".join(
+            f"  - {name}: {error}" for name, error in failed_tools
+        )
+        # Critical tools: filesystem and shell are essential
+        critical_tools = {"filesystem", "shell"}
+        if any(name in critical_tools for name, _ in failed_tools):
+            from src.core.errors import ConfigurationError
+            raise ConfigurationError(error_msg)
+        else:
+            logger.warning(error_msg)
 
     return registry
 

@@ -243,6 +243,16 @@ class GatewayModelClient(BaseModelClient):
         from httpx import AsyncClient
         self._client: AsyncClient | None = None
 
+    async def __aenter__(self):
+        """Context manager entry - ensure client is connected."""
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure client is closed."""
+        await self.close()
+        return False  # Don't suppress exceptions
+
     async def connect(self) -> None:
         """Initialize HTTP client."""
         import httpx
@@ -260,6 +270,85 @@ class GatewayModelClient(BaseModelClient):
             timeout=httpx.Timeout(120.0),
         )
         logger.info(f"Connected to gateway: {self.config.gateway_url}")
+
+    async def _make_api_call(self, endpoint: str, payload: dict | None = None, method: str = "POST") -> dict:
+        """
+        Make API call with automatic retry on transient errors.
+
+        Args:
+            endpoint: API endpoint path
+            payload: Request payload (for POST) or None (for GET)
+            method: HTTP method (POST or GET)
+
+        Returns:
+            Response JSON data
+
+        Raises:
+            RateLimitError: When rate limited
+            TransientError: When server error occurs
+            DoraemonException: For other API errors
+        """
+        from src.core.errors import (
+            DoraemonException,
+            ErrorCategory,
+            RateLimitError,
+            TransientError,
+            retry,
+        )
+        import httpx
+
+        @retry(
+            max_attempts=3,
+            initial_delay=1.0,
+            max_delay=60.0,
+            exceptions=(TransientError, RateLimitError),
+        )
+        async def _call():
+            if self._client is None:
+                await self.connect()
+            if self._client is None:
+                from src.core.errors import ConfigurationError
+                raise ConfigurationError("Failed to initialize HTTP client")
+
+            try:
+                if method == "GET":
+                    response = await self._client.get(endpoint)
+                else:
+                    response = await self._client.post(endpoint, json=payload)
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    # Rate limit - extract retry-after header
+                    retry_after = int(e.response.headers.get("Retry-After", 60))
+                    raise RateLimitError(
+                        "Rate limit exceeded",
+                        retry_after=retry_after,
+                        context={"endpoint": endpoint, "status": 429}
+                    )
+                elif e.response.status_code >= 500:
+                    # Server error - transient, can retry
+                    raise TransientError(
+                        f"Server error: {e.response.status_code}",
+                        retry_after=2.0,
+                        context={"endpoint": endpoint, "status": e.response.status_code}
+                    )
+                else:
+                    # Client error - permanent
+                    raise DoraemonException(
+                        f"API error: {e.response.status_code} - {e.response.text}",
+                        category=ErrorCategory.PERMANENT,
+                        context={"endpoint": endpoint, "status": e.response.status_code}
+                    )
+            except httpx.RequestError as e:
+                # Network error - transient
+                raise TransientError(
+                    f"Network error: {str(e)}",
+                    retry_after=2.0,
+                    context={"endpoint": endpoint, "error": str(e)}
+                )
+
+        return await _call()
 
     async def chat(
         self,
@@ -298,13 +387,8 @@ class GatewayModelClient(BaseModelClient):
         if self.config.max_tokens:
             payload["max_tokens"] = self.config.max_tokens
 
-        if self._client is None:
-            await self.connect()
-        assert self._client is not None
-
-        response = await self._client.post("/v1/chat/completions", json=payload)
-        response.raise_for_status()
-        data = response.json()
+        # Use retry-enabled API call
+        data = await self._make_api_call("/v1/chat/completions", payload)
 
         # Extract response - safely handle empty choices
         choices = data.get("choices", [])
@@ -336,9 +420,10 @@ class GatewayModelClient(BaseModelClient):
         if not self._client:
             await self.connect()
 
-        # Check for client existence for mypy
+        # Check for client existence
         if self._client is None:
-            raise RuntimeError("Client not connected")
+            from src.core.errors import ConfigurationError
+            raise ConfigurationError("Failed to initialize HTTP client for gateway mode")
 
         msg_list = [m.to_dict() if isinstance(m, Message) else m for m in messages]
         tool_list = None
@@ -388,12 +473,9 @@ class GatewayModelClient(BaseModelClient):
                     continue
 
     async def list_models(self) -> list[dict]:
-        if self._client is None:
-            await self.connect()
-        assert self._client is not None
-        response = await self._client.get("/v1/models")
-        response.raise_for_status()
-        return response.json().get("data", [])
+        """List available models from gateway."""
+        data = await self._make_api_call("/v1/models", method="GET")
+        return data.get("data", [])
 
     async def close(self) -> None:
         if self._client:
@@ -415,6 +497,16 @@ class DirectModelClient(BaseModelClient):
     def __init__(self, config: ClientConfig):
         self.config = config
         self._providers: dict[Provider, Any] = {}
+
+    async def __aenter__(self):
+        """Context manager entry - ensure providers are connected."""
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure all providers are closed."""
+        await self.close()
+        return False  # Don't suppress exceptions
 
     async def connect(self) -> None:
         """Initialize provider clients."""
@@ -633,9 +725,13 @@ class DirectModelClient(BaseModelClient):
                 # Safely convert args to dict
                 try:
                     args = dict(fc.args) if fc.args else {}
-                except (TypeError, ValueError):
-                    logger.warning(f"Failed to convert function call args: {fc.args}")
-                    args = {}
+                except (TypeError, ValueError) as e:
+                    from src.core.errors import DoraemonException, ErrorCategory
+                    raise DoraemonException(
+                        f"Invalid tool arguments: {fc.args}",
+                        category=ErrorCategory.PERMANENT,
+                        context={"tool": fc.name, "args": str(fc.args)}
+                    ) from e
                 tc_dict = {
                     "id": f"call_{uuid.uuid4().hex[:8]}",
                     "type": "function",
