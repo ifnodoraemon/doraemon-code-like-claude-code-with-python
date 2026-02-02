@@ -648,3 +648,70 @@ Project specific rules for Doraemon Code.
                 console.print(f"[red]Failed to add: {dir_path}[/red]")
         else:
             console.print("[yellow]Usage: /add-dir <path> [alias][/yellow]")
+
+    def _validate_config(self):
+        """Validate configuration and show current settings."""
+        from src.core.unified_config import UnifiedConfig
+        from pydantic import ValidationError
+
+        try:
+            config = UnifiedConfig.from_env_and_file()
+            console.print("[green]✓ Configuration is valid[/green]\n")
+
+            # Display configuration in a table
+            table = Table(title="Current Configuration", show_header=True)
+            table.add_column("Setting", style="cyan", no_wrap=True)
+            table.add_column("Value", style="yellow")
+            table.add_column("Source", style="dim")
+
+            # Model settings
+            table.add_row("Model", config.model, "config")
+            table.add_row("Temperature", str(config.temperature), "config")
+
+            # Context settings
+            table.add_row("Max Context Tokens", f"{config.max_context_tokens:,}", "config")
+            table.add_row("Summarize Threshold", f"{config.summarize_threshold:.1%}", "config")
+            table.add_row("Keep Recent Messages", str(config.keep_recent_messages), "config")
+
+            # Tool settings
+            table.add_row("Max Tool Steps", str(config.max_tool_steps), "config")
+            table.add_row("Tool Timeout", f"{config.tool_timeout}s", "config")
+            table.add_row("Enable HITL", str(config.enable_hitl), "config")
+
+            # Checkpoint settings
+            table.add_row("Checkpoint Enabled", str(config.checkpoint_enabled), "config")
+            table.add_row("Checkpoint Retention", f"{config.checkpoint_retention_days} days", "config")
+
+            # Budget settings
+            if config.daily_budget_usd:
+                table.add_row("Daily Budget", f"${config.daily_budget_usd:.2f}", "config")
+            if config.session_budget_usd:
+                table.add_row("Session Budget", f"${config.session_budget_usd:.2f}", "config")
+
+            # Logging
+            table.add_row("Log Level", config.log_level, "config")
+
+            console.print(table)
+
+            # Show environment variable overrides
+            import os
+            env_vars = [
+                "DORAEMON_MODEL",
+                "DORAEMON_MAX_CONTEXT_TOKENS",
+                "DORAEMON_MAX_TOOL_STEPS",
+                "DORAEMON_DAILY_BUDGET",
+            ]
+            active_overrides = [var for var in env_vars if os.getenv(var)]
+
+            if active_overrides:
+                console.print("\n[bold]Active Environment Overrides:[/bold]")
+                for var in active_overrides:
+                    console.print(f"  • {var}={os.getenv(var)}")
+
+        except ValidationError as e:
+            console.print("[red]✗ Configuration errors:[/red]\n")
+            for error in e.errors():
+                field = " → ".join(str(loc) for loc in error["loc"])
+                console.print(f"  [red]•[/red] {field}: {error['msg']}")
+        except Exception as e:
+            console.print(f"[red]✗ Error loading configuration: {e}[/red]")

@@ -76,7 +76,7 @@ def create_test_context_manager(
         keep_recent_messages=keep_recent,
         auto_save=False,  # Disable auto-save in tests
     )
-    return ContextManager(config, project_name="test")
+    return ContextManager(project="test", config=config)
 
 
 def create_test_tool_registry() -> ToolRegistry:
