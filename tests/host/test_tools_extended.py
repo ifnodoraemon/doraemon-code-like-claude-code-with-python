@@ -34,9 +34,11 @@ class TestToolRegistryExtended:
             return "test"
 
         registry.register(my_tool, sensitive=False)
-        tool_info = registry.get_tool("my_tool")
-        assert tool_info is not None
-        assert tool_info.name == "my_tool"
+        # Check tool is registered
+        assert "my_tool" in registry.get_tool_names()
+        # Check we can get GenAI tools
+        tools = registry.get_genai_tools(["my_tool"])
+        assert len(tools) > 0
 
     @pytest.mark.asyncio
     async def test_call_tool(self):
@@ -69,8 +71,10 @@ class TestToolRegistryExtended:
             return "danger"
 
         registry.register(dangerous_tool, sensitive=True)
-        tool_info = registry.get_tool("dangerous_tool")
-        assert tool_info.sensitive is True
+        # Check tool is marked as sensitive
+        assert registry.is_sensitive("dangerous_tool") is True
+        # Check it's in sensitive tools list
+        assert "dangerous_tool" in registry.get_sensitive_tools()
 
 class TestDefaultRegistry:
     """Tests for default registry."""
