@@ -9,6 +9,11 @@ Features:
 - Model selection per subagent
 - Parallel execution support
 - Built-in agent types (code-reviewer, debugger, etc.)
+- Agent communication protocol (message passing)
+- Agent state management (idle/running/completed/failed)
+- Parallel execution with asyncio
+- Result aggregation and monitoring
+- Timeout and error handling with metrics
 """
 
 import asyncio
@@ -16,7 +21,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
@@ -32,6 +37,76 @@ class SubagentModel(Enum):
     INHERIT = "inherit"  # Use parent's model
     PRO = "pro"  # gemini-3-pro - Most capable, multimodal
     FLASH = "flash"  # gemini-3-flash - Fast and capable (default)
+
+
+class AgentState(Enum):
+    """Agent execution state."""
+
+    IDLE = "idle"  # Not running
+    RUNNING = "running"  # Currently executing
+    COMPLETED = "completed"  # Finished successfully
+    FAILED = "failed"  # Execution failed
+    TIMEOUT = "timeout"  # Execution timed out
+    CANCELLED = "cancelled"  # Execution was cancelled
+
+
+@dataclass
+class AgentMessage:
+    """Message for inter-agent communication."""
+
+    sender_id: str
+    recipient_id: str | None  # None for broadcast
+    message_type: str  # "request", "response", "status", "error"
+    content: str
+    timestamp: float = field(default_factory=time.time)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sender_id": self.sender_id,
+            "recipient_id": self.recipient_id,
+            "message_type": self.message_type,
+            "content": self.content,
+            "timestamp": self.timestamp,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class AgentMetrics:
+    """Metrics for agent execution monitoring."""
+
+    agent_id: str
+    agent_name: str
+    state: AgentState
+    start_time: float
+    end_time: float | None = None
+    turns_used: int = 0
+    tokens_used: int = 0
+    tool_calls: int = 0
+    errors: int = 0
+    messages_sent: int = 0
+    messages_received: int = 0
+
+    @property
+    def duration(self) -> float:
+        """Calculate execution duration."""
+        end = self.end_time or time.time()
+        return end - self.start_time
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_id": self.agent_id,
+            "agent_name": self.agent_name,
+            "state": self.state.value,
+            "duration": round(self.duration, 2),
+            "turns_used": self.turns_used,
+            "tokens_used": self.tokens_used,
+            "tool_calls": self.tool_calls,
+            "errors": self.errors,
+            "messages_sent": self.messages_sent,
+            "messages_received": self.messages_received,
+        }
 
 
 @dataclass
@@ -82,6 +157,8 @@ class SubagentResult:
     tokens_used: int
     duration: float
     error: str | None = None
+    state: AgentState = AgentState.COMPLETED
+    metrics: AgentMetrics | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -93,12 +170,384 @@ class SubagentResult:
             "tokens_used": self.tokens_used,
             "duration": round(self.duration, 2),
             "error": self.error,
+            "state": self.state.value,
+            "metrics": self.metrics.to_dict() if self.metrics else None,
         }
 
 
 # ========================================
-# Built-in Agent Configurations
+# Agent Communication & State Management
 # ========================================
+
+
+class AgentMessageQueue:
+    """Thread-safe message queue for inter-agent communication."""
+
+    def __init__(self):
+        """Initialize message queue."""
+        self._queue: asyncio.Queue[AgentMessage] = asyncio.Queue()
+        self._subscribers: dict[str, list[Callable[[AgentMessage], None]]] = {}
+
+    async def send(self, message: AgentMessage) -> None:
+        """Send a message to the queue."""
+        await self._queue.put(message)
+        await self._notify_subscribers(message)
+
+    async def receive(self, timeout: float | None = None) -> AgentMessage | None:
+        """Receive a message from the queue."""
+        try:
+            if timeout:
+                return await asyncio.wait_for(self._queue.get(), timeout=timeout)
+            return await self._queue.get()
+        except asyncio.TimeoutError:
+            return None
+
+    def subscribe(
+        self, agent_id: str, callback: Callable[[AgentMessage], None]
+    ) -> None:
+        """Subscribe to messages for a specific agent."""
+        if agent_id not in self._subscribers:
+            self._subscribers[agent_id] = []
+        self._subscribers[agent_id].append(callback)
+
+    async def _notify_subscribers(self, message: AgentMessage) -> None:
+        """Notify subscribers of a new message."""
+        if message.recipient_id and message.recipient_id in self._subscribers:
+            for callback in self._subscribers[message.recipient_id]:
+                try:
+                    callback(message)
+                except Exception as e:
+                    logger.error(f"Error in message subscriber: {e}")
+
+
+class AgentStateManager:
+    """Manages agent state and transitions."""
+
+    def __init__(self):
+        """Initialize state manager."""
+        self._states: dict[str, AgentState] = {}
+        self._metrics: dict[str, AgentMetrics] = {}
+        self._lock = asyncio.Lock()
+
+    async def set_state(self, agent_id: str, state: AgentState) -> None:
+        """Set agent state."""
+        async with self._lock:
+            self._states[agent_id] = state
+            logger.debug(f"Agent {agent_id} state changed to {state.value}")
+
+    async def get_state(self, agent_id: str) -> AgentState | None:
+        """Get agent state."""
+        async with self._lock:
+            return self._states.get(agent_id)
+
+    async def create_metrics(
+        self, agent_id: str, agent_name: str
+    ) -> AgentMetrics:
+        """Create metrics for an agent."""
+        async with self._lock:
+            metrics = AgentMetrics(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                state=AgentState.IDLE,
+                start_time=time.time(),
+            )
+            self._metrics[agent_id] = metrics
+            return metrics
+
+    async def get_metrics(self, agent_id: str) -> AgentMetrics | None:
+        """Get agent metrics."""
+        async with self._lock:
+            return self._metrics.get(agent_id)
+
+    async def update_metrics(
+        self, agent_id: str, **kwargs: Any
+    ) -> None:
+        """Update agent metrics."""
+        async with self._lock:
+            if agent_id in self._metrics:
+                metrics = self._metrics[agent_id]
+                for key, value in kwargs.items():
+                    if hasattr(metrics, key):
+                        setattr(metrics, key, value)
+
+    async def get_all_metrics(self) -> dict[str, AgentMetrics]:
+        """Get all agent metrics."""
+        async with self._lock:
+            return dict(self._metrics)
+
+
+def _create_agent_id() -> str:
+    """Create a unique agent ID."""
+    return str(uuid.uuid4())[:8]
+
+
+def _get_model_name(
+    model: SubagentModel, parent_model: str
+) -> str:
+    """Get model name from SubagentModel enum."""
+    model_mapping = {
+        SubagentModel.INHERIT: parent_model,
+        SubagentModel.PRO: "gemini-3-pro-preview",
+        SubagentModel.FLASH: "gemini-3-flash-preview",
+    }
+    return model_mapping.get(model, parent_model)
+
+
+async def _execute_agent_task(
+    agent_id: str,
+    config: "SubagentConfig",
+    task: str,
+    context: str,
+    client: genai.Client,
+    tool_registry: Any,
+    parent_model: str,
+    on_output: Callable[[str], None] | None = None,
+    state_manager: AgentStateManager | None = None,
+) -> SubagentResult:
+    """
+    Execute a single agent task with state management and metrics.
+
+    Args:
+        agent_id: Unique agent ID
+        config: Agent configuration
+        task: Task description
+        context: Additional context
+        client: GenAI client
+        tool_registry: Tool registry
+        parent_model: Parent model name
+        on_output: Output callback
+        state_manager: State manager for tracking
+
+    Returns:
+        SubagentResult with execution details
+    """
+    start_time = time.time()
+    metrics = None
+
+    try:
+        # Initialize metrics
+        if state_manager:
+            metrics = await state_manager.create_metrics(agent_id, config.name)
+            await state_manager.set_state(agent_id, AgentState.RUNNING)
+
+        logger.info(f"Spawning subagent {agent_id} ({config.name}): {task[:100]}")
+
+        # Determine model
+        model_name = _get_model_name(config.model, parent_model)
+
+        # Get tools
+        if config.tools:
+            tools = tool_registry.get_genai_tools(config.tools)
+        else:
+            tools = tool_registry.get_genai_tools()
+
+        # Build system prompt
+        system_prompt = config.prompt
+        if context:
+            system_prompt += f"\n\n[Context]\n{context}"
+
+        # Create chat config
+        gen_config = types.GenerateContentConfig(
+            tools=[types.Tool(function_declarations=tools)] if tools else None,
+            system_instruction=system_prompt,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+        )
+
+        # Create chat session
+        chat = client.chats.create(model=model_name, config=gen_config)
+
+        # Run agent loop
+        output_parts = []
+        turns_used = 0
+        total_tokens = 0
+        tool_calls_count = 0
+
+        # Initial message
+        response = await asyncio.wait_for(
+            asyncio.to_thread(chat.send_message, task),
+            timeout=config.timeout,
+        )
+        turns_used += 1
+
+        while turns_used < config.max_turns:
+            if not response.candidates or not response.candidates[0].content:
+                break
+
+            parts = response.candidates[0].content.parts
+            if not parts:
+                break
+
+            has_tool_call = False
+            tool_results = []
+
+            for part in parts:
+                # Collect text output
+                if part.text:
+                    output_parts.append(part.text)
+                    if on_output:
+                        on_output(part.text)
+
+                # Handle tool calls
+                if part.function_call:
+                    has_tool_call = True
+                    tool_calls_count += 1
+                    fc = part.function_call
+                    tool_name = fc.name
+                    # Handle fc.args which might be a list or dict depending on SDK version
+                    args = {}
+                    if hasattr(fc, "args") and fc.args:
+                        if hasattr(fc.args, "items"):
+                            args = dict(fc.args.items())
+                        elif isinstance(fc.args, dict):
+                            args = fc.args
+                        else:
+                            # Fallback for other potential types
+                            try:
+                                args = dict(fc.args)  # type: ignore
+                            except (TypeError, ValueError):
+                                logger.warning(
+                                    f"Could not convert fc.args to dict: {type(fc.args)}"
+                                )
+                                args = {}
+
+                    # Execute tool
+                    try:
+                        result = await tool_registry.call_tool(tool_name, args)
+                    except Exception as e:
+                        result = f"Error: {e}"
+
+                    tool_results.append(
+                        {"name": tool_name, "result": {"result": result}}
+                    )
+
+            # Track tokens
+            if response.usage_metadata:
+                total_tokens += response.usage_metadata.prompt_token_count or 0
+                total_tokens += response.usage_metadata.candidates_token_count or 0
+
+            # No more tool calls - done
+            if not has_tool_call:
+                break
+
+            # Send tool results
+            response_parts: Sequence[types.Part] = [
+                types.Part.from_function_response(
+                    name=str(tr["name"]), response=cast(dict[str, Any], tr["result"])
+                )
+                for tr in tool_results
+            ]
+
+            response = await asyncio.wait_for(
+                asyncio.to_thread(chat.send_message, list(response_parts)),  # type: ignore
+                timeout=config.timeout,
+            )
+            turns_used += 1
+
+        duration = time.time() - start_time
+        output = "\n".join(output_parts)
+
+        # Update metrics
+        if metrics:
+            await state_manager.update_metrics(
+                agent_id,
+                state=AgentState.COMPLETED,
+                turns_used=turns_used,
+                tokens_used=total_tokens,
+                tool_calls=tool_calls_count,
+                end_time=time.time(),
+            )
+
+        logger.info(
+            f"Subagent {agent_id} completed in {duration:.1f}s "
+            f"({turns_used} turns, {total_tokens} tokens)"
+        )
+
+        return SubagentResult(
+            agent_id=agent_id,
+            agent_name=config.name,
+            success=True,
+            output=output,
+            turns_used=turns_used,
+            tokens_used=total_tokens,
+            duration=duration,
+            state=AgentState.COMPLETED,
+            metrics=metrics,
+        )
+
+    except asyncio.TimeoutError:
+        duration = time.time() - start_time
+        if metrics:
+            await state_manager.update_metrics(
+                agent_id,
+                state=AgentState.TIMEOUT,
+                end_time=time.time(),
+            )
+        return SubagentResult(
+            agent_id=agent_id,
+            agent_name=config.name,
+            success=False,
+            output="",
+            turns_used=0,
+            tokens_used=0,
+            duration=duration,
+            error=f"Timeout after {config.timeout}s",
+            state=AgentState.TIMEOUT,
+            metrics=metrics,
+        )
+
+    except Exception as e:
+        duration = time.time() - start_time
+        if metrics:
+            await state_manager.update_metrics(
+                agent_id,
+                state=AgentState.FAILED,
+                errors=1,
+                end_time=time.time(),
+            )
+        logger.error(f"Subagent {agent_id} failed: {e}")
+        return SubagentResult(
+            agent_id=agent_id,
+            agent_name=config.name,
+            success=False,
+            output="",
+            turns_used=0,
+            tokens_used=0,
+            duration=duration,
+            error=str(e),
+            state=AgentState.FAILED,
+            metrics=metrics,
+        )
+
+
+def _aggregate_results(results: list[SubagentResult]) -> dict[str, Any]:
+    """
+    Aggregate results from multiple agents.
+
+    Args:
+        results: List of SubagentResult objects
+
+    Returns:
+        Aggregated metrics and summary
+    """
+    total_duration = sum(r.duration for r in results)
+    total_tokens = sum(r.tokens_used for r in results)
+    successful = sum(1 for r in results if r.success)
+    failed = sum(1 for r in results if not r.success)
+
+    return {
+        "total_agents": len(results),
+        "successful": successful,
+        "failed": failed,
+        "total_duration": round(total_duration, 2),
+        "total_tokens": total_tokens,
+        "average_duration": round(total_duration / len(results), 2) if results else 0,
+        "results": [r.to_dict() for r in results],
+    }
+
+
+
 
 BUILTIN_AGENTS: dict[str, SubagentConfig] = {
     "code-reviewer": SubagentConfig(
@@ -235,6 +684,13 @@ class SubagentManager:
     """
     Manages subagent creation and execution.
 
+    Features:
+    - Agent communication protocol (message passing)
+    - Agent state management (idle/running/completed/failed)
+    - Parallel execution with asyncio
+    - Result aggregation and monitoring
+    - Timeout and error handling with metrics
+
     Usage:
         mgr = SubagentManager(client, tool_registry)
 
@@ -254,6 +710,12 @@ class SubagentManager:
             ("code-reviewer", "Review api.py"),
             ("security-auditor", "Audit api.py"),
         ])
+
+        # Get agent metrics
+        metrics = await mgr.get_agent_metrics(agent_id)
+
+        # Get all metrics
+        all_metrics = await mgr.get_all_metrics()
     """
 
     def __init__(
@@ -275,8 +737,10 @@ class SubagentManager:
         self.parent_model = parent_model
         self._custom_agents: dict[str, SubagentConfig] = {}
         self._running_agents: dict[str, asyncio.Task] = {}
+        self._message_queue = AgentMessageQueue()
+        self._state_manager = AgentStateManager()
 
-    def register_agent(self, config: SubagentConfig):
+    def register_agent(self, config: SubagentConfig) -> None:
         """Register a custom agent configuration."""
         self._custom_agents[config.name] = config
         logger.info(f"Registered custom agent: {config.name}")
@@ -313,6 +777,38 @@ class SubagentManager:
 
         return agents
 
+    async def get_agent_state(self, agent_id: str) -> AgentState | None:
+        """Get current state of an agent."""
+        return await self._state_manager.get_state(agent_id)
+
+    async def get_agent_metrics(self, agent_id: str) -> AgentMetrics | None:
+        """Get metrics for a specific agent."""
+        return await self._state_manager.get_metrics(agent_id)
+
+    async def get_all_metrics(self) -> dict[str, AgentMetrics]:
+        """Get metrics for all agents."""
+        return await self._state_manager.get_all_metrics()
+
+    async def send_message(self, message: AgentMessage) -> None:
+        """Send a message between agents."""
+        await self._message_queue.send(message)
+        logger.debug(
+            f"Message from {message.sender_id} to {message.recipient_id}: "
+            f"{message.message_type}"
+        )
+
+    async def receive_message(
+        self, agent_id: str, timeout: float | None = None
+    ) -> AgentMessage | None:
+        """Receive a message for an agent."""
+        return await self._message_queue.receive(timeout)
+
+    def subscribe_to_messages(
+        self, agent_id: str, callback: Callable[[AgentMessage], None]
+    ) -> None:
+        """Subscribe to messages for an agent."""
+        self._message_queue.subscribe(agent_id, callback)
+
     async def spawn(
         self,
         agent_name: str,
@@ -344,6 +840,7 @@ class SubagentManager:
                 tokens_used=0,
                 duration=0,
                 error=f"Unknown agent: {agent_name}. Available: {', '.join(available)}",
+                state=AgentState.FAILED,
             )
 
         return await self.spawn_custom(config, task, context, on_output)
@@ -367,178 +864,25 @@ class SubagentManager:
         Returns:
             SubagentResult with execution details
         """
-        agent_id = str(uuid.uuid4())[:8]
-        start_time = time.time()
+        agent_id = _create_agent_id()
 
-        logger.info(f"Spawning subagent {agent_id} ({config.name}): {task[:100]}")
-
-        try:
-            # Determine model
-            # Model selection with latest models
-            # Model mapping - Gemini 3 Series (Latest)
-            model_mapping = {
-                SubagentModel.INHERIT: self.parent_model,
-                SubagentModel.PRO: "gemini-3-pro-preview",
-                SubagentModel.FLASH: "gemini-3-flash-preview",
-            }
-            model_name = model_mapping.get(config.model, self.parent_model)
-
-            # Get tools
-            if config.tools:
-                tools = self.tool_registry.get_genai_tools(config.tools)
-            else:
-                tools = self.tool_registry.get_genai_tools()
-
-            # Build system prompt
-            system_prompt = config.prompt
-            if context:
-                system_prompt += f"\n\n[Context]\n{context}"
-
-            # Create chat config
-            gen_config = types.GenerateContentConfig(
-                tools=[types.Tool(function_declarations=tools)] if tools else None,
-                system_instruction=system_prompt,
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                    disable=True
-                ),
-            )
-
-            # Create chat session
-            chat = self.client.chats.create(model=model_name, config=gen_config)
-
-            # Run agent loop
-            output_parts = []
-            turns_used = 0
-            total_tokens = 0
-
-            # Initial message
-            response = await asyncio.wait_for(
-                asyncio.to_thread(chat.send_message, task),
-                timeout=config.timeout,
-            )
-            turns_used += 1
-
-            while turns_used < config.max_turns:
-                if not response.candidates or not response.candidates[0].content:
-                    break
-
-                parts = response.candidates[0].content.parts
-                if not parts:
-                    break
-
-                has_tool_call = False
-                tool_results = []
-
-                for part in parts:
-                    # Collect text output
-                    if part.text:
-                        output_parts.append(part.text)
-                        if on_output:
-                            on_output(part.text)
-
-                    # Handle tool calls
-                    if part.function_call:
-                        has_tool_call = True
-                        fc = part.function_call
-                        tool_name = fc.name
-                        # Handle fc.args which might be a list or dict depending on SDK version
-                        args = {}
-                        if hasattr(fc, "args") and fc.args:
-                            if hasattr(fc.args, "items"):
-                                args = dict(fc.args.items())
-                            elif isinstance(fc.args, dict):
-                                args = fc.args
-                            else:
-                                # Fallback for other potential types
-                                try:
-                                    args = dict(fc.args) # type: ignore
-                                except (TypeError, ValueError):
-                                    logger.warning(f"Could not convert fc.args to dict: {type(fc.args)}")
-                                    args = {}
-
-                        # Execute tool
-                        try:
-                            result = await self.tool_registry.call_tool(tool_name, args)
-                        except Exception as e:
-                            result = f"Error: {e}"
-
-                        tool_results.append(
-                            {"name": tool_name, "result": {"result": result}}
-                        )
-
-                # Track tokens
-                if response.usage_metadata:
-                    total_tokens += response.usage_metadata.prompt_token_count or 0
-                    total_tokens += response.usage_metadata.candidates_token_count or 0
-
-                # No more tool calls - done
-                if not has_tool_call:
-                    break
-
-                # Send tool results
-                response_parts: Sequence[types.Part] = [
-                    types.Part.from_function_response(
-                        name=str(tr["name"]), response=cast(dict[str, Any], tr["result"])
-                    )
-                    for tr in tool_results
-                ]
-
-                response = await asyncio.wait_for(
-                    asyncio.to_thread(chat.send_message, list(response_parts)), # type: ignore
-                    timeout=config.timeout,
-                )
-                turns_used += 1
-
-            duration = time.time() - start_time
-            output = "\n".join(output_parts)
-
-            logger.info(
-                f"Subagent {agent_id} completed in {duration:.1f}s "
-                f"({turns_used} turns, {total_tokens} tokens)"
-            )
-
-            return SubagentResult(
-                agent_id=agent_id,
-                agent_name=config.name,
-                success=True,
-                output=output,
-                turns_used=turns_used,
-                tokens_used=total_tokens,
-                duration=duration,
-            )
-
-        except asyncio.TimeoutError:
-            duration = time.time() - start_time
-            return SubagentResult(
-                agent_id=agent_id,
-                agent_name=config.name,
-                success=False,
-                output="",
-                turns_used=0,
-                tokens_used=0,
-                duration=duration,
-                error=f"Timeout after {config.timeout}s",
-            )
-
-        except Exception as e:
-            duration = time.time() - start_time
-            logger.error(f"Subagent {agent_id} failed: {e}")
-            return SubagentResult(
-                agent_id=agent_id,
-                agent_name=config.name,
-                success=False,
-                output="",
-                turns_used=0,
-                tokens_used=0,
-                duration=duration,
-                error=str(e),
-            )
+        return await _execute_agent_task(
+            agent_id=agent_id,
+            config=config,
+            task=task,
+            context=context,
+            client=self.client,
+            tool_registry=self.tool_registry,
+            parent_model=self.parent_model,
+            on_output=on_output,
+            state_manager=self._state_manager,
+        )
 
     async def spawn_parallel(
         self,
         tasks: list[tuple[str, str]],  # (agent_name, task)
         context: str = "",
-    ) -> list[SubagentResult]:
+    ) -> dict[str, Any]:
         """
         Run multiple agents in parallel.
 
@@ -547,7 +891,7 @@ class SubagentManager:
             context: Shared context for all agents
 
         Returns:
-            List of results in same order as tasks
+            Aggregated results with metrics
         """
         coroutines = [self.spawn(name, task, context) for name, task in tasks]
 
@@ -568,6 +912,7 @@ class SubagentManager:
                         tokens_used=0,
                         duration=0,
                         error=str(result),
+                        state=AgentState.FAILED,
                     )
                 )
             elif isinstance(result, SubagentResult):
@@ -576,4 +921,99 @@ class SubagentManager:
                 # Should not happen but for type safety
                 logger.error(f"Unexpected result type from spawn: {type(result)}")
 
-        return final_results
+        return _aggregate_results(final_results)
+
+    async def spawn_with_timeout(
+        self,
+        agent_name: str,
+        task: str,
+        timeout: float,
+        context: str = "",
+        on_output: Callable[[str], None] | None = None,
+    ) -> SubagentResult:
+        """
+        Spawn an agent with a custom timeout.
+
+        Args:
+            agent_name: Name of agent
+            task: Task description
+            timeout: Timeout in seconds
+            context: Additional context
+            on_output: Output callback
+
+        Returns:
+            SubagentResult with execution details
+        """
+        config = self.get_agent_config(agent_name)
+        if not config:
+            available = list(BUILTIN_AGENTS.keys()) + list(self._custom_agents.keys())
+            return SubagentResult(
+                agent_id="",
+                agent_name=agent_name,
+                success=False,
+                output="",
+                turns_used=0,
+                tokens_used=0,
+                duration=0,
+                error=f"Unknown agent: {agent_name}. Available: {', '.join(available)}",
+                state=AgentState.FAILED,
+            )
+
+        # Create a modified config with custom timeout
+        modified_config = SubagentConfig(
+            name=config.name,
+            description=config.description,
+            prompt=config.prompt,
+            tools=config.tools,
+            model=config.model,
+            max_turns=config.max_turns,
+            timeout=timeout,
+        )
+
+        return await self.spawn_custom(modified_config, task, context, on_output)
+
+    async def cancel_agent(self, agent_id: str) -> bool:
+        """
+        Cancel a running agent.
+
+        Args:
+            agent_id: ID of agent to cancel
+
+        Returns:
+            True if cancelled, False if not running
+        """
+        if agent_id in self._running_agents:
+            task = self._running_agents[agent_id]
+            task.cancel()
+            await self._state_manager.set_state(agent_id, AgentState.CANCELLED)
+            logger.info(f"Cancelled agent {agent_id}")
+            return True
+        return False
+
+    async def get_running_agents(self) -> list[str]:
+        """Get list of currently running agent IDs."""
+        return list(self._running_agents.keys())
+
+    async def wait_for_agent(self, agent_id: str, timeout: float | None = None) -> bool:
+        """
+        Wait for an agent to complete.
+
+        Args:
+            agent_id: ID of agent to wait for
+            timeout: Timeout in seconds
+
+        Returns:
+            True if completed, False if timeout
+        """
+        if agent_id not in self._running_agents:
+            return False
+
+        try:
+            if timeout:
+                await asyncio.wait_for(self._running_agents[agent_id], timeout=timeout)
+            else:
+                await self._running_agents[agent_id]
+            return True
+        except asyncio.TimeoutError:
+            return False
+
