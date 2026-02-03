@@ -1157,3 +1157,389 @@ class TestEdgeCasesAndBoundaryConditions:
         client = MCPClient(config_path=None)
         assert client._servers == {}
         assert client._connections == {}
+
+
+# ============================================================================
+# SECTION 11: Additional Coverage Tests for Missing Lines (10+ tests)
+# ============================================================================
+
+
+class TestMCPConnectionReadResponses:
+    """Tests for _read_responses method and edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_read_responses_no_process(self, mock_config):
+        """Test _read_responses returns early if no process."""
+        conn = MCPConnection(mock_config)
+        conn._process = None
+        # Should not raise
+        await conn._read_responses()
+
+    @pytest.mark.asyncio
+    async def test_read_responses_no_stdout(self, mock_config):
+        """Test _read_responses returns early if no stdout."""
+        conn = MCPConnection(mock_config)
+        conn._process = Mock()
+        conn._process.stdout = None
+        # Should not raise
+        await conn._read_responses()
+
+    @pytest.mark.asyncio
+    async def test_read_responses_json_decode_error(self, mock_config):
+        """Test _read_responses handles JSON decode errors."""
+        conn = MCPConnection(mock_config)
+        mock_process = Mock()
+        mock_process.stdout = Mock()
+
+        # Simulate reading invalid JSON then EOF
+        call_count = [0]
+
+        async def mock_readline_impl():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return b"invalid json\n"
+            else:
+                return b""  # EOF
+
+        mock_process.stdout.readline = mock_readline_impl
+        conn._process = mock_process
+
+        # Create a task that will read one line then stop
+        read_task = asyncio.create_task(conn._read_responses())
+        await asyncio.sleep(0.1)
+
+        # Task should complete naturally
+        assert read_task.done()
+
+    @pytest.mark.asyncio
+    async def test_read_responses_exception_handling(self, mock_config):
+        """Test _read_responses handles exceptions."""
+        conn = MCPConnection(mock_config)
+        mock_process = Mock()
+        mock_process.stdout = Mock()
+
+        async def mock_readline_impl():
+            raise Exception("Read error")
+
+        mock_process.stdout.readline = mock_readline_impl
+        conn._process = mock_process
+
+        # Create a task that will encounter an exception
+        read_task = asyncio.create_task(conn._read_responses())
+        await asyncio.sleep(0.1)
+
+        # Task should have exited due to exception
+        assert read_task.done()
+
+
+class TestMCPConnectionInitialize:
+    """Tests for connection initialization and setup."""
+
+    @pytest.mark.asyncio
+    async def test_connect_initialize_request_fails(self, mock_config):
+        """Test connect when initialize request returns None."""
+        conn = MCPConnection(mock_config)
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = Mock()
+            mock_process.stdin = Mock()
+            mock_process.stdout = Mock()
+            mock_popen.return_value = mock_process
+
+            # Mock _request to return None (failed initialize)
+            conn._request = AsyncMock(return_value=None)
+
+            result = await conn.connect()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_connect_initialize_request_false(self, mock_config):
+        """Test connect when initialize request returns False."""
+        conn = MCPConnection(mock_config)
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = Mock()
+            mock_process.stdin = Mock()
+            mock_process.stdout = Mock()
+            mock_popen.return_value = mock_process
+
+            # Mock _request to return False
+            conn._request = AsyncMock(return_value=False)
+
+            result = await conn.connect()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_connect_sends_initialized_notification(self, mock_config):
+        """Test connect sends initialized notification on success."""
+        conn = MCPConnection(mock_config)
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = Mock()
+            mock_process.stdin = Mock()
+            mock_process.stdout = Mock()
+            mock_popen.return_value = mock_process
+
+            # Mock _request to return success
+            conn._request = AsyncMock(return_value={"status": "ok"})
+            conn._notify = AsyncMock()
+
+            result = await conn.connect()
+
+            assert result is True
+            conn._notify.assert_called_once_with("notifications/initialized", {})
+
+
+class TestMCPClientConnectAll:
+    """Tests for connect_all and disconnect_all operations."""
+
+    @pytest.mark.asyncio
+    async def test_connect_all_multiple_servers(self, mcp_client):
+        """Test connecting to multiple servers."""
+        config1 = MCPServerConfig(name="server1", command="python")
+        config2 = MCPServerConfig(name="server2", command="python")
+
+        mcp_client.add_server(config1)
+        mcp_client.add_server(config2)
+
+        # Mock the connect method
+        mcp_client.connect = AsyncMock(side_effect=[True, False])
+
+        results = await mcp_client.connect_all()
+
+        assert results["server1"] is True
+        assert results["server2"] is False
+
+    @pytest.mark.asyncio
+    async def test_disconnect_all_multiple_servers(self, mcp_client):
+        """Test disconnecting from multiple servers."""
+        config1 = MCPServerConfig(name="server1", command="python")
+        config2 = MCPServerConfig(name="server2", command="python")
+
+        conn1 = MCPConnection(config1)
+        conn2 = MCPConnection(config2)
+
+        mcp_client._connections["server1"] = conn1
+        mcp_client._connections["server2"] = conn2
+
+        # Mock disconnect
+        mcp_client.disconnect = AsyncMock()
+
+        await mcp_client.disconnect_all()
+
+        assert mcp_client.disconnect.call_count == 2
+
+
+class TestMCPClientCallToolEdgeCases:
+    """Tests for call_tool edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_call_tool_with_server_not_connected(self, mcp_client):
+        """Test calling tool on server that's not connected."""
+        with pytest.raises(Exception, match="Not connected to server"):
+            await mcp_client.call_tool("unknown_server", "tool", {})
+
+    @pytest.mark.asyncio
+    async def test_call_tool_passes_arguments_correctly(self, mcp_client):
+        """Test call_tool passes arguments to connection."""
+        config = MCPServerConfig(name="test", command="python")
+        conn = MCPConnection(config)
+        conn.call_tool = AsyncMock(return_value="result")
+
+        mcp_client._connections["test"] = conn
+
+        result = await mcp_client.call_tool("test", "my_tool", {"arg": "value"})
+
+        conn.call_tool.assert_called_once_with("my_tool", {"arg": "value"})
+        assert result == "result"
+
+
+class TestMCPClientReadResourceEdgeCases:
+    """Tests for read_resource edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_read_resource_with_server_not_connected(self, mcp_client):
+        """Test reading resource from server that's not connected."""
+        with pytest.raises(Exception, match="Not connected to server"):
+            await mcp_client.read_resource("unknown_server", "file:///test")
+
+    @pytest.mark.asyncio
+    async def test_read_resource_passes_uri_correctly(self, mcp_client):
+        """Test read_resource passes URI to connection."""
+        config = MCPServerConfig(name="test", command="python")
+        conn = MCPConnection(config)
+        conn.read_resource = AsyncMock(return_value="content")
+
+        mcp_client._connections["test"] = conn
+
+        result = await mcp_client.read_resource("test", "file:///test.txt")
+
+        conn.read_resource.assert_called_once_with("file:///test.txt")
+        assert result == "content"
+
+
+class TestMCPConnectionNotifyEdgeCases:
+    """Tests for _notify method edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_notify_with_no_stdin(self, mock_config):
+        """Test _notify handles missing stdin gracefully."""
+        conn = MCPConnection(mock_config)
+        conn._process = Mock()
+        conn._process.stdin = None
+
+        # Should not raise
+        await conn._notify("test_method", {})
+
+    @pytest.mark.asyncio
+    async def test_notify_writes_correct_format(self, mock_config):
+        """Test _notify writes JSON-RPC notification in correct format."""
+        conn = MCPConnection(mock_config)
+        mock_process = Mock()
+        mock_stdin = Mock()
+        mock_process.stdin = mock_stdin
+        conn._process = mock_process
+
+        await conn._notify("test_method", {"param": "value"})
+
+        # Verify write was called
+        mock_stdin.write.assert_called_once()
+        mock_stdin.flush.assert_called_once()
+
+        # Verify the written data is valid JSON
+        written_data = mock_stdin.write.call_args[0][0]
+        message = json.loads(written_data.decode("utf-8"))
+        assert message["jsonrpc"] == "2.0"
+        assert message["method"] == "test_method"
+        assert message["params"] == {"param": "value"}
+
+
+class TestMCPConnectionRequestFormat:
+    """Tests for request message format."""
+
+    @pytest.mark.asyncio
+    async def test_request_sends_jsonrpc_format(self, mock_config):
+        """Test _request sends proper JSON-RPC format."""
+        conn = MCPConnection(mock_config)
+        mock_process = Mock()
+        mock_stdin = Mock()
+        mock_process.stdin = mock_stdin
+        conn._process = mock_process
+
+        # Mock _request to capture the message format
+        original_request = conn._request
+        captured_messages = []
+
+        async def mock_request_impl(method, params):
+            # Capture the request details
+            conn._request_id += 1
+            request_id = conn._request_id
+            request = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params,
+            }
+            captured_messages.append(request)
+            # Return a result
+            return {"result": "ok"}
+
+        conn._request = mock_request_impl
+
+        result = await conn._request("test_method", {"param": "value"})
+
+        assert result == {"result": "ok"}
+        assert len(captured_messages) == 1
+        message = captured_messages[0]
+        assert message["jsonrpc"] == "2.0"
+        assert message["id"] == 1
+        assert message["method"] == "test_method"
+        assert message["params"] == {"param": "value"}
+
+
+class TestMCPConnectionHandleMessageEdgeCases:
+    """Tests for _handle_message edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_handle_message_without_id(self, mock_config):
+        """Test _handle_message ignores messages without id."""
+        conn = MCPConnection(mock_config)
+
+        # Should not raise
+        await conn._handle_message({"result": "data"})
+
+    @pytest.mark.asyncio
+    async def test_handle_message_with_unknown_id(self, mock_config):
+        """Test _handle_message ignores unknown request IDs."""
+        conn = MCPConnection(mock_config)
+
+        # Should not raise
+        await conn._handle_message({"id": 999, "result": "data"})
+
+    @pytest.mark.asyncio
+    async def test_handle_message_error_without_message(self, mock_config):
+        """Test _handle_message handles error without message field."""
+        conn = MCPConnection(mock_config)
+
+        future = asyncio.Future()
+        conn._pending_requests[1] = future
+
+        message = {
+            "id": 1,
+            "error": {},  # No message field
+        }
+
+        await conn._handle_message(message)
+
+        with pytest.raises(Exception, match="Unknown error"):
+            await future
+
+
+class TestMCPDataClassEdgeCases:
+    """Tests for data class edge cases."""
+
+    def test_mcp_server_config_with_all_fields(self):
+        """Test MCPServerConfig with all fields populated."""
+        config = MCPServerConfig(
+            name="test",
+            command="cmd",
+            args=["arg1", "arg2"],
+            env={"VAR": "value"},
+            transport=MCPTransport.WEBSOCKET,
+            url="ws://localhost:8000",
+            timeout=45.0,
+        )
+
+        d = config.to_dict()
+        assert d["transport"] == "websocket"
+        assert d["url"] == "ws://localhost:8000"
+
+    def test_mcp_resource_with_all_fields(self):
+        """Test MCPResource with all fields populated."""
+        resource = MCPResource(
+            uri="file:///path",
+            name="file",
+            description="desc",
+            mime_type="text/plain",
+            server_name="fs",
+        )
+
+        d = resource.to_dict()
+        assert d["mime_type"] == "text/plain"
+        assert d["server_name"] == "fs"
+
+    def test_mcp_prompt_with_arguments(self):
+        """Test MCPPrompt with arguments."""
+        prompt = MCPPrompt(
+            name="test",
+            description="desc",
+            arguments=[
+                {"name": "arg1", "type": "string"},
+                {"name": "arg2", "type": "number"},
+            ],
+            server_name="prompts",
+        )
+
+        d = prompt.to_dict()
+        assert len(d["arguments"]) == 2
+        assert d["arguments"][0]["name"] == "arg1"
