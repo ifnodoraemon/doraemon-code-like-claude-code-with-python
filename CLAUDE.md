@@ -6,6 +6,161 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Doraemon Code is an AI coding assistant built on the Model Context Protocol (MCP) with a Host-Server architecture. It supports multiple LLM providers through a unified gateway and provides both CLI and Web UI interfaces.
 
+## 🎯 Six Core Design Principles
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Doraemon Code 六大设计原则                      │
+└─────────────────────────────────────────────────────────────┘
+
+1. 奥卡姆剃刀 (Occam's Razor)
+   简洁至上，优先选择更少但设计良好的工具
+   Example: 15个工具 → 3个统一工具 (80%减少)
+
+2. 单一职责 + 功能内聚
+   每个工具/模块有明确的目的，相关功能通过参数组合
+   Example: read(mode="file|outline|directory|tree")
+
+3. 多commit原则
+   每个独立功能单独commit，便于追踪和回滚
+   Example: 工具整合 → commit 1, 文件拆分 → commit 2
+
+4. 不过度考虑向后兼容
+   能重构就重构，不保留技术债
+   Example: 直接删除deprecated工具，不保留wrapper
+
+5. 抽离为函数 + 复用
+   提取公共逻辑为独立函数，最大化代码复用
+   Example: git_common.py提取公共函数
+
+6. 多用图交流，少用文字
+   用流程图、架构图、ASCII图代替长篇文字
+   Example: 本文档大量使用ASCII图表
+```
+
+## 📐 System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    系统架构图                                │
+└─────────────────────────────────────────────────────────────┘
+
+                    ┌──────────┐
+                    │   User   │
+                    └─────┬────┘
+                          │
+                    ┌─────▼─────┐
+                    │    CLI    │ (Host)
+                    │  main.py  │
+                    └─────┬─────┘
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+   ┌────▼────┐      ┌────▼────┐      ┌────▼────┐
+   │ Context │      │  Tools  │      │  Model  │
+   │ Manager │      │Registry │      │ Client  │
+   └─────────┘      └────┬────┘      └────┬────┘
+                         │                 │
+              ┌──────────┼──────────┐      │
+              │          │          │      │
+         ┌────▼───┐ ┌───▼────┐ ┌──▼──────▼──┐
+         │Filesys │ │  Git   │ │  Gateway   │
+         │Server  │ │ Server │ │   Server   │
+         └────────┘ └────────┘ └─────┬──────┘
+                                      │
+                         ┌────────────┼────────────┐
+                         │            │            │
+                    ┌────▼───┐   ┌───▼────┐  ┌───▼────┐
+                    │ Google │   │ OpenAI │  │Anthropic│
+                    │  API   │   │  API   │  │  API   │
+                    └────────┘   └────────┘  └────────┘
+```
+
+## 🔄 Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    数据流图                                  │
+└─────────────────────────────────────────────────────────────┘
+
+User Input
+    │
+    ▼
+┌───────────────┐
+│ CommandHandler│ ─── /help, /mode, etc.
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│ ContextManager│ ─── Add to history
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│  ModelClient  │ ─── Send to LLM
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│  LLM Response │ ─── Text + Tool Calls
+└───────┬───────┘
+        │
+        ├─── Text ────────────────────┐
+        │                             │
+        └─── Tool Calls               │
+                │                     │
+                ▼                     │
+        ┌───────────────┐             │
+        │ ToolRegistry  │             │
+        └───────┬───────┘             │
+                │                     │
+                ▼                     │
+        ┌───────────────┐             │
+        │ Execute Tools │             │
+        └───────┬───────┘             │
+                │                     │
+                ▼                     │
+        ┌───────────────┐             │
+        │ Tool Results  │             │
+        └───────┬───────┘             │
+                │                     │
+                └──────────┬──────────┘
+                           │
+                           ▼
+                   ┌───────────────┐
+                   │ Display to    │
+                   │     User      │
+                   └───────────────┘
+```
+
+## 🛠️ Tool Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    工具架构演进                              │
+└─────────────────────────────────────────────────────────────┘
+
+Before (分散):              After (统一):
+┌──────────────┐           ┌──────────────┐
+│ read_file    │           │              │
+│ read_outline │           │    read()    │
+│ list_dir     │  ───→     │   4 modes    │
+│ list_tree    │           │              │
+│ glob_files   │           └──────────────┘
+│ grep_search  │           ┌──────────────┐
+│ find_symbol  │           │              │
+│ write_file   │           │   write()    │
+│ edit_file    │  ───→     │ 5 operations │
+│ delete_file  │           │              │
+│ move_file    │           └──────────────┘
+│ copy_file    │           ┌──────────────┐
+│ rename_file  │           │              │
+│ create_dir   │           │   search()   │
+│ ...          │  ───→     │   3 modes    │
+└──────────────┘           └──────────────┘
+  15个工具                    3个工具
+```
+
 ## Development Commands
 
 ### Setup

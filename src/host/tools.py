@@ -288,34 +288,13 @@ def _create_default_registry() -> ToolRegistry:
     failed_tools: list[tuple[str, str]] = []
 
     try:
-        # Unified Filesystem Tools (NEW - Recommended)
+        # Unified Filesystem Tools (Recommended)
         from src.servers.filesystem_unified import read, search, write
 
         registry.register(read, sensitive=False, timeout=_get_timeout("read", 60.0))
         registry.register(write, sensitive=True, timeout=_get_timeout("write", 120.0))
         registry.register(search, sensitive=False, timeout=_get_timeout("search", 120.0))
 
-        # Legacy Filesystem Tools (DEPRECATED - For backward compatibility)
-        from src.servers.filesystem import (
-            edit_file,
-            find_symbol,
-            glob_files,
-            grep_search,
-            list_directory,
-            read_file,
-            read_file_outline,
-            write_file,
-        )
-
-        registry.register(read_file, sensitive=False, timeout=_get_timeout("read_file", 60.0))
-        registry.register(read_file_outline, sensitive=False, timeout=_get_timeout("read_file_outline", 60.0))
-        registry.register(list_directory, sensitive=False, timeout=_get_timeout("list_directory", 60.0))
-        registry.register(glob_files, sensitive=False, timeout=_get_timeout("glob_files", 60.0))
-        registry.register(grep_search, sensitive=False, timeout=_get_timeout("grep_search", 120.0))  # Grep can be slow
-        registry.register(find_symbol, sensitive=False, timeout=_get_timeout("find_symbol", 60.0))
-
-        registry.register(write_file, sensitive=True, timeout=_get_timeout("write_file", 60.0))
-        registry.register(edit_file, sensitive=True, timeout=_get_timeout("edit_file", 120.0))  # Edits might involve processing
     except ImportError as e:
         logger.error(f"Failed to import filesystem tools: {e}")
         failed_tools.append(("filesystem", str(e)))
