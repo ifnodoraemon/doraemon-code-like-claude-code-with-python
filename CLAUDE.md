@@ -157,6 +157,42 @@ Message(
 
 ## Important Patterns
 
+### Tool Design Principles
+
+**Doraemon Code follows these core principles for tool design:**
+
+1. **Occam's Razor (奥卡姆剃刀)**: Simplicity is paramount. Prefer fewer, well-designed tools over many scattered ones.
+
+2. **Single Responsibility with Functional Cohesion**: Each tool should have one clear purpose, but related operations should be grouped together through parameters rather than creating multiple tools.
+
+3. **Parameterized Design**: Use mode/operation parameters to distinguish behaviors instead of creating separate tools for each variation.
+
+### Unified Filesystem Tools (Recommended)
+
+Doraemon provides **3 unified tools** that replace 15 scattered tools:
+
+```python
+# 1. read - Unified reading tool
+read(path, mode="file")  # Read file content
+read(path, mode="outline")  # Get file structure
+read(path, mode="directory")  # List directory
+read(path, mode="tree", depth=2)  # Show directory tree
+
+# 2. write - Unified writing tool
+write(path, content="...", operation="create")  # Create file
+write(path, operation="edit", old_string="...", new_string="...")  # Edit
+write(path, operation="delete")  # Delete
+write(path, operation="move", destination="...")  # Move/rename
+write(path, operation="copy", destination="...")  # Copy
+
+# 3. search - Unified searching tool
+search(query, mode="content")  # Search file contents (grep)
+search(query, mode="files")  # Search file names (glob)
+search(query, mode="symbol")  # Search code symbols
+```
+
+**Legacy tools** (read_file, write_file, edit_file, glob_files, grep_search, etc.) are still available for backward compatibility but are deprecated.
+
 ### Adding New Tools
 
 Register in `src/host/tools.py`:

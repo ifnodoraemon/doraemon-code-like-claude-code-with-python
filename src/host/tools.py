@@ -288,7 +288,14 @@ def _create_default_registry() -> ToolRegistry:
     failed_tools: list[tuple[str, str]] = []
 
     try:
-        # Filesystem Tools (Unified)
+        # Unified Filesystem Tools (NEW - Recommended)
+        from src.servers.filesystem_unified import read, search, write
+
+        registry.register(read, sensitive=False, timeout=_get_timeout("read", 60.0))
+        registry.register(write, sensitive=True, timeout=_get_timeout("write", 120.0))
+        registry.register(search, sensitive=False, timeout=_get_timeout("search", 120.0))
+
+        # Legacy Filesystem Tools (DEPRECATED - For backward compatibility)
         from src.servers.filesystem import (
             edit_file,
             find_symbol,
