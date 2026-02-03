@@ -2,8 +2,8 @@
 
 **Doraemon Code** is a powerful AI coding assistant built on the Model Context Protocol (MCP), featuring a unified model gateway, comprehensive testing, and rich development tools.
 
-[![Tests](https://img.shields.io/badge/tests-1492%20passing-brightgreen)](tests/)
-[![Coverage](https://img.shields.io/badge/coverage-95%25%2B-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-2440%20passing-brightgreen)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-core%20modules%2095%25%2B-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -15,7 +15,7 @@
 - **Provider Adapters**: Seamless conversion between different model formats
 
 ### 🧪 Comprehensive Testing
-- **1,492 tests** with **95%+ coverage**
+- **2,440 tests** with **95%+ coverage on core modules**
 - Comprehensive test suites for all core modules
 - Automated testing with pytest
 
@@ -134,7 +134,7 @@ pytest tests/core/test_model_client_comprehensive.py -v
 | `plugins.py` | - | 95%+ | ✅ |
 | `hooks.py` | - | 95%+ | ✅ |
 
-**Total**: 1,492 tests with 95%+ overall coverage
+**Total**: 2,440 tests with 95%+ coverage on core modules
 
 ## 🛠️ Development
 
@@ -290,8 +290,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 - **Version**: 0.8.0
 - **Status**: Active Development
 - **Python**: 3.10+
-- **Tests**: 1,492 passing
-- **Coverage**: 95%+
+- **Tests**: 2,440 passing
+- **Coverage**: 95%+ (core modules)
 
 ---
 
