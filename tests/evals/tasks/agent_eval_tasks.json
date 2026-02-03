@@ -1,0 +1,159 @@
+[
+  {
+    "id": "agent-basic-001",
+    "category": "file_operations",
+    "difficulty": 1,
+    "name": "创建简单文件",
+    "prompt": "Create a file called 'hello.txt' with the content 'Hello, World!'",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "success_criteria": [
+      "文件 hello.txt 存在",
+      "内容为 'Hello, World!'",
+      "使用了 write_file 工具"
+    ],
+    "evaluation_focus": ["tool_selection", "task_completion"]
+  },
+  {
+    "id": "agent-basic-002",
+    "category": "file_operations",
+    "difficulty": 1,
+    "name": "读取文件内容",
+    "prompt": "Read the README.md file and tell me what this project is about",
+    "expected_tools": ["read_file"],
+    "expected_steps": 1,
+    "success_criteria": [
+      "使用了 read_file 工具",
+      "正确读取了 README.md",
+      "提供了项目描述"
+    ],
+    "evaluation_focus": ["tool_selection", "context_understanding"]
+  },
+  {
+    "id": "agent-basic-003",
+    "category": "code_generation",
+    "difficulty": 2,
+    "name": "生成简单函数",
+    "prompt": "Write a Python function called 'add' that takes two numbers and returns their sum. Save it to math_utils.py",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "success_criteria": [
+      "文件 math_utils.py 存在",
+      "包含 def add 函数定义",
+      "函数逻辑正确",
+      "代码语法正确"
+    ],
+    "evaluation_focus": ["code_quality", "task_completion"]
+  },
+  {
+    "id": "agent-basic-004",
+    "category": "code_generation",
+    "difficulty": 2,
+    "name": "生成类定义",
+    "prompt": "Create a Python class 'Calculator' with methods add, subtract, multiply, divide. Save to calculator.py",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "success_criteria": [
+      "文件 calculator.py 存在",
+      "包含 class Calculator",
+      "包含所有四个方法",
+      "方法实现正确"
+    ],
+    "evaluation_focus": ["code_quality", "completeness"]
+  },
+  {
+    "id": "agent-basic-005",
+    "category": "information_retrieval",
+    "difficulty": 1,
+    "name": "回答简单问题",
+    "prompt": "What is Python?",
+    "expected_tools": [],
+    "expected_steps": 1,
+    "success_criteria": [
+      "提供了 Python 的定义",
+      "回答清晰准确",
+      "无需使用工具"
+    ],
+    "evaluation_focus": ["knowledge", "clarity"]
+  },
+  {
+    "id": "agent-inter-001",
+    "category": "code_editing",
+    "difficulty": 5,
+    "name": "修复代码错误",
+    "prompt": "The calculator.py file has a bug in the divide method - it doesn't handle division by zero. Fix it.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 2,
+    "success_criteria": [
+      "读取了 calculator.py",
+      "识别了除零问题",
+      "添加了错误处理",
+      "代码正确"
+    ],
+    "evaluation_focus": ["problem_solving", "code_quality"]
+  },
+  {
+    "id": "agent-inter-002",
+    "category": "debugging",
+    "difficulty": 6,
+    "name": "诊断和修复 bug",
+    "prompt": "The fibonacci.py function returns wrong results for n=0. Find and fix the bug.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 2,
+    "success_criteria": [
+      "读取并分析代码",
+      "识别基础情况错误",
+      "正确修复 bug",
+      "验证修复"
+    ],
+    "evaluation_focus": ["debugging", "problem_solving"]
+  },
+  {
+    "id": "agent-inter-003",
+    "category": "refactoring",
+    "difficulty": 5,
+    "name": "代码重构",
+    "prompt": "Refactor the calculator.py to use a more object-oriented design with proper error handling",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 2,
+    "success_criteria": [
+      "改进了代码结构",
+      "添加了错误处理",
+      "保持功能不变",
+      "代码更易维护"
+    ],
+    "evaluation_focus": ["code_quality", "design"]
+  },
+  {
+    "id": "agent-inter-004",
+    "category": "multi_file",
+    "difficulty": 6,
+    "name": "多文件项目",
+    "prompt": "Create a simple Python package with __init__.py, math_utils.py (with add, subtract), and string_utils.py (with uppercase, lowercase)",
+    "expected_tools": ["write_file"],
+    "expected_steps": 3,
+    "success_criteria": [
+      "创建了所有三个文件",
+      "包结构正确",
+      "所有函数实现正确",
+      "可以导入使用"
+    ],
+    "evaluation_focus": ["project_structure", "completeness"]
+  },
+  {
+    "id": "agent-inter-005",
+    "category": "context_understanding",
+    "difficulty": 5,
+    "name": "上下文理解",
+    "prompt": "First create a file data.txt with 'line1'. Then add 'line2' to it. Then show me the contents.",
+    "expected_tools": ["write_file", "edit_file", "read_file"],
+    "expected_steps": 3,
+    "success_criteria": [
+      "创建了 data.txt",
+      "追加了内容",
+      "显示了最终内容",
+      "理解了多步骤指令"
+    ],
+    "evaluation_focus": ["context_understanding", "multi_step"]
+  }
+]
