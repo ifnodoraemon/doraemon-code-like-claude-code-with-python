@@ -1,0 +1,93 @@
+[
+  {
+    "id": "agent-exp-001",
+    "category": "end_to_end_project",
+    "difficulty": 10,
+    "name": "完整 Todo 应用",
+    "prompt": "Create a complete todo application with FastAPI backend, React frontend, SQLite database, and pytest tests. Include authentication.",
+    "expected_tools": ["write_file", "execute_python"],
+    "expected_steps": 10,
+    "success_criteria": [
+      "完整的后端 API",
+      "功能完整的前端",
+      "数据库集成",
+      "用户认证",
+      "测试覆盖",
+      "文档完整",
+      "可以运行"
+    ],
+    "evaluation_focus": ["full_stack", "architecture", "completeness", "quality"]
+  },
+  {
+    "id": "agent-exp-002",
+    "category": "complex_algorithm",
+    "difficulty": 10,
+    "name": "实现复杂算法",
+    "prompt": "Implement a distributed consensus algorithm (Raft) with proper state management, leader election, and log replication.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 5,
+    "success_criteria": [
+      "实现了核心算法",
+      "状态管理正确",
+      "领导选举工作",
+      "日志复制正确",
+      "包含测试",
+      "文档详细"
+    ],
+    "evaluation_focus": ["algorithm_complexity", "correctness", "distributed_systems"]
+  },
+  {
+    "id": "agent-exp-003",
+    "category": "system_design",
+    "difficulty": 10,
+    "name": "设计分布式系统",
+    "prompt": "Design a scalable distributed caching system like Redis. Include architecture, data structures, and replication strategy.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 5,
+    "success_criteria": [
+      "完整的架构设计",
+      "数据结构设计",
+      "复制策略",
+      "故障恢复",
+      "性能考虑",
+      "文档详细"
+    ],
+    "evaluation_focus": ["system_design", "scalability", "reliability"]
+  },
+  {
+    "id": "agent-exp-004",
+    "category": "ml_integration",
+    "difficulty": 9,
+    "name": "机器学习集成",
+    "prompt": "Create a sentiment analysis API using a pre-trained model. Include model loading, inference, and API endpoints.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 4,
+    "success_criteria": [
+      "模型加载正确",
+      "推理功能工作",
+      "API 端点完整",
+      "性能优化",
+      "错误处理",
+      "文档完整"
+    ],
+    "evaluation_focus": ["ml_integration", "api_design", "performance"]
+  },
+  {
+    "id": "agent-exp-005",
+    "category": "devops",
+    "difficulty": 9,
+    "name": "DevOps 配置",
+    "prompt": "Create a complete CI/CD pipeline with Docker, GitHub Actions, and deployment scripts. Include testing and monitoring.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 5,
+    "success_criteria": [
+      "Dockerfile 正确",
+      "CI/CD 配置完整",
+      "部署脚本工作",
+      "包含测试",
+      "监控配置",
+      "文档详细"
+    ],
+    "evaluation_focus": ["devops", "automation", "best_practices"]
+  }
+]

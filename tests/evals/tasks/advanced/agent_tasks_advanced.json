@@ -1,0 +1,172 @@
+[
+  {
+    "id": "agent-adv-001",
+    "category": "project_creation",
+    "difficulty": 8,
+    "name": "创建完整项目结构",
+    "prompt": "Create a Python project structure with src/, tests/, docs/, and setup.py. Include a sample module and test.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 5,
+    "success_criteria": [
+      "创建了完整的项目结构",
+      "包含 setup.py",
+      "包含示例模块",
+      "包含测试文件",
+      "结构符合最佳实践"
+    ],
+    "evaluation_focus": ["project_structure", "best_practices", "completeness"]
+  },
+  {
+    "id": "agent-adv-002",
+    "category": "api_development",
+    "difficulty": 8,
+    "name": "创建 REST API",
+    "prompt": "Create a simple REST API using FastAPI with endpoints for user CRUD operations. Include error handling.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 3,
+    "success_criteria": [
+      "使用 FastAPI 框架",
+      "实现 CRUD 端点",
+      "包含错误处理",
+      "代码结构清晰",
+      "可以运行"
+    ],
+    "evaluation_focus": ["api_design", "error_handling", "code_quality"]
+  },
+  {
+    "id": "agent-adv-003",
+    "category": "testing",
+    "difficulty": 7,
+    "name": "编写测试套件",
+    "prompt": "Write comprehensive tests for the Calculator class using pytest. Include unit tests and edge cases.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 2,
+    "success_criteria": [
+      "使用 pytest 框架",
+      "覆盖所有方法",
+      "包含边界测试",
+      "测试可以运行",
+      "测试命名清晰"
+    ],
+    "evaluation_focus": ["test_coverage", "test_quality", "edge_cases"]
+  },
+  {
+    "id": "agent-adv-004",
+    "category": "documentation",
+    "difficulty": 6,
+    "name": "生成项目文档",
+    "prompt": "Create comprehensive documentation for the Calculator class including README.md, API docs, and usage examples.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 3,
+    "success_criteria": [
+      "创建了 README.md",
+      "包含 API 文档",
+      "包含使用示例",
+      "文档清晰完整",
+      "格式正确"
+    ],
+    "evaluation_focus": ["documentation_quality", "clarity", "completeness"]
+  },
+  {
+    "id": "agent-adv-005",
+    "category": "performance_optimization",
+    "difficulty": 9,
+    "name": "性能优化",
+    "prompt": "Optimize the fibonacci function to use memoization. Compare performance before and after.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 3,
+    "success_criteria": [
+      "实现了记忆化",
+      "性能显著提升",
+      "保持功能正确",
+      "代码清晰",
+      "添加了性能测试"
+    ],
+    "evaluation_focus": ["optimization", "performance", "correctness"]
+  },
+  {
+    "id": "agent-adv-006",
+    "category": "security_audit",
+    "difficulty": 8,
+    "name": "安全审计",
+    "prompt": "Review the user authentication code for security vulnerabilities. Identify and fix any issues.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 3,
+    "success_criteria": [
+      "识别了安全问题",
+      "提供了修复方案",
+      "修复了漏洞",
+      "添加了安全注释",
+      "遵循安全最佳实践"
+    ],
+    "evaluation_focus": ["security_awareness", "vulnerability_detection", "fix_quality"]
+  },
+  {
+    "id": "agent-adv-007",
+    "category": "architecture_design",
+    "difficulty": 9,
+    "name": "架构设计",
+    "prompt": "Design a microservices architecture for an e-commerce system. Include service boundaries and communication patterns.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 2,
+    "success_criteria": [
+      "定义了服务边界",
+      "设计了通信模式",
+      "考虑了可扩展性",
+      "文档清晰",
+      "架构合理"
+    ],
+    "evaluation_focus": ["architecture_design", "scalability", "clarity"]
+  },
+  {
+    "id": "agent-adv-008",
+    "category": "database_design",
+    "difficulty": 7,
+    "name": "数据库设计",
+    "prompt": "Design a database schema for a blog system with users, posts, comments, and tags. Include relationships.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 2,
+    "success_criteria": [
+      "定义了所有表",
+      "建立了关系",
+      "考虑了索引",
+      "包含约束",
+      "设计合理"
+    ],
+    "evaluation_focus": ["database_design", "relationships", "optimization"]
+  },
+  {
+    "id": "agent-adv-009",
+    "category": "error_recovery",
+    "difficulty": 8,
+    "name": "错误恢复",
+    "prompt": "The API server keeps crashing. Debug the issue, identify the root cause, and implement a fix with proper error handling.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 4,
+    "success_criteria": [
+      "识别了崩溃原因",
+      "实现了修复",
+      "添加了错误处理",
+      "添加了日志",
+      "测试了修复"
+    ],
+    "evaluation_focus": ["debugging", "error_handling", "robustness"]
+  },
+  {
+    "id": "agent-adv-010",
+    "category": "integration",
+    "difficulty": 8,
+    "name": "第三方集成",
+    "prompt": "Integrate with the Stripe payment API. Create a payment processing module with error handling and webhooks.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 3,
+    "success_criteria": [
+      "实现了支付处理",
+      "处理了 webhooks",
+      "包含错误处理",
+      "代码安全",
+      "文档完整"
+    ],
+    "evaluation_focus": ["api_integration", "error_handling", "security"]
+  }
+]
