@@ -1,7 +1,7 @@
 """Tests for main.py helper functions"""
 import pytest
 from unittest.mock import MagicMock, patch
-from src.host.cli.main import build_system_prompt, convert_tools_to_definitions
+from src.host.cli.chat_loop import build_system_prompt, convert_tools_to_definitions
 
 def test_build_system_prompt_build_mode():
     """Test system prompt for build mode."""

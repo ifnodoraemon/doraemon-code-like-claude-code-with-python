@@ -23,7 +23,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch, call, mock_open
 from io import StringIO
 
-from src.host.cli.main import (
+from src.host.cli.chat_loop import (
     build_system_prompt,
     convert_tools_to_definitions,
     chat_loop,
@@ -36,10 +36,10 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_build_mode(self):
         """Test system prompt generation for build mode."""
-        with patch("src.host.cli.main.load_config") as mock_config, \
-             patch("src.host.cli.main.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.main.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.main.format_instructions_for_prompt") as mock_format:
+        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
+             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
+             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
 
             mock_config.return_value = {"persona": {"name": "TestBot"}}
             mock_sys_prompt.return_value = "Base prompt"
@@ -53,10 +53,10 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_plan_mode(self):
         """Test system prompt generation for plan mode."""
-        with patch("src.host.cli.main.load_config") as mock_config, \
-             patch("src.host.cli.main.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.main.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.main.format_instructions_for_prompt") as mock_format:
+        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
+             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
+             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
 
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Plan mode prompt"
@@ -69,10 +69,10 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_with_skills(self):
         """Test system prompt includes skills content."""
-        with patch("src.host.cli.main.load_config") as mock_config, \
-             patch("src.host.cli.main.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.main.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.main.format_instructions_for_prompt") as mock_format:
+        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
+             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
+             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
 
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Base"
@@ -85,10 +85,10 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_with_instructions(self):
         """Test system prompt includes project instructions."""
-        with patch("src.host.cli.main.load_config") as mock_config, \
-             patch("src.host.cli.main.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.main.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.main.format_instructions_for_prompt") as mock_format:
+        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
+             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
+             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
 
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Base"
@@ -102,10 +102,10 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_empty_persona(self):
         """Test system prompt with missing persona config."""
-        with patch("src.host.cli.main.load_config") as mock_config, \
-             patch("src.host.cli.main.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.main.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.main.format_instructions_for_prompt") as mock_format:
+        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
+             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
+             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
 
             mock_config.return_value = {}
             mock_sys_prompt.return_value = "Default prompt"
@@ -118,10 +118,10 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_with_all_components(self):
         """Test system prompt with all components combined."""
-        with patch("src.host.cli.main.load_config") as mock_config, \
-             patch("src.host.cli.main.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.main.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.main.format_instructions_for_prompt") as mock_format:
+        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
+             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
+             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
 
             mock_config.return_value = {"persona": {"name": "Doraemon", "role": "Assistant"}}
             mock_sys_prompt.return_value = "System: "
@@ -137,10 +137,10 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_returns_string(self):
         """Test that build_system_prompt returns a string."""
-        with patch("src.host.cli.main.load_config") as mock_config, \
-             patch("src.host.cli.main.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.main.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.main.format_instructions_for_prompt") as mock_format:
+        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
+             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
+             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
 
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Prompt"
@@ -262,23 +262,23 @@ class TestChatLoopInitialization:
 
     async def test_chat_loop_gateway_mode_initialization(self):
         """Test chat loop initializes correctly in gateway mode."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.GATEWAY
             mock_mode_info.return_value = {"gateway_url": "http://localhost:8000"}
@@ -337,23 +337,23 @@ class TestChatLoopInitialization:
 
     async def test_chat_loop_direct_mode_initialization(self):
         """Test chat loop initializes correctly in direct mode."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True, "openai": False}}
@@ -411,10 +411,10 @@ class TestChatLoopInitialization:
 
     async def test_chat_loop_no_api_keys_error(self):
         """Test chat loop exits when no API keys configured."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.console") as mock_console:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.console") as mock_console:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": False, "openai": False}}
@@ -427,10 +427,10 @@ class TestChatLoopInitialization:
 
     async def test_chat_loop_gateway_url_missing_error(self):
         """Test chat loop exits when gateway URL not configured."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.console") as mock_console:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.console") as mock_console:
 
             mock_get_mode.return_value = ClientMode.GATEWAY
             mock_mode_info.return_value = {"gateway_url": None}
@@ -443,11 +443,11 @@ class TestChatLoopInitialization:
 
     async def test_chat_loop_model_client_creation_failure(self):
         """Test chat loop handles model client creation failure."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.console") as mock_console:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.console") as mock_console:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -461,23 +461,23 @@ class TestChatLoopInitialization:
 
     async def test_chat_loop_with_project_isolation(self):
         """Test chat loop respects project isolation."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -537,22 +537,22 @@ class TestChatLoopInitialization:
 
     async def test_chat_loop_headless_mode_with_prompt(self):
         """Test chat loop enters headless mode when prompt provided."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -615,23 +615,23 @@ class TestChatLoopUserInputHandling:
 
     async def test_chat_loop_exit_command(self):
         """Test chat loop exits on exit command."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -689,23 +689,23 @@ class TestChatLoopUserInputHandling:
 
     async def test_chat_loop_quit_command(self):
         """Test chat loop exits on quit command."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -763,23 +763,23 @@ class TestChatLoopUserInputHandling:
 
     async def test_chat_loop_bash_mode_execution(self):
         """Test bash mode (! prefix) command execution."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -840,24 +840,24 @@ class TestChatLoopUserInputHandling:
 
     async def test_chat_loop_slash_command_routing(self):
         """Test slash command routing to CommandHandler."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.CommandHandler") as mock_cmd_handler, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.CommandHandler") as mock_cmd_handler, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -926,23 +926,23 @@ class TestChatLoopUserInputHandling:
 
     async def test_chat_loop_keyboard_interrupt_handling(self):
         """Test chat loop handles KeyboardInterrupt gracefully."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1001,23 +1001,23 @@ class TestChatLoopUserInputHandling:
 
     async def test_chat_loop_exception_handling(self):
         """Test chat loop handles exceptions gracefully."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1075,23 +1075,23 @@ class TestChatLoopUserInputHandling:
 
     async def test_chat_loop_session_resume(self):
         """Test chat loop resumes previous session."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1163,23 +1163,23 @@ class TestChatLoopToolExecution:
 
     async def test_chat_loop_tool_execution_success(self):
         """Test successful tool execution."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1265,23 +1265,23 @@ class TestChatLoopToolExecution:
 
     async def test_chat_loop_tool_execution_failure(self):
         """Test tool execution failure handling."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1365,23 +1365,23 @@ class TestChatLoopToolExecution:
 
     async def test_chat_loop_sensitive_tool_approval(self):
         """Test sensitive tool requires user approval."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1465,23 +1465,23 @@ class TestChatLoopToolExecution:
 
     async def test_chat_loop_loop_detection(self):
         """Test detection of infinite tool loops."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1562,23 +1562,23 @@ class TestChatLoopToolExecution:
 
     async def test_chat_loop_max_tool_steps_limit(self):
         """Test max tool steps limit prevents infinite loops."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1666,23 +1666,23 @@ class TestChatLoopContextManagement:
 
     async def test_chat_loop_context_summarization(self):
         """Test context summarization when threshold reached."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1753,23 +1753,23 @@ class TestChatLoopContextManagement:
 
     async def test_chat_loop_mode_switching_plan_to_build(self):
         """Test mode switching from plan to build."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1853,23 +1853,23 @@ class TestChatLoopContextManagement:
 
     async def test_chat_loop_checkpoint_creation(self):
         """Test checkpoint creation on file modifications."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -1954,23 +1954,23 @@ class TestChatLoopContextManagement:
 
     async def test_chat_loop_cost_tracking(self):
         """Test cost tracking during chat loop."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -2041,23 +2041,23 @@ class TestChatLoopContextManagement:
 
     async def test_chat_loop_budget_warning(self):
         """Test budget warning display."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -2134,23 +2134,23 @@ class TestChatLoopSkillsAndHooks:
 
     async def test_chat_loop_skill_loading(self):
         """Test skill loading based on context."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -2221,23 +2221,23 @@ class TestChatLoopSkillsAndHooks:
 
     async def test_chat_loop_hook_triggers(self):
         """Test hook triggers during chat loop."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -2308,23 +2308,23 @@ class TestChatLoopSkillsAndHooks:
 
     async def test_chat_loop_hook_blocks_execution(self):
         """Test hook can block user prompt execution."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -2389,23 +2389,23 @@ class TestChatLoopSkillsAndHooks:
 
     async def test_chat_loop_piped_input_handling(self):
         """Test handling of piped input."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=False), \
-             patch("src.host.cli.main.sys.stdin.read", return_value="piped input"), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=False), \
+             patch("src.host.cli.chat_loop.sys.stdin.read", return_value="piped input"), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
@@ -2475,23 +2475,23 @@ class TestChatLoopSkillsAndHooks:
 
     async def test_chat_loop_running_background_tasks_display(self):
         """Test display of running background tasks."""
-        with patch("src.host.cli.main.sys.stdin.isatty", return_value=True), \
-             patch("src.host.cli.main.ModelClient.get_mode") as mock_get_mode, \
-             patch("src.host.cli.main.ModelClient.get_mode_info") as mock_mode_info, \
-             patch("src.host.cli.main.ModelClient.create") as mock_create, \
-             patch("src.host.cli.main.get_default_registry") as mock_registry, \
-             patch("src.host.cli.main.ToolSelector") as mock_selector, \
-             patch("src.host.cli.main.ContextManager") as mock_ctx, \
-             patch("src.host.cli.main.SkillManager") as mock_skill, \
-             patch("src.host.cli.main.CheckpointManager") as mock_checkpoint, \
-             patch("src.host.cli.main.get_task_manager") as mock_task, \
-             patch("src.host.cli.main.HookManager") as mock_hook, \
-             patch("src.host.cli.main.CostTracker") as mock_cost, \
-             patch("src.host.cli.main.CommandHistory") as mock_history, \
-             patch("src.host.cli.main.BashModeExecutor") as mock_bash, \
-             patch("src.host.cli.main.SessionManager") as mock_session, \
-             patch("src.host.cli.main.console") as mock_console, \
-             patch("src.host.cli.main.Prompt.ask") as mock_prompt:
+        with patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=True), \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode") as mock_get_mode, \
+             patch("src.host.cli.chat_loop.ModelClient.get_mode_info") as mock_mode_info, \
+             patch("src.host.cli.chat_loop.ModelClient.create") as mock_create, \
+             patch("src.host.cli.chat_loop.get_default_registry") as mock_registry, \
+             patch("src.host.cli.chat_loop.ToolSelector") as mock_selector, \
+             patch("src.host.cli.chat_loop.ContextManager") as mock_ctx, \
+             patch("src.host.cli.chat_loop.SkillManager") as mock_skill, \
+             patch("src.host.cli.chat_loop.CheckpointManager") as mock_checkpoint, \
+             patch("src.host.cli.chat_loop.get_task_manager") as mock_task, \
+             patch("src.host.cli.chat_loop.HookManager") as mock_hook, \
+             patch("src.host.cli.chat_loop.CostTracker") as mock_cost, \
+             patch("src.host.cli.chat_loop.CommandHistory") as mock_history, \
+             patch("src.host.cli.chat_loop.BashModeExecutor") as mock_bash, \
+             patch("src.host.cli.chat_loop.SessionManager") as mock_session, \
+             patch("src.host.cli.chat_loop.console") as mock_console, \
+             patch("src.host.cli.chat_loop.Prompt.ask") as mock_prompt:
 
             mock_get_mode.return_value = ClientMode.DIRECT
             mock_mode_info.return_value = {"providers": {"google": True}}
