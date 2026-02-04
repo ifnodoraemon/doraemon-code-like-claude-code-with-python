@@ -105,7 +105,8 @@ class AgentEvaluator:
         print(f"开始评估 {len(self.tasks)} 个任务...")
 
         for task in self.tasks:
-            print(f"\n评估任务: {task['name']} (难度: {task['difficulty']})")
+            task_name = task.get('name', task.get('id', 'Unknown'))
+            print(f"\n评估任务: {task_name} (难度: {task['difficulty']})")
             result = self.evaluate_task(agent, task)
             self.results.append(result)
 
