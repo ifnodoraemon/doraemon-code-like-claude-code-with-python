@@ -1,0 +1,270 @@
+{
+  "metadata": {
+    "timestamp": "2026-02-04T10:15:19.515173",
+    "evaluation_type": "comprehensive",
+    "parallel": false,
+    "max_workers": 4,
+    "n_trials": 1,
+    "use_llm_judge": false
+  },
+  "summary": {
+    "timestamp": "2026-02-04T10:15:19.514911",
+    "total_tasks": 10,
+    "successful_tasks": 10,
+    "results": [
+      {
+        "task_id": "file-001",
+        "task_name": "file-001",
+        "difficulty": "easy",
+        "category": "file_operations",
+        "success": true,
+        "execution_time": 0.25624823570251465,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "file-002",
+        "task_name": "file-002",
+        "difficulty": "easy",
+        "category": "file_operations",
+        "success": true,
+        "execution_time": 0.48354649543762207,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "file-003",
+        "task_name": "file-003",
+        "difficulty": "easy",
+        "category": "file_operations",
+        "success": true,
+        "execution_time": 0.37904977798461914,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "code-001",
+        "task_name": "code-001",
+        "difficulty": "easy",
+        "category": "code_writing",
+        "success": true,
+        "execution_time": 0.28695082664489746,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "code-002",
+        "task_name": "code-002",
+        "difficulty": "medium",
+        "category": "code_writing",
+        "success": true,
+        "execution_time": 0.21375775337219238,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "code-003",
+        "task_name": "code-003",
+        "difficulty": "medium",
+        "category": "code_writing",
+        "success": true,
+        "execution_time": 0.40032148361206055,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "edit-001",
+        "task_name": "edit-001",
+        "difficulty": "medium",
+        "category": "code_editing",
+        "success": true,
+        "execution_time": 0.25281524658203125,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "edit-002",
+        "task_name": "edit-002",
+        "difficulty": "medium",
+        "category": "code_editing",
+        "success": true,
+        "execution_time": 0.10480952262878418,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "debug-001",
+        "task_name": "debug-001",
+        "difficulty": "hard",
+        "category": "debugging",
+        "success": true,
+        "execution_time": 0.35372161865234375,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      },
+      {
+        "task_id": "multi-001",
+        "task_name": "multi-001",
+        "difficulty": "hard",
+        "category": "multi_file",
+        "success": true,
+        "execution_time": 0.2718825340270996,
+        "tool_calls": [],
+        "errors": [],
+        "tool_usage": {
+          "expected_tools": [],
+          "actual_tools": [],
+          "tool_selection_accuracy": 1.0,
+          "tool_count": 0
+        }
+      }
+    ]
+  },
+  "metrics": {
+    "timestamp": "2026-02-04T10:15:19.514987",
+    "collection_time": 3.005671977996826,
+    "core_metrics": {
+      "total_tasks": 10,
+      "successful_tasks": 10,
+      "failed_tasks": 0,
+      "success_rate": 1.0,
+      "avg_execution_time": 0.3003103494644165,
+      "total_execution_time": 3.003103494644165
+    },
+    "tool_metrics": {
+      "total_tool_calls": 0,
+      "avg_tool_calls_per_task": 0.0,
+      "max_tool_calls": 0,
+      "min_tool_calls": 0,
+      "tool_usage_distribution": {},
+      "most_used_tools": []
+    },
+    "difficulty_metrics": {
+      "avg_difficulty": 1.8,
+      "by_difficulty": {
+        "easy": {
+          "total_tasks": 4,
+          "successful_tasks": 4,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.35144883394241333
+        },
+        "medium": {
+          "total_tasks": 4,
+          "successful_tasks": 4,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.2429260015487671
+        },
+        "hard": {
+          "total_tasks": 2,
+          "successful_tasks": 2,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.3128020763397217
+        }
+      }
+    },
+    "category_metrics": {
+      "total_categories": 5,
+      "by_category": {
+        "file_operations": {
+          "total_tasks": 3,
+          "successful_tasks": 3,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.37294816970825195
+        },
+        "code_writing": {
+          "total_tasks": 3,
+          "successful_tasks": 3,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.3003433545430501
+        },
+        "code_editing": {
+          "total_tasks": 2,
+          "successful_tasks": 2,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.17881238460540771
+        },
+        "debugging": {
+          "total_tasks": 1,
+          "successful_tasks": 1,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.35372161865234375
+        },
+        "multi_file": {
+          "total_tasks": 1,
+          "successful_tasks": 1,
+          "success_rate": 1.0,
+          "avg_execution_time": 0.2718825340270996
+        }
+      }
+    },
+    "llm_metrics": {},
+    "performance_metrics": {
+      "min_time": 0.10480952262878418,
+      "max_time": 0.48354649543762207,
+      "avg_time": 0.3003103494644165,
+      "median_time": 0.28695082664489746,
+      "p95_time": 0.48354649543762207,
+      "p99_time": 0.48354649543762207,
+      "total_time": 3.003103494644165
+    },
+    "error_metrics": {
+      "total_errors": 0,
+      "error_types": {}
+    }
+  },
+  "llm_evaluation": null
+}

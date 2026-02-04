@@ -1,0 +1,14 @@
+# Application Configuration
+
+app_name: "test-app"
+version: "1.0.0"
+debug: false
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "testdb"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

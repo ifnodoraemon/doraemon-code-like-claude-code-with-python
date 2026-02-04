@@ -28,10 +28,10 @@ class AgentEvaluator:
     def evaluate_task(self, agent, task: Dict) -> Dict:
         """评估单个任务"""
         result = {
-            "task_id": task["id"],
-            "task_name": task["name"],
-            "difficulty": task["difficulty"],
-            "category": task["category"],
+            "task_id": task.get("id", "unknown"),
+            "task_name": task.get("name", task.get("id", "unknown")),
+            "difficulty": task.get("difficulty", "medium"),
+            "category": task.get("category", "general"),
             "success": False,
             "execution_time": 0,
             "tool_calls": [],
@@ -51,7 +51,7 @@ class AgentEvaluator:
 
             # 检查成功标准
             result["success"] = self.check_success_criteria(
-                response, task["success_criteria"]
+                response, task.get("success_criteria", [])
             )
 
             # 评估工具使用

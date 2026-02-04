@@ -1,0 +1,224 @@
+[
+  {
+    "id": "refactor-001",
+    "category": "refactoring",
+    "difficulty": 6,
+    "name": "Extract Method Refactoring",
+    "prompt": "The function `process_user_data` in `src/core/user_processor.py` is too long (50+ lines). Extract the validation logic into a separate `validate_user_input` method and the transformation logic into `transform_user_data`. Ensure all existing tests still pass.",
+    "expected_steps": 4,
+    "timeout": 300,
+    "assertions": [
+      {"type": "file_contains", "path": "src/core/user_processor.py", "pattern": "def validate_user_input"},
+      {"type": "file_contains", "path": "src/core/user_processor.py", "pattern": "def transform_user_data"},
+      {"type": "function_line_count", "path": "src/core/user_processor.py", "function": "process_user_data", "max_lines": 20},
+      {"type": "tests_pass", "suite": "tests/test_user_processor.py"},
+      {"type": "tool_used", "tool": "read_file"},
+      {"type": "tool_used", "tool": "edit_file"}
+    ],
+    "rubric": {
+      "code_quality": "Methods should be well-named and have single responsibility",
+      "functionality": "All existing functionality must be preserved",
+      "test_coverage": "Existing tests must pass without modification"
+    },
+    "reference_solution": "Extract validation into validate_user_input(data) -> bool, transformation into transform_user_data(data) -> dict, then call both from process_user_data"
+  },
+  {
+    "id": "refactor-002",
+    "category": "refactoring",
+    "difficulty": 5,
+    "name": "Simplify Conditional Logic",
+    "prompt": "The `calculate_discount` function in `src/pricing/discount.py` has deeply nested if-else statements (4+ levels). Refactor using early returns and guard clauses to reduce nesting to maximum 2 levels while maintaining the same behavior.",
+    "expected_steps": 3,
+    "timeout": 240,
+    "assertions": [
+      {"type": "max_nesting_depth", "path": "src/pricing/discount.py", "function": "calculate_discount", "max_depth": 2},
+      {"type": "file_contains", "path": "src/pricing/discount.py", "pattern": "return"},
+      {"type": "tests_pass", "suite": "tests/test_discount.py"},
+      {"type": "tool_used", "tool": "edit_file"}
+    ],
+    "rubric": {
+      "readability": "Code should be easier to read with clear flow",
+      "maintainability": "Guard clauses should handle edge cases first",
+      "correctness": "All discount calculations must produce same results"
+    },
+    "reference_solution": "Use early returns for edge cases (no discount, invalid input), then calculate discount in a flat structure"
+  },
+  {
+    "id": "bugfix-001",
+    "category": "bug_fix",
+    "difficulty": 6,
+    "name": "Fix Race Condition in Cache",
+    "prompt": "Users report intermittent cache misses in `src/core/cache_manager.py`. The `get_or_set` method has a race condition where two threads can both miss the cache and compute the value. Fix this using proper locking without significantly impacting performance.",
+    "expected_steps": 4,
+    "timeout": 300,
+    "assertions": [
+      {"type": "file_contains", "path": "src/core/cache_manager.py", "pattern": "Lock"},
+      {"type": "file_contains", "path": "src/core/cache_manager.py", "pattern": "with"},
+      {"type": "no_race_condition", "path": "src/core/cache_manager.py", "method": "get_or_set"},
+      {"type": "tests_pass", "suite": "tests/test_cache_manager.py"},
+      {"type": "performance_regression", "max_slowdown_percent": 10}
+    ],
+    "rubric": {
+      "correctness": "Race condition must be eliminated",
+      "performance": "Lock granularity should be minimal",
+      "thread_safety": "All cache operations should be thread-safe"
+    },
+    "reference_solution": "Use double-checked locking pattern: check cache, acquire lock, check again, compute if needed"
+  },
+  {
+    "id": "bugfix-002",
+    "category": "bug_fix",
+    "difficulty": 5,
+    "name": "Fix Memory Leak in Event Handler",
+    "prompt": "The `EventDispatcher` class in `src/events/dispatcher.py` has a memory leak - event handlers are never removed even after the subscriber is garbage collected. Implement weak references for handlers to fix this issue.",
+    "expected_steps": 3,
+    "timeout": 240,
+    "assertions": [
+      {"type": "file_contains", "path": "src/events/dispatcher.py", "pattern": "weakref"},
+      {"type": "file_contains", "path": "src/events/dispatcher.py", "pattern": "WeakMethod"},
+      {"type": "memory_leak_fixed", "class": "EventDispatcher"},
+      {"type": "tests_pass", "suite": "tests/test_dispatcher.py"}
+    ],
+    "rubric": {
+      "memory_management": "Handlers should be automatically cleaned up",
+      "api_compatibility": "Existing subscribe/unsubscribe API should work",
+      "robustness": "Should handle dead references gracefully"
+    },
+    "reference_solution": "Use weakref.WeakMethod for bound methods, weakref.ref for functions, clean up dead refs on dispatch"
+  },
+  {
+    "id": "feature-001",
+    "category": "feature_addition",
+    "difficulty": 6,
+    "name": "Add Retry Logic to API Client",
+    "prompt": "Add exponential backoff retry logic to the `APIClient` class in `src/gateway/api_client.py`. The `request` method should retry failed requests (5xx errors and timeouts) up to 3 times with exponential backoff (1s, 2s, 4s). Add a `max_retries` parameter with default 3.",
+    "expected_steps": 4,
+    "timeout": 300,
+    "assertions": [
+      {"type": "file_contains", "path": "src/gateway/api_client.py", "pattern": "max_retries"},
+      {"type": "file_contains", "path": "src/gateway/api_client.py", "pattern": "exponential"},
+      {"type": "file_contains", "path": "src/gateway/api_client.py", "pattern": "sleep"},
+      {"type": "parameter_exists", "path": "src/gateway/api_client.py", "method": "request", "param": "max_retries"},
+      {"type": "tests_pass", "suite": "tests/test_api_client.py"}
+    ],
+    "rubric": {
+      "implementation": "Retry logic should follow exponential backoff pattern",
+      "configurability": "Retry count should be configurable",
+      "error_handling": "Should only retry on appropriate errors (5xx, timeout)"
+    },
+    "reference_solution": "Add retry loop with time.sleep(2**attempt), catch HTTPError and Timeout, re-raise after max retries"
+  },
+  {
+    "id": "feature-002",
+    "category": "feature_addition",
+    "difficulty": 7,
+    "name": "Add Pagination to List Endpoint",
+    "prompt": "The `/api/items` endpoint in `src/webui/routes/items.py` returns all items at once. Add cursor-based pagination with `limit` (default 20, max 100) and `cursor` parameters. Return a response with `items`, `next_cursor`, and `has_more` fields.",
+    "expected_steps": 5,
+    "timeout": 360,
+    "assertions": [
+      {"type": "file_contains", "path": "src/webui/routes/items.py", "pattern": "cursor"},
+      {"type": "file_contains", "path": "src/webui/routes/items.py", "pattern": "limit"},
+      {"type": "file_contains", "path": "src/webui/routes/items.py", "pattern": "has_more"},
+      {"type": "file_contains", "path": "src/webui/routes/items.py", "pattern": "next_cursor"},
+      {"type": "api_response_schema", "endpoint": "/api/items", "required_fields": ["items", "next_cursor", "has_more"]},
+      {"type": "tests_pass", "suite": "tests/test_items_api.py"}
+    ],
+    "rubric": {
+      "api_design": "Cursor-based pagination should be properly implemented",
+      "validation": "Limit should be validated (1-100 range)",
+      "consistency": "Pagination should work correctly across multiple requests"
+    },
+    "reference_solution": "Use base64-encoded item ID as cursor, query with WHERE id > cursor LIMIT limit+1, check if extra item exists for has_more"
+  },
+  {
+    "id": "optimize-001",
+    "category": "performance_optimization",
+    "difficulty": 6,
+    "name": "Optimize Database Query N+1",
+    "prompt": "The `get_users_with_orders` function in `src/core/user_service.py` has an N+1 query problem - it fetches users then loops to fetch orders for each. Optimize to use a single query with JOIN or batch loading. Measure and document the performance improvement.",
+    "expected_steps": 4,
+    "timeout": 300,
+    "assertions": [
+      {"type": "query_count", "function": "get_users_with_orders", "max_queries": 2},
+      {"type": "file_contains", "path": "src/core/user_service.py", "pattern": "JOIN|joinedload|selectinload"},
+      {"type": "performance_improvement", "function": "get_users_with_orders", "min_speedup_percent": 50},
+      {"type": "tests_pass", "suite": "tests/test_user_service.py"}
+    ],
+    "rubric": {
+      "query_efficiency": "Should reduce from N+1 to 1-2 queries",
+      "correctness": "Results should be identical to original",
+      "documentation": "Performance improvement should be documented"
+    },
+    "reference_solution": "Use SQLAlchemy joinedload() or selectinload() for eager loading, or raw SQL with LEFT JOIN"
+  },
+  {
+    "id": "optimize-002",
+    "category": "performance_optimization",
+    "difficulty": 5,
+    "name": "Add Caching to Expensive Computation",
+    "prompt": "The `compute_statistics` function in `src/analytics/stats.py` is called frequently but the underlying data changes rarely. Add LRU caching with a TTL of 5 minutes. The cache key should be based on the input parameters.",
+    "expected_steps": 3,
+    "timeout": 240,
+    "assertions": [
+      {"type": "file_contains", "path": "src/analytics/stats.py", "pattern": "lru_cache|cache|TTLCache"},
+      {"type": "file_contains", "path": "src/analytics/stats.py", "pattern": "300|5.*minute"},
+      {"type": "cache_hit_rate", "function": "compute_statistics", "min_rate": 0.8},
+      {"type": "tests_pass", "suite": "tests/test_stats.py"}
+    ],
+    "rubric": {
+      "caching_strategy": "Cache should use appropriate key and TTL",
+      "memory_management": "Cache size should be bounded",
+      "invalidation": "Cache should expire after TTL"
+    },
+    "reference_solution": "Use functools.lru_cache with maxsize, or cachetools.TTLCache with 300s TTL"
+  },
+  {
+    "id": "test-001",
+    "category": "test_writing",
+    "difficulty": 5,
+    "name": "Add Unit Tests for Validator",
+    "prompt": "The `InputValidator` class in `src/core/validator.py` has no tests. Write comprehensive unit tests in `tests/test_validator.py` covering: valid inputs, invalid inputs, edge cases (empty, null, max length), and error messages. Achieve at least 90% code coverage.",
+    "expected_steps": 3,
+    "timeout": 300,
+    "assertions": [
+      {"type": "file_exists", "path": "tests/test_validator.py"},
+      {"type": "file_contains", "path": "tests/test_validator.py", "pattern": "def test_"},
+      {"type": "file_contains", "path": "tests/test_validator.py", "pattern": "pytest"},
+      {"type": "test_count", "path": "tests/test_validator.py", "min_tests": 10},
+      {"type": "coverage", "file": "src/core/validator.py", "min_coverage": 90},
+      {"type": "tests_pass", "suite": "tests/test_validator.py"}
+    ],
+    "rubric": {
+      "coverage": "All public methods should be tested",
+      "edge_cases": "Tests should cover boundary conditions",
+      "assertions": "Tests should have meaningful assertions",
+      "organization": "Tests should be well-organized and named"
+    },
+    "reference_solution": "Use pytest fixtures for common setup, parametrize for multiple inputs, test both success and failure cases"
+  },
+  {
+    "id": "test-002",
+    "category": "test_writing",
+    "difficulty": 6,
+    "name": "Add Integration Tests for API",
+    "prompt": "Write integration tests for the `/api/auth` endpoints in `src/webui/routes/auth.py`. Test the full flow: register, login, token refresh, and logout. Use pytest fixtures for test client and database setup. Tests should be in `tests/integration/test_auth_api.py`.",
+    "expected_steps": 4,
+    "timeout": 360,
+    "assertions": [
+      {"type": "file_exists", "path": "tests/integration/test_auth_api.py"},
+      {"type": "file_contains", "path": "tests/integration/test_auth_api.py", "pattern": "TestClient|client"},
+      {"type": "file_contains", "path": "tests/integration/test_auth_api.py", "pattern": "fixture"},
+      {"type": "file_contains", "path": "tests/integration/test_auth_api.py", "pattern": "/api/auth"},
+      {"type": "test_count", "path": "tests/integration/test_auth_api.py", "min_tests": 8},
+      {"type": "tests_pass", "suite": "tests/integration/test_auth_api.py"}
+    ],
+    "rubric": {
+      "flow_coverage": "Full authentication flow should be tested",
+      "isolation": "Tests should be independent and idempotent",
+      "fixtures": "Proper use of pytest fixtures for setup/teardown",
+      "assertions": "Response status codes and body should be verified"
+    },
+    "reference_solution": "Use FastAPI TestClient, create fixtures for test user and auth tokens, test happy path and error cases"
+  }
+]

@@ -1,0 +1,223 @@
+[
+  {
+    "id": "complex-refactor-001",
+    "category": "cross_file_refactoring",
+    "difficulty": 8,
+    "name": "Extract Shared Authentication Module",
+    "prompt": "The authentication logic is duplicated across `src/webui/routes/auth.py`, `src/gateway/middleware.py`, and `src/host/cli/auth.py`. Extract the common authentication logic into a new `src/core/auth/` module with:\n1. `authenticator.py` - Core authentication logic\n2. `token_manager.py` - JWT token handling\n3. `session_store.py` - Session management\n\nUpdate all three original files to use the new module. Ensure:\n- All existing tests pass\n- No code duplication remains\n- Backward compatibility is maintained\n- Add unit tests for the new module with >90% coverage",
+    "expected_steps": 12,
+    "timeout": 900,
+    "assertions": [
+      {"type": "file_exists", "path": "src/core/auth/__init__.py"},
+      {"type": "file_exists", "path": "src/core/auth/authenticator.py"},
+      {"type": "file_exists", "path": "src/core/auth/token_manager.py"},
+      {"type": "file_exists", "path": "src/core/auth/session_store.py"},
+      {"type": "file_contains", "path": "src/webui/routes/auth.py", "pattern": "from src.core.auth"},
+      {"type": "file_contains", "path": "src/gateway/middleware.py", "pattern": "from src.core.auth"},
+      {"type": "file_contains", "path": "src/host/cli/auth.py", "pattern": "from src.core.auth"},
+      {"type": "no_duplication", "pattern": "verify_token|authenticate_user", "max_occurrences": 1},
+      {"type": "tests_pass", "suite": "tests/"},
+      {"type": "coverage", "path": "src/core/auth/", "min_coverage": 90},
+      {"type": "file_exists", "path": "tests/test_auth_module.py"}
+    ],
+    "rubric": {
+      "architecture": {
+        "weight": 0.3,
+        "criteria": "Clean separation of concerns, proper module boundaries"
+      },
+      "code_quality": {
+        "weight": 0.25,
+        "criteria": "No duplication, clear interfaces, proper abstractions"
+      },
+      "backward_compatibility": {
+        "weight": 0.2,
+        "criteria": "All existing functionality preserved, no breaking changes"
+      },
+      "test_coverage": {
+        "weight": 0.15,
+        "criteria": "Comprehensive tests for new module"
+      },
+      "documentation": {
+        "weight": 0.1,
+        "criteria": "Clear docstrings and module documentation"
+      }
+    },
+    "reference_solution": "1. Analyze common patterns in all three files\n2. Design unified interface for Authenticator class\n3. Create token_manager with encode/decode/verify methods\n4. Create session_store with get/set/delete methods\n5. Create authenticator that uses both\n6. Update imports in all three files\n7. Run tests and fix any issues\n8. Add new tests for the module"
+  },
+  {
+    "id": "complex-api-001",
+    "category": "api_design_implementation",
+    "difficulty": 9,
+    "name": "Design and Implement Webhook System",
+    "prompt": "Design and implement a webhook delivery system for Doraemon Code. Requirements:\n\n1. API Design (`src/webhooks/`):\n   - `POST /api/webhooks` - Register webhook endpoint\n   - `GET /api/webhooks` - List registered webhooks\n   - `DELETE /api/webhooks/{id}` - Remove webhook\n   - `POST /api/webhooks/{id}/test` - Send test event\n\n2. Core Features:\n   - Event types: `task.completed`, `task.failed`, `model.response`\n   - Signature verification (HMAC-SHA256)\n   - Retry with exponential backoff (3 attempts)\n   - Delivery status tracking\n\n3. Implementation:\n   - `webhook_manager.py` - Core webhook logic\n   - `delivery_worker.py` - Async delivery with retries\n   - `signature.py` - HMAC signature generation/verification\n   - Database models for webhook registration and delivery logs\n\n4. Tests with >85% coverage",
+    "expected_steps": 15,
+    "timeout": 1200,
+    "assertions": [
+      {"type": "file_exists", "path": "src/webhooks/__init__.py"},
+      {"type": "file_exists", "path": "src/webhooks/webhook_manager.py"},
+      {"type": "file_exists", "path": "src/webhooks/delivery_worker.py"},
+      {"type": "file_exists", "path": "src/webhooks/signature.py"},
+      {"type": "file_exists", "path": "src/webhooks/routes.py"},
+      {"type": "file_contains", "path": "src/webhooks/signature.py", "pattern": "hmac|HMAC"},
+      {"type": "file_contains", "path": "src/webhooks/delivery_worker.py", "pattern": "retry|exponential"},
+      {"type": "api_endpoints_exist", "endpoints": ["/api/webhooks", "/api/webhooks/{id}", "/api/webhooks/{id}/test"]},
+      {"type": "tests_pass", "suite": "tests/test_webhooks.py"},
+      {"type": "coverage", "path": "src/webhooks/", "min_coverage": 85}
+    ],
+    "rubric": {
+      "api_design": {
+        "weight": 0.25,
+        "criteria": "RESTful design, proper HTTP methods, clear request/response schemas"
+      },
+      "security": {
+        "weight": 0.25,
+        "criteria": "Proper HMAC signature, secret management, input validation"
+      },
+      "reliability": {
+        "weight": 0.25,
+        "criteria": "Retry logic, error handling, delivery tracking"
+      },
+      "code_quality": {
+        "weight": 0.15,
+        "criteria": "Clean architecture, proper abstractions, documentation"
+      },
+      "testing": {
+        "weight": 0.1,
+        "criteria": "Comprehensive tests including edge cases"
+      }
+    },
+    "reference_solution": "Use FastAPI for routes, asyncio for delivery worker, store webhooks in SQLite, use background tasks for async delivery"
+  },
+  {
+    "id": "complex-integration-001",
+    "category": "system_integration",
+    "difficulty": 8,
+    "name": "Integrate External Vector Database",
+    "prompt": "Replace the current in-memory vector storage with Qdrant integration. Requirements:\n\n1. Create `src/core/vector_store/` module:\n   - `base.py` - Abstract base class for vector stores\n   - `qdrant_store.py` - Qdrant implementation\n   - `memory_store.py` - Keep existing in-memory as fallback\n   - `factory.py` - Factory to create appropriate store based on config\n\n2. Update `src/servers/memory.py` to use the new vector store abstraction\n\n3. Configuration:\n   - Add `VECTOR_STORE_TYPE` env var (qdrant/memory)\n   - Add `QDRANT_URL` and `QDRANT_API_KEY` config options\n   - Graceful fallback to memory store if Qdrant unavailable\n\n4. Migration:\n   - Add script to migrate existing data to Qdrant\n   - Ensure zero downtime during migration\n\n5. Tests for both implementations",
+    "expected_steps": 10,
+    "timeout": 900,
+    "assertions": [
+      {"type": "file_exists", "path": "src/core/vector_store/__init__.py"},
+      {"type": "file_exists", "path": "src/core/vector_store/base.py"},
+      {"type": "file_exists", "path": "src/core/vector_store/qdrant_store.py"},
+      {"type": "file_exists", "path": "src/core/vector_store/memory_store.py"},
+      {"type": "file_exists", "path": "src/core/vector_store/factory.py"},
+      {"type": "file_contains", "path": "src/core/vector_store/base.py", "pattern": "ABC|abstractmethod"},
+      {"type": "file_contains", "path": "src/core/vector_store/qdrant_store.py", "pattern": "QdrantClient"},
+      {"type": "file_contains", "path": "src/servers/memory.py", "pattern": "from src.core.vector_store"},
+      {"type": "env_var_documented", "vars": ["VECTOR_STORE_TYPE", "QDRANT_URL"]},
+      {"type": "tests_pass", "suite": "tests/test_vector_store.py"},
+      {"type": "fallback_works", "primary": "qdrant", "fallback": "memory"}
+    ],
+    "rubric": {
+      "abstraction": {
+        "weight": 0.25,
+        "criteria": "Clean interface, proper use of abstract base class"
+      },
+      "integration": {
+        "weight": 0.25,
+        "criteria": "Correct Qdrant client usage, proper error handling"
+      },
+      "configuration": {
+        "weight": 0.2,
+        "criteria": "Flexible config, environment variables, graceful fallback"
+      },
+      "migration": {
+        "weight": 0.15,
+        "criteria": "Safe migration path, data integrity"
+      },
+      "testing": {
+        "weight": 0.15,
+        "criteria": "Tests for both implementations, mock external service"
+      }
+    },
+    "reference_solution": "Use ABC for base class, implement search/add/delete methods, use factory pattern with config, mock Qdrant in tests"
+  },
+  {
+    "id": "complex-architecture-001",
+    "category": "architecture_improvement",
+    "difficulty": 9,
+    "name": "Implement Plugin Architecture",
+    "prompt": "Implement a plugin system for Doraemon Code that allows third-party extensions. Requirements:\n\n1. Plugin Interface (`src/plugins/`):\n   - `base.py` - Base plugin class with lifecycle hooks (init, activate, deactivate)\n   - `registry.py` - Plugin discovery and registration\n   - `loader.py` - Dynamic plugin loading from directory\n   - `manager.py` - Plugin lifecycle management\n\n2. Plugin Types:\n   - Tool plugins (add new tools)\n   - Model adapter plugins (add new LLM providers)\n   - Hook plugins (intercept events)\n\n3. Plugin Discovery:\n   - Load from `~/.doraemon/plugins/` directory\n   - Support both Python packages and single files\n   - Validate plugin metadata (name, version, dependencies)\n\n4. Safety:\n   - Sandbox plugin execution\n   - Permission system for sensitive operations\n   - Plugin isolation (plugins cannot affect each other)\n\n5. Example plugin and documentation",
+    "expected_steps": 15,
+    "timeout": 1200,
+    "assertions": [
+      {"type": "file_exists", "path": "src/plugins/__init__.py"},
+      {"type": "file_exists", "path": "src/plugins/base.py"},
+      {"type": "file_exists", "path": "src/plugins/registry.py"},
+      {"type": "file_exists", "path": "src/plugins/loader.py"},
+      {"type": "file_exists", "path": "src/plugins/manager.py"},
+      {"type": "file_contains", "path": "src/plugins/base.py", "pattern": "class.*Plugin"},
+      {"type": "file_contains", "path": "src/plugins/base.py", "pattern": "activate|deactivate|init"},
+      {"type": "file_contains", "path": "src/plugins/loader.py", "pattern": "importlib|__import__"},
+      {"type": "file_exists", "path": "examples/plugins/sample_plugin.py"},
+      {"type": "tests_pass", "suite": "tests/test_plugins.py"},
+      {"type": "plugin_loads", "plugin": "examples/plugins/sample_plugin.py"}
+    ],
+    "rubric": {
+      "architecture": {
+        "weight": 0.3,
+        "criteria": "Clean plugin interface, proper separation of concerns"
+      },
+      "extensibility": {
+        "weight": 0.25,
+        "criteria": "Easy to create new plugins, clear extension points"
+      },
+      "safety": {
+        "weight": 0.2,
+        "criteria": "Plugin isolation, permission system, error handling"
+      },
+      "usability": {
+        "weight": 0.15,
+        "criteria": "Clear documentation, example plugin, easy installation"
+      },
+      "testing": {
+        "weight": 0.1,
+        "criteria": "Tests for plugin lifecycle, loading, and isolation"
+      }
+    },
+    "reference_solution": "Use ABC for base plugin, importlib for dynamic loading, entry_points for discovery, subprocess for sandboxing"
+  },
+  {
+    "id": "complex-performance-001",
+    "category": "performance_optimization",
+    "difficulty": 8,
+    "name": "Optimize Context Manager for Large Conversations",
+    "prompt": "The `ContextManager` in `src/core/context_manager.py` becomes slow with large conversation histories (1000+ messages). Optimize for:\n\n1. Performance Improvements:\n   - Implement lazy loading of conversation history\n   - Add message indexing for fast retrieval\n   - Optimize summarization to run incrementally\n   - Add compression for stored messages\n\n2. Memory Optimization:\n   - Implement message pagination (load only recent N messages)\n   - Add LRU cache for frequently accessed messages\n   - Offload old messages to disk\n\n3. Benchmarks:\n   - Add performance benchmarks in `tests/benchmarks/`\n   - Document before/after metrics\n   - Target: <100ms for common operations with 10K messages\n\n4. Backward Compatibility:\n   - Existing API must remain unchanged\n   - Migration path for existing conversation files",
+    "expected_steps": 12,
+    "timeout": 1080,
+    "assertions": [
+      {"type": "file_modified", "path": "src/core/context_manager.py"},
+      {"type": "file_contains", "path": "src/core/context_manager.py", "pattern": "lazy|pagination|cache"},
+      {"type": "file_exists", "path": "tests/benchmarks/test_context_manager_perf.py"},
+      {"type": "performance_target", "operation": "get_recent_messages", "max_ms": 100, "message_count": 10000},
+      {"type": "performance_target", "operation": "add_message", "max_ms": 10, "message_count": 10000},
+      {"type": "memory_usage", "max_mb": 100, "message_count": 10000},
+      {"type": "tests_pass", "suite": "tests/test_context_manager.py"},
+      {"type": "api_unchanged", "path": "src/core/context_manager.py"}
+    ],
+    "rubric": {
+      "performance": {
+        "weight": 0.35,
+        "criteria": "Significant improvement in operation latency"
+      },
+      "memory_efficiency": {
+        "weight": 0.25,
+        "criteria": "Reduced memory footprint, proper resource management"
+      },
+      "correctness": {
+        "weight": 0.2,
+        "criteria": "All existing functionality preserved"
+      },
+      "benchmarks": {
+        "weight": 0.1,
+        "criteria": "Comprehensive benchmarks with clear metrics"
+      },
+      "code_quality": {
+        "weight": 0.1,
+        "criteria": "Clean implementation, proper documentation"
+      }
+    },
+    "reference_solution": "Use SQLite for message storage, implement cursor-based pagination, add LRU cache with TTL, compress old messages with zlib"
+  }
+]
