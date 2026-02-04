@@ -1,0 +1,189 @@
+[
+  {
+    "id": "api-rest-001",
+    "name": "Implement REST API Client",
+    "category": "api_integration",
+    "difficulty": "medium",
+    "prompt": "Create a Python REST API client class in `api_client.py` that can make GET, POST, PUT, DELETE requests to any endpoint. Include proper headers handling, JSON serialization, and timeout configuration.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 120,
+    "assertions": [
+      {"type": "file_exists", "path": "api_client.py"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "class.*Client"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "def get"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "def post"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "def put"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "def delete"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "timeout"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "completeness": "All HTTP methods should be implemented",
+      "error_handling": "Should handle network errors gracefully",
+      "configurability": "Should support custom headers and timeout"
+    }
+  },
+  {
+    "id": "api-rest-002",
+    "name": "Add Retry Logic with Exponential Backoff",
+    "category": "api_integration",
+    "difficulty": "medium",
+    "prompt": "Enhance the API client in `api_client.py` to include retry logic with exponential backoff. Retry on 5xx errors and connection timeouts, up to 3 attempts with delays of 1s, 2s, 4s.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 2,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_contains", "path": "api_client.py", "pattern": "retry|Retry"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "exponential|backoff"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "sleep|time"},
+      {"type": "file_contains", "path": "api_client.py", "pattern": "500|5xx|status_code >= 500"},
+      {"type": "tool_used", "tool": "edit_file"}
+    ],
+    "rubric": {
+      "retry_logic": "Should implement proper exponential backoff",
+      "error_detection": "Should only retry on appropriate errors",
+      "max_attempts": "Should respect maximum retry count"
+    }
+  },
+  {
+    "id": "api-auth-001",
+    "name": "Implement OAuth2 Authentication Flow",
+    "category": "api_integration",
+    "difficulty": "hard",
+    "prompt": "Create an OAuth2 authentication module in `oauth2_client.py` that supports the authorization code flow. Include methods for: generating auth URL, exchanging code for tokens, refreshing tokens, and making authenticated requests.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 240,
+    "assertions": [
+      {"type": "file_exists", "path": "oauth2_client.py"},
+      {"type": "file_contains", "path": "oauth2_client.py", "pattern": "authorization_url|auth_url"},
+      {"type": "file_contains", "path": "oauth2_client.py", "pattern": "exchange|token"},
+      {"type": "file_contains", "path": "oauth2_client.py", "pattern": "refresh"},
+      {"type": "file_contains", "path": "oauth2_client.py", "pattern": "client_id"},
+      {"type": "file_contains", "path": "oauth2_client.py", "pattern": "client_secret"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "oauth_flow": "Should implement complete authorization code flow",
+      "token_management": "Should handle token storage and refresh",
+      "security": "Should not expose secrets in logs or errors"
+    }
+  },
+  {
+    "id": "api-auth-002",
+    "name": "Add JWT Token Validation",
+    "category": "api_integration",
+    "difficulty": "medium",
+    "prompt": "Create a JWT validation module in `jwt_validator.py` that can decode and validate JWT tokens. Include signature verification, expiration checking, and claims extraction.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "jwt_validator.py"},
+      {"type": "file_contains", "path": "jwt_validator.py", "pattern": "decode|verify"},
+      {"type": "file_contains", "path": "jwt_validator.py", "pattern": "exp|expiration"},
+      {"type": "file_contains", "path": "jwt_validator.py", "pattern": "signature"},
+      {"type": "file_contains", "path": "jwt_validator.py", "pattern": "claims"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "validation": "Should properly validate JWT structure and signature",
+      "expiration": "Should check token expiration",
+      "error_handling": "Should handle invalid tokens gracefully"
+    }
+  },
+  {
+    "id": "api-error-001",
+    "name": "Implement API Error Handler",
+    "category": "api_integration",
+    "difficulty": "medium",
+    "prompt": "Create an API error handling module in `api_errors.py` with custom exception classes for different HTTP error codes (400, 401, 403, 404, 500). Include a decorator that catches requests exceptions and converts them to appropriate custom exceptions.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "api_errors.py"},
+      {"type": "file_contains", "path": "api_errors.py", "pattern": "class.*Error|class.*Exception"},
+      {"type": "file_contains", "path": "api_errors.py", "pattern": "400|BadRequest"},
+      {"type": "file_contains", "path": "api_errors.py", "pattern": "401|Unauthorized"},
+      {"type": "file_contains", "path": "api_errors.py", "pattern": "404|NotFound"},
+      {"type": "file_contains", "path": "api_errors.py", "pattern": "decorator|@"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "exception_hierarchy": "Should have proper exception class hierarchy",
+      "status_mapping": "Should map HTTP status codes to exceptions",
+      "decorator": "Should provide reusable error handling decorator"
+    }
+  },
+  {
+    "id": "api-rate-001",
+    "name": "Implement Rate Limiter",
+    "category": "api_integration",
+    "difficulty": "hard",
+    "prompt": "Create a rate limiting module in `rate_limiter.py` that implements token bucket algorithm. Support configurable rate limits, burst capacity, and provide both sync and async interfaces.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_exists", "path": "rate_limiter.py"},
+      {"type": "file_contains", "path": "rate_limiter.py", "pattern": "class.*RateLimiter|class.*TokenBucket"},
+      {"type": "file_contains", "path": "rate_limiter.py", "pattern": "tokens|bucket"},
+      {"type": "file_contains", "path": "rate_limiter.py", "pattern": "acquire|consume"},
+      {"type": "file_contains", "path": "rate_limiter.py", "pattern": "async|await"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "algorithm": "Should implement token bucket correctly",
+      "configurability": "Should support custom rate and burst settings",
+      "async_support": "Should work in both sync and async contexts"
+    }
+  },
+  {
+    "id": "api-webhook-001",
+    "name": "Create Webhook Handler",
+    "category": "api_integration",
+    "difficulty": "hard",
+    "prompt": "Create a webhook handling module in `webhook_handler.py` with signature verification (HMAC-SHA256), payload parsing, and event routing. Include a FastAPI router for receiving webhooks.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 200,
+    "assertions": [
+      {"type": "file_exists", "path": "webhook_handler.py"},
+      {"type": "file_contains", "path": "webhook_handler.py", "pattern": "hmac|HMAC"},
+      {"type": "file_contains", "path": "webhook_handler.py", "pattern": "sha256|SHA256"},
+      {"type": "file_contains", "path": "webhook_handler.py", "pattern": "verify|signature"},
+      {"type": "file_contains", "path": "webhook_handler.py", "pattern": "FastAPI|APIRouter"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "security": "Should verify webhook signatures properly",
+      "routing": "Should route events to appropriate handlers",
+      "error_handling": "Should handle invalid payloads gracefully"
+    }
+  },
+  {
+    "id": "api-graphql-001",
+    "name": "Create GraphQL Client",
+    "category": "api_integration",
+    "difficulty": "hard",
+    "prompt": "Create a GraphQL client in `graphql_client.py` that supports queries, mutations, and subscriptions. Include variable substitution, error handling, and response parsing.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 200,
+    "assertions": [
+      {"type": "file_exists", "path": "graphql_client.py"},
+      {"type": "file_contains", "path": "graphql_client.py", "pattern": "query|Query"},
+      {"type": "file_contains", "path": "graphql_client.py", "pattern": "mutation|Mutation"},
+      {"type": "file_contains", "path": "graphql_client.py", "pattern": "variables"},
+      {"type": "file_contains", "path": "graphql_client.py", "pattern": "errors"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "operations": "Should support queries and mutations",
+      "variables": "Should handle variable substitution",
+      "error_handling": "Should parse and handle GraphQL errors"
+    }
+  }
+]

@@ -1,0 +1,195 @@
+[
+  {
+    "id": "frontend-react-001",
+    "name": "Create React Functional Component",
+    "category": "frontend_development",
+    "difficulty": "easy",
+    "prompt": "Create a React functional component in `components/UserCard.tsx` that displays user information (name, email, avatar). Use TypeScript interfaces for props and include proper prop types.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 120,
+    "assertions": [
+      {"type": "file_exists", "path": "components/UserCard.tsx"},
+      {"type": "file_contains", "path": "components/UserCard.tsx", "pattern": "interface.*Props|type.*Props"},
+      {"type": "file_contains", "path": "components/UserCard.tsx", "pattern": "const UserCard"},
+      {"type": "file_contains", "path": "components/UserCard.tsx", "pattern": "export"},
+      {"type": "file_contains", "path": "components/UserCard.tsx", "pattern": "name|email|avatar"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "typescript": "Should use proper TypeScript types",
+      "component_structure": "Should follow React best practices",
+      "props": "Should have well-defined prop types"
+    }
+  },
+  {
+    "id": "frontend-react-002",
+    "name": "Create React Component with Hooks",
+    "category": "frontend_development",
+    "difficulty": "medium",
+    "prompt": "Create a React component in `components/SearchInput.tsx` with debounced search functionality. Use useState for input value, useEffect for debouncing, and useCallback for the search handler. Include loading state.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "components/SearchInput.tsx"},
+      {"type": "file_contains", "path": "components/SearchInput.tsx", "pattern": "useState"},
+      {"type": "file_contains", "path": "components/SearchInput.tsx", "pattern": "useEffect"},
+      {"type": "file_contains", "path": "components/SearchInput.tsx", "pattern": "useCallback"},
+      {"type": "file_contains", "path": "components/SearchInput.tsx", "pattern": "debounce|setTimeout"},
+      {"type": "file_contains", "path": "components/SearchInput.tsx", "pattern": "loading|isLoading"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "hooks_usage": "Should use React hooks correctly",
+      "debouncing": "Should implement proper debouncing",
+      "state_management": "Should manage loading state properly"
+    }
+  },
+  {
+    "id": "frontend-react-003",
+    "name": "Create Custom React Hook",
+    "category": "frontend_development",
+    "difficulty": "medium",
+    "prompt": "Create a custom React hook in `hooks/useLocalStorage.ts` that syncs state with localStorage. Include TypeScript generics, error handling, and SSR compatibility.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "hooks/useLocalStorage.ts"},
+      {"type": "file_contains", "path": "hooks/useLocalStorage.ts", "pattern": "function useLocalStorage|const useLocalStorage"},
+      {"type": "file_contains", "path": "hooks/useLocalStorage.ts", "pattern": "<T>|<T,"},
+      {"type": "file_contains", "path": "hooks/useLocalStorage.ts", "pattern": "localStorage"},
+      {"type": "file_contains", "path": "hooks/useLocalStorage.ts", "pattern": "useState"},
+      {"type": "file_contains", "path": "hooks/useLocalStorage.ts", "pattern": "try|catch"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "generics": "Should use TypeScript generics properly",
+      "error_handling": "Should handle localStorage errors",
+      "ssr_compatibility": "Should work in SSR environments"
+    }
+  },
+  {
+    "id": "frontend-vue-001",
+    "name": "Create Vue 3 Composition API Component",
+    "category": "frontend_development",
+    "difficulty": "medium",
+    "prompt": "Create a Vue 3 component in `components/TodoList.vue` using the Composition API. Include reactive state, computed properties, and methods for adding, completing, and deleting todos.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "components/TodoList.vue"},
+      {"type": "file_contains", "path": "components/TodoList.vue", "pattern": "<script setup>|setup()"},
+      {"type": "file_contains", "path": "components/TodoList.vue", "pattern": "ref|reactive"},
+      {"type": "file_contains", "path": "components/TodoList.vue", "pattern": "computed"},
+      {"type": "file_contains", "path": "components/TodoList.vue", "pattern": "v-for"},
+      {"type": "file_contains", "path": "components/TodoList.vue", "pattern": "@click|v-on:click"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "composition_api": "Should use Vue 3 Composition API correctly",
+      "reactivity": "Should use reactive state properly",
+      "functionality": "Should implement all todo operations"
+    }
+  },
+  {
+    "id": "frontend-style-001",
+    "name": "Create Responsive CSS Layout",
+    "category": "frontend_development",
+    "difficulty": "medium",
+    "prompt": "Create a responsive CSS layout in `styles/dashboard.css` for a dashboard with sidebar, header, and main content area. Use CSS Grid and Flexbox. Include mobile breakpoints at 768px and 1024px.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "styles/dashboard.css"},
+      {"type": "file_contains", "path": "styles/dashboard.css", "pattern": "display:\\s*grid|display: grid"},
+      {"type": "file_contains", "path": "styles/dashboard.css", "pattern": "display:\\s*flex|display: flex"},
+      {"type": "file_contains", "path": "styles/dashboard.css", "pattern": "@media"},
+      {"type": "file_contains", "path": "styles/dashboard.css", "pattern": "768px"},
+      {"type": "file_contains", "path": "styles/dashboard.css", "pattern": "1024px"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "layout": "Should use CSS Grid and Flexbox appropriately",
+      "responsiveness": "Should have proper breakpoints",
+      "structure": "Should have clear layout structure"
+    }
+  },
+  {
+    "id": "frontend-style-002",
+    "name": "Create Tailwind Component Styles",
+    "category": "frontend_development",
+    "difficulty": "easy",
+    "prompt": "Create a React component in `components/Button.tsx` with Tailwind CSS styling. Include variants for primary, secondary, and danger. Support sizes: small, medium, large. Include disabled state.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 120,
+    "assertions": [
+      {"type": "file_exists", "path": "components/Button.tsx"},
+      {"type": "file_contains", "path": "components/Button.tsx", "pattern": "className"},
+      {"type": "file_contains", "path": "components/Button.tsx", "pattern": "bg-|text-|px-|py-"},
+      {"type": "file_contains", "path": "components/Button.tsx", "pattern": "primary|secondary|danger"},
+      {"type": "file_contains", "path": "components/Button.tsx", "pattern": "small|medium|large|sm|md|lg"},
+      {"type": "file_contains", "path": "components/Button.tsx", "pattern": "disabled"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "tailwind_usage": "Should use Tailwind classes correctly",
+      "variants": "Should support all required variants",
+      "accessibility": "Should handle disabled state properly"
+    }
+  },
+  {
+    "id": "frontend-state-001",
+    "name": "Implement Redux Slice",
+    "category": "frontend_development",
+    "difficulty": "medium",
+    "prompt": "Create a Redux Toolkit slice in `store/cartSlice.ts` for shopping cart state management. Include actions for: addItem, removeItem, updateQuantity, clearCart. Include selectors for total items and total price.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_exists", "path": "store/cartSlice.ts"},
+      {"type": "file_contains", "path": "store/cartSlice.ts", "pattern": "createSlice"},
+      {"type": "file_contains", "path": "store/cartSlice.ts", "pattern": "addItem"},
+      {"type": "file_contains", "path": "store/cartSlice.ts", "pattern": "removeItem"},
+      {"type": "file_contains", "path": "store/cartSlice.ts", "pattern": "updateQuantity"},
+      {"type": "file_contains", "path": "store/cartSlice.ts", "pattern": "clearCart"},
+      {"type": "file_contains", "path": "store/cartSlice.ts", "pattern": "selector|Selector"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "redux_toolkit": "Should use Redux Toolkit correctly",
+      "actions": "All required actions should be implemented",
+      "selectors": "Should include proper selectors"
+    }
+  },
+  {
+    "id": "frontend-state-002",
+    "name": "Create Zustand Store",
+    "category": "frontend_development",
+    "difficulty": "medium",
+    "prompt": "Create a Zustand store in `store/authStore.ts` for authentication state. Include: user object, isAuthenticated, login, logout, updateProfile actions. Add persist middleware for localStorage.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "store/authStore.ts"},
+      {"type": "file_contains", "path": "store/authStore.ts", "pattern": "create"},
+      {"type": "file_contains", "path": "store/authStore.ts", "pattern": "user"},
+      {"type": "file_contains", "path": "store/authStore.ts", "pattern": "isAuthenticated"},
+      {"type": "file_contains", "path": "store/authStore.ts", "pattern": "login"},
+      {"type": "file_contains", "path": "store/authStore.ts", "pattern": "logout"},
+      {"type": "file_contains", "path": "store/authStore.ts", "pattern": "persist"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "zustand_usage": "Should use Zustand correctly",
+      "state_structure": "Should have proper state structure",
+      "persistence": "Should implement localStorage persistence"
+    }
+  }
+]

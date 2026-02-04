@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doraemon Code - Evaluation Dashboard</title>
+    <link rel="stylesheet" href="/dashboard/static/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-left">
+                <h1>Evaluation Dashboard</h1>
+                <span class="subtitle">Doraemon Code Performance Analytics</span>
+            </div>
+            <div class="header-right">
+                <button id="refreshBtn" class="btn btn-secondary">
+                    <span class="icon">&#8635;</span> Refresh
+                </button>
+                <button id="newEvalBtn" class="btn btn-primary">
+                    <span class="icon">+</span> New Evaluation
+                </button>
+            </div>
+        </header>
+
+        <!-- Summary Cards -->
+        <section class="summary-cards">
+            <div class="card summary-card">
+                <div class="card-icon success">&#10003;</div>
+                <div class="card-content">
+                    <span class="card-value" id="overallSuccessRate">
+                        {{ "%.1f"|format(task_stats.overall_success_rate * 100) }}%
+                    </span>
+                    <span class="card-label">Overall Success Rate</span>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-icon tasks">&#9776;</div>
+                <div class="card-content">
+                    <span class="card-value" id="totalTasks">{{ task_stats.total_tasks }}</span>
+                    <span class="card-label">Total Tasks Evaluated</span>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-icon evals">&#128202;</div>
+                <div class="card-content">
+                    <span class="card-value" id="totalEvaluations">{{ task_stats.total_evaluations }}</span>
+                    <span class="card-label">Total Evaluations</span>
+                </div>
+            </div>
+            <div class="card summary-card">
+                <div class="card-icon categories">&#128193;</div>
+                <div class="card-content">
+                    <span class="card-value" id="totalCategories">{{ task_stats.by_category|length }}</span>
+                    <span class="card-label">Task Categories</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Running Evaluations Progress -->
+        {% if running_evaluations %}
+        <section class="running-evaluations">
+            <h2>Running Evaluations</h2>
+            {% for eval in running_evaluations %}
+            <div class="progress-card" data-eval-id="{{ eval.id }}">
+                <div class="progress-header">
+                    <span class="eval-id">{{ eval.id }}</span>
+                    <span class="eval-status status-{{ eval.status }}">{{ eval.status }}</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" style="width: {{ eval.progress * 100 }}%"></div>
+                </div>
+                <div class="progress-details">
+                    <span>{{ eval.completed_tasks }}/{{ eval.total_tasks }} tasks</span>
+                    {% if eval.current_task %}
+                    <span>Current: {{ eval.current_task }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <div class="chart-row">
+                <!-- Success Rate Trend -->
+                <div class="card chart-card">
+                    <h3>Success Rate Trend</h3>
+                    <div class="chart-container">
+                        <canvas id="successRateChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Latency Distribution -->
+                <div class="card chart-card">
+                    <h3>Latency Distribution</h3>
+                    <div class="chart-container">
+                        <canvas id="latencyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-row">
+                <!-- Category Heatmap -->
+                <div class="card chart-card">
+                    <h3>Task Category Performance</h3>
+                    <div class="heatmap-container" id="categoryHeatmap">
+                        {% for category, stats in task_stats.by_category.items() %}
+                        <div class="heatmap-cell"
+                             style="--success-rate: {{ stats.success_rate }}"
+                             title="{{ category }}: {{ '%.1f'|format(stats.success_rate * 100) }}% ({{ stats.success }}/{{ stats.total }})">
+                            <span class="cell-label">{{ category }}</span>
+                            <span class="cell-value">{{ "%.0f"|format(stats.success_rate * 100) }}%</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Difficulty Analysis -->
+                <div class="card chart-card">
+                    <h3>Performance by Difficulty</h3>
+                    <div class="chart-container">
+                        <canvas id="difficultyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Model Comparison Table -->
+        <section class="comparison-section">
+            <div class="card">
+                <h3>Model Comparison</h3>
+                <div class="table-container">
+                    <table class="comparison-table" id="modelComparisonTable">
+                        <thead>
+                            <tr>
+                                <th>Model / Category</th>
+                                <th>Evaluations</th>
+                                <th>Total Tasks</th>
+                                <th>Success Rate</th>
+                                <th>Avg Time/Task</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recent Evaluations -->
+        <section class="evaluations-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Recent Evaluations</h3>
+                    <div class="filter-controls">
+                        <select id="categoryFilter">
+                            <option value="">All Categories</option>
+                            {% for category, stats in task_stats.by_category.items() %}
+                            <option value="{{ category }}">{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="evaluations-table" id="evaluationsTable">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Category</th>
+                                <th>Tasks</th>
+                                <th>Success Rate</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for eval in evaluations %}
+                            <tr data-eval-id="{{ eval.id }}">
+                                <td>{{ eval.timestamp[:19] }}</td>
+                                <td><span class="category-badge">{{ eval.category }}</span></td>
+                                <td>{{ eval.total_tasks }}</td>
+                                <td>
+                                    <div class="success-rate-bar">
+                                        <div class="bar-fill" style="width: {{ eval.success_rate * 100 }}%"></div>
+                                        <span class="bar-label">{{ "%.1f"|format(eval.success_rate * 100) }}%</span>
+                                    </div>
+                                </td>
+                                <td>{{ "%.2f"|format(eval.total_time) }}s</td>
+                                <td>
+                                    <button class="btn btn-small btn-view" onclick="viewDetails('{{ eval.id }}')">
+                                        View
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detail Modal -->
+        <div id="detailModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">Evaluation Details</h2>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- New Evaluation Modal -->
+        <div id="newEvalModal" class="modal">
+            <div class="modal-content modal-small">
+                <div class="modal-header">
+                    <h2>Start New Evaluation</h2>
+                    <button class="modal-close" onclick="closeNewEvalModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="newEvalForm">
+                        <div class="form-group">
+                            <label for="taskSet">Task Set</label>
+                            <select id="taskSet" name="task_set">
+                                <option value="default">Default</option>
+                                <option value="quick">Quick (5 tasks)</option>
+                                <option value="full">Full Suite</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="nTrials">Number of Trials</label>
+                            <input type="number" id="nTrials" name="n_trials" value="1" min="1" max="10">
+                        </div>
+                        <div class="form-group">
+                            <label for="maxWorkers">Max Workers</label>
+                            <input type="number" id="maxWorkers" name="max_workers" value="2" min="1" max="8">
+                        </div>
+                        <div class="form-group">
+                            <label for="model">Model (optional)</label>
+                            <input type="text" id="model" name="model" placeholder="e.g., gemini-3-pro">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="closeNewEvalModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Start Evaluation</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pass data to JavaScript -->
+    <script>
+        const trendsData = {{ trends | tojson | safe }};
+        const taskStats = {{ task_stats | tojson | safe }};
+    </script>
+    <script src="/dashboard/static/dashboard.js"></script>
+</body>
+</html>

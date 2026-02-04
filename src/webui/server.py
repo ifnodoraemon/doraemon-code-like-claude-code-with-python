@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from src.webui.dashboard.api import router as dashboard_router
 from src.webui.routes import chat, sessions, tools
 
 # Setup logging
@@ -43,6 +44,16 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(tools.router, prefix="/api/tools", tags=["tools"])
+app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
+
+# Mount dashboard static files
+dashboard_static_dir = Path(__file__).parent / "dashboard" / "static"
+if dashboard_static_dir.exists():
+    app.mount(
+        "/dashboard/static",
+        StaticFiles(directory=str(dashboard_static_dir)),
+        name="dashboard_static"
+    )
 
 # Mount static files (frontend)
 static_dir = Path(__file__).parent / "static"

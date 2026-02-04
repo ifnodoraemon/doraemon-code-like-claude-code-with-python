@@ -1,0 +1,196 @@
+[
+  {
+    "id": "db-query-001",
+    "name": "Write Complex SQL Query with Joins",
+    "category": "database_operations",
+    "difficulty": "medium",
+    "prompt": "Write a SQL query in `queries/user_orders.sql` that retrieves all users with their total order count and total spending. Join the users, orders, and order_items tables. Include users with no orders (show 0).",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 120,
+    "assertions": [
+      {"type": "file_exists", "path": "queries/user_orders.sql"},
+      {"type": "file_contains", "path": "queries/user_orders.sql", "pattern": "SELECT"},
+      {"type": "file_contains", "path": "queries/user_orders.sql", "pattern": "JOIN|join"},
+      {"type": "file_contains", "path": "queries/user_orders.sql", "pattern": "LEFT|left"},
+      {"type": "file_contains", "path": "queries/user_orders.sql", "pattern": "COUNT|count|SUM|sum"},
+      {"type": "file_contains", "path": "queries/user_orders.sql", "pattern": "GROUP BY|group by"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "correctness": "Query should return correct results",
+      "efficiency": "Should use appropriate join types",
+      "completeness": "Should handle users with no orders"
+    }
+  },
+  {
+    "id": "db-query-002",
+    "name": "Write Aggregation Query with Window Functions",
+    "category": "database_operations",
+    "difficulty": "hard",
+    "prompt": "Write a SQL query in `queries/sales_ranking.sql` that ranks products by sales within each category using window functions. Include running totals and percentage of category sales.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "queries/sales_ranking.sql"},
+      {"type": "file_contains", "path": "queries/sales_ranking.sql", "pattern": "OVER|over"},
+      {"type": "file_contains", "path": "queries/sales_ranking.sql", "pattern": "PARTITION BY|partition by"},
+      {"type": "file_contains", "path": "queries/sales_ranking.sql", "pattern": "RANK|ROW_NUMBER|DENSE_RANK"},
+      {"type": "file_contains", "path": "queries/sales_ranking.sql", "pattern": "SUM.*OVER"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "window_functions": "Should use window functions correctly",
+      "ranking": "Should implement proper ranking logic",
+      "calculations": "Running totals and percentages should be accurate"
+    }
+  },
+  {
+    "id": "db-migration-001",
+    "name": "Create Database Migration Script",
+    "category": "database_operations",
+    "difficulty": "medium",
+    "prompt": "Create an Alembic migration script in `migrations/add_user_preferences.py` that adds a new `user_preferences` table with columns: id, user_id (FK), preference_key, preference_value, created_at, updated_at. Include both upgrade and downgrade functions.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 150,
+    "assertions": [
+      {"type": "file_exists", "path": "migrations/add_user_preferences.py"},
+      {"type": "file_contains", "path": "migrations/add_user_preferences.py", "pattern": "def upgrade"},
+      {"type": "file_contains", "path": "migrations/add_user_preferences.py", "pattern": "def downgrade"},
+      {"type": "file_contains", "path": "migrations/add_user_preferences.py", "pattern": "user_preferences"},
+      {"type": "file_contains", "path": "migrations/add_user_preferences.py", "pattern": "ForeignKey|foreign_key"},
+      {"type": "file_contains", "path": "migrations/add_user_preferences.py", "pattern": "op.create_table|create_table"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "migration_structure": "Should follow Alembic conventions",
+      "reversibility": "Downgrade should properly reverse upgrade",
+      "constraints": "Should include proper foreign key constraints"
+    }
+  },
+  {
+    "id": "db-migration-002",
+    "name": "Create Data Migration with Transformation",
+    "category": "database_operations",
+    "difficulty": "hard",
+    "prompt": "Create a migration script in `migrations/split_full_name.py` that splits the existing `full_name` column into `first_name` and `last_name` columns. Handle edge cases like single names, multiple spaces, and null values.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_exists", "path": "migrations/split_full_name.py"},
+      {"type": "file_contains", "path": "migrations/split_full_name.py", "pattern": "def upgrade"},
+      {"type": "file_contains", "path": "migrations/split_full_name.py", "pattern": "first_name"},
+      {"type": "file_contains", "path": "migrations/split_full_name.py", "pattern": "last_name"},
+      {"type": "file_contains", "path": "migrations/split_full_name.py", "pattern": "split|SPLIT|SUBSTRING"},
+      {"type": "file_contains", "path": "migrations/split_full_name.py", "pattern": "NULL|null|None"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "data_transformation": "Should correctly split names",
+      "edge_cases": "Should handle null and single names",
+      "data_integrity": "Should not lose any data during migration"
+    }
+  },
+  {
+    "id": "db-schema-001",
+    "name": "Design E-commerce Database Schema",
+    "category": "database_operations",
+    "difficulty": "hard",
+    "prompt": "Design a complete e-commerce database schema in `schema/ecommerce.sql`. Include tables for: users, products, categories, orders, order_items, reviews, addresses, and payments. Define all relationships, indexes, and constraints.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 300,
+    "assertions": [
+      {"type": "file_exists", "path": "schema/ecommerce.sql"},
+      {"type": "file_contains", "path": "schema/ecommerce.sql", "pattern": "CREATE TABLE users"},
+      {"type": "file_contains", "path": "schema/ecommerce.sql", "pattern": "CREATE TABLE products"},
+      {"type": "file_contains", "path": "schema/ecommerce.sql", "pattern": "CREATE TABLE orders"},
+      {"type": "file_contains", "path": "schema/ecommerce.sql", "pattern": "FOREIGN KEY|REFERENCES"},
+      {"type": "file_contains", "path": "schema/ecommerce.sql", "pattern": "INDEX|index"},
+      {"type": "file_contains", "path": "schema/ecommerce.sql", "pattern": "PRIMARY KEY"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "completeness": "All required tables should be present",
+      "relationships": "Proper foreign key relationships",
+      "normalization": "Schema should be properly normalized",
+      "indexing": "Appropriate indexes for common queries"
+    }
+  },
+  {
+    "id": "db-schema-002",
+    "name": "Create SQLAlchemy Models",
+    "category": "database_operations",
+    "difficulty": "medium",
+    "prompt": "Create SQLAlchemy ORM models in `models/blog.py` for a blog system with User, Post, Comment, and Tag models. Include relationships, timestamps, and proper column types.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_exists", "path": "models/blog.py"},
+      {"type": "file_contains", "path": "models/blog.py", "pattern": "class User"},
+      {"type": "file_contains", "path": "models/blog.py", "pattern": "class Post"},
+      {"type": "file_contains", "path": "models/blog.py", "pattern": "class Comment"},
+      {"type": "file_contains", "path": "models/blog.py", "pattern": "class Tag"},
+      {"type": "file_contains", "path": "models/blog.py", "pattern": "relationship"},
+      {"type": "file_contains", "path": "models/blog.py", "pattern": "ForeignKey"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "model_design": "Models should be well-structured",
+      "relationships": "Proper ORM relationships defined",
+      "column_types": "Appropriate column types used"
+    }
+  },
+  {
+    "id": "db-optimize-001",
+    "name": "Optimize Slow Query",
+    "category": "database_operations",
+    "difficulty": "hard",
+    "prompt": "The query in `queries/slow_report.sql` takes 30 seconds to run. Analyze it and create an optimized version in `queries/optimized_report.sql`. Add appropriate indexes in `schema/indexes.sql`. Document the optimization strategy.",
+    "expected_tools": ["read_file", "write_file"],
+    "expected_steps": 3,
+    "timeout": 240,
+    "assertions": [
+      {"type": "file_exists", "path": "queries/optimized_report.sql"},
+      {"type": "file_exists", "path": "schema/indexes.sql"},
+      {"type": "file_contains", "path": "schema/indexes.sql", "pattern": "CREATE INDEX"},
+      {"type": "file_contains", "path": "queries/optimized_report.sql", "pattern": "SELECT"},
+      {"type": "tool_used", "tool": "read_file"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "analysis": "Should identify performance bottlenecks",
+      "optimization": "Query should be significantly faster",
+      "indexing": "Appropriate indexes should be created"
+    }
+  },
+  {
+    "id": "db-repository-001",
+    "name": "Implement Repository Pattern",
+    "category": "database_operations",
+    "difficulty": "medium",
+    "prompt": "Create a repository pattern implementation in `repositories/user_repository.py` for the User model. Include methods for: create, get_by_id, get_by_email, update, delete, list_with_pagination, and search.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_exists", "path": "repositories/user_repository.py"},
+      {"type": "file_contains", "path": "repositories/user_repository.py", "pattern": "class.*Repository"},
+      {"type": "file_contains", "path": "repositories/user_repository.py", "pattern": "def create"},
+      {"type": "file_contains", "path": "repositories/user_repository.py", "pattern": "def get_by_id"},
+      {"type": "file_contains", "path": "repositories/user_repository.py", "pattern": "def update"},
+      {"type": "file_contains", "path": "repositories/user_repository.py", "pattern": "def delete"},
+      {"type": "file_contains", "path": "repositories/user_repository.py", "pattern": "pagination|limit|offset"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "pattern_implementation": "Should follow repository pattern correctly",
+      "completeness": "All CRUD operations should be implemented",
+      "pagination": "Should support proper pagination"
+    }
+  }
+]

@@ -1,0 +1,189 @@
+[
+  {
+    "id": "doc-api-001",
+    "name": "Generate OpenAPI Documentation",
+    "category": "documentation",
+    "difficulty": "medium",
+    "prompt": "Create OpenAPI/Swagger documentation in `docs/api/openapi.yaml` for a user management API. Include endpoints for CRUD operations, authentication, and proper request/response schemas with examples.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 200,
+    "assertions": [
+      {"type": "file_exists", "path": "docs/api/openapi.yaml"},
+      {"type": "file_contains", "path": "docs/api/openapi.yaml", "pattern": "openapi:|swagger:"},
+      {"type": "file_contains", "path": "docs/api/openapi.yaml", "pattern": "paths:"},
+      {"type": "file_contains", "path": "docs/api/openapi.yaml", "pattern": "/users"},
+      {"type": "file_contains", "path": "docs/api/openapi.yaml", "pattern": "schemas:|components:"},
+      {"type": "file_contains", "path": "docs/api/openapi.yaml", "pattern": "example:|examples:"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "openapi_compliance": "Should follow OpenAPI specification",
+      "completeness": "Should document all endpoints",
+      "examples": "Should include request/response examples"
+    }
+  },
+  {
+    "id": "doc-api-002",
+    "name": "Write API Endpoint Documentation",
+    "category": "documentation",
+    "difficulty": "easy",
+    "prompt": "Create API documentation in `docs/api/endpoints.md` for a REST API. Include endpoint descriptions, request parameters, response formats, error codes, and curl examples for each endpoint.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_exists", "path": "docs/api/endpoints.md"},
+      {"type": "file_contains", "path": "docs/api/endpoints.md", "pattern": "## |### "},
+      {"type": "file_contains", "path": "docs/api/endpoints.md", "pattern": "GET|POST|PUT|DELETE"},
+      {"type": "file_contains", "path": "docs/api/endpoints.md", "pattern": "curl"},
+      {"type": "file_contains", "path": "docs/api/endpoints.md", "pattern": "Response|response"},
+      {"type": "file_contains", "path": "docs/api/endpoints.md", "pattern": "Error|error|400|401|404|500"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "structure": "Should have clear documentation structure",
+      "examples": "Should include curl examples",
+      "error_documentation": "Should document error responses"
+    }
+  },
+  {
+    "id": "doc-readme-001",
+    "name": "Create Project README",
+    "category": "documentation",
+    "difficulty": "easy",
+    "prompt": "Create a comprehensive README.md for a Python library. Include: project description, installation instructions, quick start guide, configuration options, API reference, contributing guidelines, and license information.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_exists", "path": "README.md"},
+      {"type": "file_contains", "path": "README.md", "pattern": "# "},
+      {"type": "file_contains", "path": "README.md", "pattern": "Installation|install"},
+      {"type": "file_contains", "path": "README.md", "pattern": "pip install|poetry add"},
+      {"type": "file_contains", "path": "README.md", "pattern": "Usage|Quick Start|Getting Started"},
+      {"type": "file_contains", "path": "README.md", "pattern": "```python|```bash"},
+      {"type": "file_contains", "path": "README.md", "pattern": "License|LICENSE"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "completeness": "Should include all required sections",
+      "code_examples": "Should have working code examples",
+      "clarity": "Should be clear and well-organized"
+    }
+  },
+  {
+    "id": "doc-readme-002",
+    "name": "Update README with New Features",
+    "category": "documentation",
+    "difficulty": "medium",
+    "prompt": "Update the existing README.md to document new features: async support, plugin system, and CLI interface. Add new sections while maintaining the existing structure and style.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 2,
+    "timeout": 180,
+    "assertions": [
+      {"type": "file_contains", "path": "README.md", "pattern": "async|Async"},
+      {"type": "file_contains", "path": "README.md", "pattern": "plugin|Plugin"},
+      {"type": "file_contains", "path": "README.md", "pattern": "CLI|cli|command"},
+      {"type": "tool_used", "tool": "read_file"},
+      {"type": "tool_used", "tool": "edit_file"}
+    ],
+    "rubric": {
+      "integration": "New content should fit existing style",
+      "completeness": "All new features should be documented",
+      "examples": "Should include usage examples"
+    }
+  },
+  {
+    "id": "doc-code-001",
+    "name": "Add Docstrings to Module",
+    "category": "documentation",
+    "difficulty": "medium",
+    "prompt": "Add comprehensive docstrings to all functions and classes in `src/utils/helpers.py`. Use Google-style docstrings with Args, Returns, Raises, and Examples sections.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 2,
+    "timeout": 200,
+    "assertions": [
+      {"type": "file_contains", "path": "src/utils/helpers.py", "pattern": "\"\"\""},
+      {"type": "file_contains", "path": "src/utils/helpers.py", "pattern": "Args:"},
+      {"type": "file_contains", "path": "src/utils/helpers.py", "pattern": "Returns:"},
+      {"type": "file_contains", "path": "src/utils/helpers.py", "pattern": "Example:|Examples:"},
+      {"type": "tool_used", "tool": "read_file"},
+      {"type": "tool_used", "tool": "edit_file"}
+    ],
+    "rubric": {
+      "docstring_style": "Should follow Google style",
+      "completeness": "All public functions should be documented",
+      "examples": "Should include usage examples"
+    }
+  },
+  {
+    "id": "doc-code-002",
+    "name": "Generate Type Stubs",
+    "category": "documentation",
+    "difficulty": "hard",
+    "prompt": "Create type stub file `src/core/client.pyi` for the client module. Include all public classes, methods, and their type signatures. Add overloads where appropriate.",
+    "expected_tools": ["read_file", "write_file"],
+    "expected_steps": 2,
+    "timeout": 200,
+    "assertions": [
+      {"type": "file_exists", "path": "src/core/client.pyi"},
+      {"type": "file_contains", "path": "src/core/client.pyi", "pattern": "class"},
+      {"type": "file_contains", "path": "src/core/client.pyi", "pattern": "def"},
+      {"type": "file_contains", "path": "src/core/client.pyi", "pattern": "->"},
+      {"type": "file_contains", "path": "src/core/client.pyi", "pattern": ": "},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "type_accuracy": "Types should be accurate",
+      "completeness": "All public APIs should be typed",
+      "pyi_format": "Should follow .pyi conventions"
+    }
+  },
+  {
+    "id": "doc-arch-001",
+    "name": "Create Architecture Documentation",
+    "category": "documentation",
+    "difficulty": "hard",
+    "prompt": "Create architecture documentation in `docs/architecture.md`. Include system overview, component diagrams (using Mermaid), data flow, design decisions, and technology choices.",
+    "expected_tools": ["write_file"],
+    "expected_steps": 1,
+    "timeout": 240,
+    "assertions": [
+      {"type": "file_exists", "path": "docs/architecture.md"},
+      {"type": "file_contains", "path": "docs/architecture.md", "pattern": "# Architecture|# System"},
+      {"type": "file_contains", "path": "docs/architecture.md", "pattern": "```mermaid"},
+      {"type": "file_contains", "path": "docs/architecture.md", "pattern": "Component|component"},
+      {"type": "file_contains", "path": "docs/architecture.md", "pattern": "Data Flow|data flow"},
+      {"type": "file_contains", "path": "docs/architecture.md", "pattern": "Decision|decision"},
+      {"type": "tool_used", "tool": "write_file"}
+    ],
+    "rubric": {
+      "diagrams": "Should include visual diagrams",
+      "completeness": "Should cover all major components",
+      "clarity": "Should be understandable by new developers"
+    }
+  },
+  {
+    "id": "doc-changelog-001",
+    "name": "Generate Changelog Entry",
+    "category": "documentation",
+    "difficulty": "easy",
+    "prompt": "Update CHANGELOG.md with a new version entry (v2.1.0). Include sections for Added, Changed, Fixed, and Deprecated. Follow Keep a Changelog format.",
+    "expected_tools": ["read_file", "edit_file"],
+    "expected_steps": 2,
+    "timeout": 120,
+    "assertions": [
+      {"type": "file_contains", "path": "CHANGELOG.md", "pattern": "## \\[2.1.0\\]|## [2.1.0]"},
+      {"type": "file_contains", "path": "CHANGELOG.md", "pattern": "### Added"},
+      {"type": "file_contains", "path": "CHANGELOG.md", "pattern": "### Changed"},
+      {"type": "file_contains", "path": "CHANGELOG.md", "pattern": "### Fixed"},
+      {"type": "tool_used", "tool": "edit_file"}
+    ],
+    "rubric": {
+      "format": "Should follow Keep a Changelog format",
+      "sections": "Should include all required sections",
+      "clarity": "Entries should be clear and descriptive"
+    }
+  }
+]
