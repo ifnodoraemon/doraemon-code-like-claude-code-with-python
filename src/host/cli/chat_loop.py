@@ -6,36 +6,37 @@ Extracted from main.py for better maintainability.
 """
 
 import asyncio
+import json
 import logging
 import sys
-from pathlib import Path
 
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-from src.core.background_tasks import get_task_manager
-from src.core.checkpoint import CheckpointConfig, CheckpointManager
-from src.core.command_history import BashModeExecutor, CommandHistory
 from src.core.config import load_config
-from src.core.context_manager import ContextConfig, ContextManager
-from src.core.cost_tracker import BudgetConfig, CostTracker
-from src.core.hooks import HookEvent, HookManager
-from src.core.model_client import ClientMode, Message, ModelClient, ToolDefinition
+from src.core.hooks import HookEvent
+from src.core.model_client import ClientMode, Message, ToolDefinition
+from src.core.model_utils import ChatResponse
+from src.core.parallel_executor import DependencyAnalyzer
+from src.core.parallel_executor import ToolCall as PToolCall
 from src.core.prompts import get_system_prompt
-from src.core.rules import format_instructions_for_prompt, load_all_instructions
-from src.core.session import SessionManager
-from src.core.skills import SkillManager
-from src.core.tool_selector import ToolSelector
-from src.host.cli.commands import CommandHandler, MODE_COLORS
+from src.core.rules import (
+    format_instructions_for_prompt,
+    format_memory_for_prompt,
+    load_all_instructions,
+    load_global_memory,
+    load_project_memory,
+)
+from src.host.cli.commands import MODE_COLORS, CommandHandler
 from src.host.cli.initialization import initialize_all_managers
 from src.host.cli.tool_execution import (
     detect_tool_loop,
     execute_tool,
     parse_tool_arguments,
 )
-from src.host.tools import get_default_registry
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -44,7 +45,7 @@ MAX_TOOL_STEPS = 15  # Prevent infinite tool loops
 
 
 def build_system_prompt(mode: str, skills_content: str = "") -> str:
-    """Build the system prompt with mode, rules, and skills."""
+    """Build the system prompt with mode, rules, memory, and skills."""
     config = load_config()
     persona = config.get("persona", {})
 
@@ -56,6 +57,19 @@ def build_system_prompt(mode: str, skills_content: str = "") -> str:
     if instructions:
         system_prompt += format_instructions_for_prompt(instructions)
 
+    # Add project memory (.doraemon/MEMORY.md and ~/.doraemon/MEMORY.md)
+    project_memory = load_project_memory()
+    global_memory = load_global_memory()
+    combined_memory = ""
+    if project_memory:
+        combined_memory += project_memory
+    if global_memory:
+        if combined_memory:
+            combined_memory += "\n\n"
+        combined_memory += global_memory
+    if combined_memory:
+        system_prompt += format_memory_for_prompt(combined_memory)
+
     # Add active skills (loaded on-demand based on context)
     if skills_content:
         system_prompt += f"\n\n{skills_content}"
@@ -65,23 +79,26 @@ def build_system_prompt(mode: str, skills_content: str = "") -> str:
 
 def convert_tools_to_definitions(registry_tools: list) -> list:
     """Convert registry tools to ToolDefinition format."""
-    from src.core.model_client import ToolDefinition
 
     definitions = []
     for tool in registry_tools:
         # Handle both FunctionDeclaration and dict formats
         if hasattr(tool, "name"):
-            definitions.append(ToolDefinition(
-                name=tool.name,
-                description=getattr(tool, "description", ""),
-                parameters=getattr(tool, "parameters", {}) or {},
-            ))
+            definitions.append(
+                ToolDefinition(
+                    name=tool.name,
+                    description=getattr(tool, "description", ""),
+                    parameters=getattr(tool, "parameters", {}) or {},
+                )
+            )
         elif isinstance(tool, dict):
-            definitions.append(ToolDefinition(
-                name=tool.get("name", ""),
-                description=tool.get("description", ""),
-                parameters=tool.get("parameters", {}),
-            ))
+            definitions.append(
+                ToolDefinition(
+                    name=tool.get("name", ""),
+                    description=tool.get("description", ""),
+                    parameters=tool.get("parameters", {}),
+                )
+            )
     return definitions
 
 
@@ -121,7 +138,9 @@ def validate_client_mode(model_client) -> bool:
         providers = mode_info.get("providers", {})
         if not any(providers.values()):
             console.print("[red]Error: No API keys configured[/red]")
-            console.print("[dim]Set at least one of: GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY[/dim]")
+            console.print(
+                "[dim]Set at least one of: GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY[/dim]"
+            )
             console.print("[dim]Or configure Gateway mode: DORAEMON_GATEWAY_URL[/dim]")
             return False
 
@@ -133,12 +152,16 @@ def restore_session_history(session_mgr, ctx, resume_session: str | None):
     if resume_session:
         session_data = session_mgr.resume_session(resume_session)
         if session_data:
-            console.print(f"[green]Resumed session: {session_data.metadata.get_display_name()}[/green]")
+            console.print(
+                f"[green]Resumed session: {session_data.metadata.get_display_name()}[/green]"
+            )
             for msg in session_data.messages:
                 role = msg.get("role", "")
                 content = msg.get("content", "")
                 if role and content:
-                    ctx.add_user_message(content) if role == "user" else ctx.add_assistant_message(content)
+                    ctx.add_user_message(content) if role == "user" else ctx.add_assistant_message(
+                        content
+                    )
         else:
             console.print(f"[yellow]Session not found: {resume_session}[/yellow]")
 
@@ -192,6 +215,90 @@ async def handle_bash_mode(user_input: str, bash_executor, ctx, cmd_history):
         cmd_history.add(user_input)
 
 
+def _merge_tool_call_delta(accumulated: list[dict], delta: dict):
+    """Merge a streaming tool_call delta into accumulated list."""
+    index = delta.get("index", len(accumulated))
+    while len(accumulated) <= index:
+        accumulated.append(
+            {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            }
+        )
+    tc = accumulated[index]
+    if delta.get("id"):
+        tc["id"] = delta["id"]
+    func_delta = delta.get("function", {})
+    if func_delta.get("name"):
+        tc["function"]["name"] += func_delta["name"]
+    if func_delta.get("arguments"):
+        tc["function"]["arguments"] += func_delta["arguments"]
+
+
+async def stream_model_response(
+    model_client,
+    messages: list[Message],
+    tools,
+    model_name: str,
+) -> ChatResponse:
+    """
+    Stream model response, printing text in real-time.
+
+    Accumulates the full response (text + tool_calls) for agentic loop.
+    Falls back to non-streaming on error.
+
+    Returns:
+        ChatResponse with accumulated content, tool_calls, usage.
+    """
+    accumulated_content = ""
+    accumulated_thought = ""
+    accumulated_tool_calls: list[dict] = []
+    last_usage = None
+    finish_reason = None
+
+    try:
+        stream = model_client.chat_stream(messages, tools=tools, model=model_name)
+
+        with Live("", console=console, refresh_per_second=12, transient=True) as live:
+            async for chunk in stream:
+                if chunk.thought:
+                    accumulated_thought += chunk.thought
+                if chunk.content:
+                    accumulated_content += chunk.content
+                    live.update(Markdown(accumulated_content))
+                if chunk.tool_calls:
+                    for tc_delta in chunk.tool_calls:
+                        _merge_tool_call_delta(accumulated_tool_calls, tc_delta)
+                if chunk.finish_reason:
+                    finish_reason = chunk.finish_reason
+                if chunk.usage:
+                    last_usage = chunk.usage
+
+        # Parse accumulated tool_call arguments from JSON strings
+        for tc in accumulated_tool_calls:
+            func = tc.get("function", {})
+            args = func.get("arguments", "")
+            if isinstance(args, str) and args:
+                try:
+                    func["arguments"] = json.loads(args)
+                except json.JSONDecodeError:
+                    pass
+
+    except Exception as e:
+        logger.debug(f"Streaming failed, falling back to non-streaming: {e}")
+        response = await model_client.chat(messages, tools=tools, model=model_name)
+        return response
+
+    return ChatResponse(
+        content=accumulated_content or None,
+        thought=accumulated_thought or None,
+        tool_calls=accumulated_tool_calls or None,
+        finish_reason=finish_reason,
+        usage=last_usage,
+    )
+
+
 async def process_tool_calls(
     response,
     registry,
@@ -202,9 +309,17 @@ async def process_tool_calls(
     headless: bool,
     model_name: str,
     cost_tracker,
+    model_client=None,
+    conversation_history: list[Message] | None = None,
+    tool_definitions=None,
+    system_prompt: str = "",
+    permission_mgr=None,
 ) -> tuple[str, list[str], list[Message]]:
     """
-    Process tool calls from model response.
+    Process tool calls from model response with agentic loop.
+
+    After executing tools, sends results back to the model for follow-up
+    reasoning. Continues until the model responds with text only (no tool calls).
 
     Returns:
         tuple of (accumulated_text, files_modified, tool_results_messages)
@@ -214,21 +329,31 @@ async def process_tool_calls(
     tool_steps = 0
     previous_tool_calls = []
     tool_results_messages = []
+    last_usage = response.usage
 
     while True:
         if tool_steps >= MAX_TOOL_STEPS:
-            console.print(f"[red]⚠️ Max tool steps ({MAX_TOOL_STEPS}) reached. Stopping to prevent infinite loop.[/red]")
-            ctx.add_system_message(f"System: Execution stopped because maximum tool steps ({MAX_TOOL_STEPS}) were exceeded.")
+            console.print(
+                f"[red]⚠️ Max tool steps ({MAX_TOOL_STEPS}) reached. Stopping to prevent infinite loop.[/red]"
+            )
+            ctx.add_system_message(
+                f"System: Execution stopped because maximum tool steps ({MAX_TOOL_STEPS}) were exceeded."
+            )
             break
 
         tool_steps += 1
 
         # Debug: Log response state
-        logger.debug(f"Tool step {tool_steps}: content={bool(response.content)}, tool_calls={bool(response.tool_calls)}, thought={bool(response.thought)}")
+        logger.debug(
+            f"Tool step {tool_steps}: content={bool(response.content)}, tool_calls={bool(response.tool_calls)}, thought={bool(response.thought)}"
+        )
 
         if not response.content and not response.tool_calls:
-            console.print("[red]Empty response[/red]")
-            logger.warning(f"Empty response received. Raw: {response.raw if hasattr(response, 'raw') else 'N/A'}")
+            if tool_steps == 1:
+                console.print("[red]Empty response[/red]")
+                logger.warning(
+                    f"Empty response received. Raw: {response.raw if hasattr(response, 'raw') else 'N/A'}"
+                )
             break
 
         has_tool_call = response.has_tool_calls
@@ -259,12 +384,13 @@ async def process_tool_calls(
 
         # Tool calls
         if response.tool_calls:
+            # Pre-process: parse args and check loops
+            pending_calls = []
             for tc in response.tool_calls:
                 func = tc.get("function", {})
                 tool_name = func.get("name", "")
                 tool_call_id = tc.get("id", "")
 
-                # Parse arguments
                 args_raw = func.get("arguments", {})
                 args, args_str_normalized = parse_tool_arguments(args_raw)
 
@@ -272,62 +398,150 @@ async def process_tool_calls(
                 is_loop, loop_msg = detect_tool_loop(tool_name, args, previous_tool_calls)
                 if is_loop:
                     console.print(f"[red]⚠️ {loop_msg}[/red]")
-                    tool_results.append({
-                        "tool_call_id": tool_call_id,
-                        "name": tool_name,
-                        "result": f"Error: {loop_msg}",
-                    })
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call_id,
+                            "name": tool_name,
+                            "result": f"Error: {loop_msg}",
+                        }
+                    )
                     continue
 
-                # Execute tool
-                tool_result_dict = await execute_tool(
-                    tool_name=tool_name,
-                    args=args,
-                    tool_call_id=tool_call_id,
-                    registry=registry,
-                    sensitive_tools=sensitive_tools,
-                    checkpoint_mgr=checkpoint_mgr,
-                    hook_mgr=hook_mgr,
-                    headless=headless,
-                )
+                pending_calls.append((tool_name, args, tool_call_id))
 
-                tool_results.append(tool_result_dict)
+            # Execute tools: parallel for multiple independent calls, sequential for single/sensitive
+            if len(pending_calls) > 1:
+                # Use DependencyAnalyzer to find parallel stages
+                analyzer = DependencyAnalyzer()
+                p_calls = [
+                    PToolCall(id=tc_id, name=tn, arguments=a) for tn, a, tc_id in pending_calls
+                ]
+                stages = analyzer.analyze(p_calls)
 
-                # Special handling for switch_mode
-                if tool_name == "switch_mode" and "mode" in args:
-                    # This will be handled by the caller
-                    pass
+                for stage in stages:
+                    if len(stage) == 1:
+                        pc = stage[0]
+                        a = next(a for tn, a, tc_id in pending_calls if tc_id == pc.id)
+                        r = await execute_tool(
+                            tool_name=pc.name,
+                            args=a,
+                            tool_call_id=pc.id,
+                            registry=registry,
+                            sensitive_tools=sensitive_tools,
+                            checkpoint_mgr=checkpoint_mgr,
+                            hook_mgr=hook_mgr,
+                            headless=headless,
+                            permission_mgr=permission_mgr,
+                        )
+                        tool_results.append(r)
+                    else:
+                        # Parallel execution of independent tools in this stage
+                        async def _run_tool(pc, a):
+                            return await execute_tool(
+                                tool_name=pc.name,
+                                args=a,
+                                tool_call_id=pc.id,
+                                registry=registry,
+                                sensitive_tools=sensitive_tools,
+                                checkpoint_mgr=checkpoint_mgr,
+                                hook_mgr=hook_mgr,
+                                headless=headless,
+                                permission_mgr=permission_mgr,
+                            )
 
-                # Track file modifications
+                        tasks = []
+                        for pc in stage:
+                            a = next(a for tn, a, tc_id in pending_calls if tc_id == pc.id)
+                            tasks.append(_run_tool(pc, a))
+                        stage_results = await asyncio.gather(*tasks)
+                        tool_results.extend(stage_results)
+            else:
+                # Single tool call - execute directly
+                for tool_name, args, tool_call_id in pending_calls:
+                    tool_result_dict = await execute_tool(
+                        tool_name=tool_name,
+                        args=args,
+                        tool_call_id=tool_call_id,
+                        registry=registry,
+                        sensitive_tools=sensitive_tools,
+                        checkpoint_mgr=checkpoint_mgr,
+                        hook_mgr=hook_mgr,
+                        headless=headless,
+                        permission_mgr=permission_mgr,
+                    )
+                    tool_results.append(tool_result_dict)
+
+            # Post-process: track modifications
+            for tool_name, args, _tool_call_id in pending_calls:
                 if tool_name in ["write_file", "edit_file"] and "path" in args:
                     files_modified.append(args["path"])
 
         # No more tool calls - done with this turn
         if not has_tool_call:
-            logger.info(f"Turn complete: accumulated_text={len(accumulated_text)} chars, content={bool(response.content)}")
+            logger.info(
+                f"Turn complete: accumulated_text={len(accumulated_text)} chars, content={bool(response.content)}"
+            )
             if not accumulated_text and not response.content:
                 console.print("[yellow]⚠️ No text response generated.[/yellow]")
 
             # Track usage and costs
-            usage = response.usage
-            if usage:
+            if last_usage:
                 cost_tracker.track(
                     model=model_name,
-                    input_tokens=usage.get("prompt_tokens", 0),
-                    output_tokens=usage.get("completion_tokens", 0),
+                    input_tokens=last_usage.get("prompt_tokens", 0),
+                    output_tokens=last_usage.get("completion_tokens", 0),
                     session_id=ctx.session_id,
                 )
 
             break
 
-        # Send tool results back
+        # === Agentic loop: send tool results back to model ===
+
+        # Add assistant message (with tool_calls) to conversation history
+        if conversation_history is not None:
+            conversation_history.append(
+                Message(
+                    role="assistant",
+                    content=response.content,
+                    tool_calls=response.tool_calls,
+                    thought=response.thought,
+                )
+            )
+
+        # Add tool result messages
         for tr in tool_results:
-            tool_results_messages.append(Message(
+            tool_msg = Message(
                 role="tool",
                 content=tr["result"],
                 tool_call_id=tr["tool_call_id"],
                 name=tr["name"],
-            ))
+            )
+            tool_results_messages.append(tool_msg)
+            if conversation_history is not None:
+                conversation_history.append(tool_msg)
+
+        # Re-call model with updated conversation history (streaming)
+        if model_client and conversation_history is not None and tool_definitions is not None:
+            messages_for_api = [
+                Message(role="system", content=system_prompt)
+            ] + conversation_history
+            try:
+                response = await stream_model_response(
+                    model_client,
+                    messages_for_api,
+                    tool_definitions,
+                    model_name,
+                )
+                last_usage = response.usage
+            except Exception as e:
+                console.print(f"[red]API Error during tool loop: {e}[/red]")
+                break
+        else:
+            # Fallback: no model_client provided, break after first round
+            logger.warning(
+                "No model_client provided to process_tool_calls, cannot send tool results back to model"
+            )
+            break
 
     return accumulated_text, files_modified, tool_results_messages
 
@@ -359,12 +573,17 @@ async def chat_loop(
         model_client = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: asyncio.run(
-                (lambda: __import__('src.host.cli.initialization', fromlist=['initialize_model_client']).initialize_model_client())()
-            )
+                (
+                    lambda: __import__(
+                        "src.host.cli.initialization", fromlist=["initialize_model_client"]
+                    ).initialize_model_client()
+                )()
+            ),
         )
     except Exception:
         # Fallback: initialize directly
         from src.host.cli.initialization import initialize_model_client
+
         model_client = await initialize_model_client()
 
     if not validate_client_mode(model_client):
@@ -389,6 +608,7 @@ async def chat_loop(
     cmd_history = managers["cmd_history"]
     bash_executor = managers["bash_executor"]
     session_mgr = managers["session_mgr"]
+    permission_mgr = managers.get("permission_mgr")
 
     sensitive_tools = registry.get_sensitive_tools()
 
@@ -402,6 +622,7 @@ async def chat_loop(
     mode = "build"
     turn_count = 0
     import os
+
     model_name = os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview")
 
     # Get tools for current mode
@@ -447,6 +668,7 @@ async def chat_loop(
     )
 
     # Main loop
+    _ctrl_c_count = 0
     try:
         while True:
             mode_color = MODE_COLORS.get(mode, "yellow")
@@ -454,7 +676,9 @@ async def chat_loop(
             # Show running tasks
             running_tasks = task_mgr.get_running_tasks()
             if running_tasks:
-                console.print(f"[dim cyan]⏳ {len(running_tasks)} background task(s) running[/dim cyan]")
+                console.print(
+                    f"[dim cyan]⏳ {len(running_tasks)} background task(s) running[/dim cyan]"
+                )
 
             # Check budget warning
             budget_status = cost_tracker.check_budget()
@@ -469,7 +693,36 @@ async def chat_loop(
             elif headless:
                 break
             else:
-                user_input = Prompt.ask(f"\n[bold {mode_color}]You ({mode})[/bold {mode_color}]")
+                try:
+                    _ctrl_c_count = 0
+                    user_input = Prompt.ask(
+                        f"\n[bold {mode_color}]You ({mode})[/bold {mode_color}]"
+                    )
+
+                    # Multi-line input: detect """ or ''' opener
+                    for delim in ('"""', "'''"):
+                        if user_input.strip().startswith(delim) and not user_input.strip().endswith(
+                            delim
+                        ):
+                            lines = [user_input]
+                            console.print(
+                                "[dim]Multi-line mode (close with matching delimiter)...[/dim]"
+                            )
+                            while True:
+                                line = Prompt.ask("[dim]...[/dim]")
+                                lines.append(line)
+                                if delim in line:
+                                    break
+                            user_input = "\n".join(lines)
+                            break
+
+                except KeyboardInterrupt:
+                    _ctrl_c_count += 1
+                    if _ctrl_c_count >= 2:
+                        console.print("\n[yellow]Exiting...[/yellow]")
+                        break
+                    console.print("\n[dim]Press Ctrl+C again to exit, or type to continue.[/dim]")
+                    continue
 
             # Exit
             if user_input.lower() in ["exit", "quit", "/exit"]:
@@ -545,23 +798,30 @@ async def chat_loop(
             conversation_history.append(Message(role="user", content=user_input))
 
             # Build messages with system prompt
-            messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
+            messages_for_api = [
+                Message(role="system", content=system_prompt)
+            ] + conversation_history
 
-            # Send message using unified client
+            # Send message using unified client (streaming)
             try:
-                with console.status(f"[bold {mode_color}]Thinking...[/bold {mode_color}]"):
-                    response = await model_client.chat(
-                        messages_for_api,
-                        tools=tool_definitions,
-                        model=model_name,
-                    )
+                response = await stream_model_response(
+                    model_client,
+                    messages_for_api,
+                    tool_definitions,
+                    model_name,
+                )
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Generation interrupted.[/yellow]")
+                conversation_history.pop()
+                checkpoint_mgr.discard_checkpoint()
+                continue
             except Exception as e:
                 console.print(f"[red]API Error: {e}[/red]")
                 conversation_history.pop()
                 checkpoint_mgr.discard_checkpoint()
                 continue
 
-            # Process tool calls
+            # Process tool calls (agentic loop: sends tool results back to model)
             accumulated_text, files_modified, tool_results_messages = await process_tool_calls(
                 response=response,
                 registry=registry,
@@ -572,13 +832,17 @@ async def chat_loop(
                 headless=headless,
                 model_name=model_name,
                 cost_tracker=cost_tracker,
+                model_client=model_client,
+                conversation_history=conversation_history,
+                tool_definitions=tool_definitions,
+                system_prompt=system_prompt,
+                permission_mgr=permission_mgr,
             )
 
-            # Add assistant message to conversation history
-            conversation_history.append(Message(role="assistant", content=accumulated_text))
-
-            # Add tool results to conversation history
-            conversation_history.extend(tool_results_messages)
+            # Add final assistant text to conversation history
+            # (intermediate assistant+tool messages are already appended by process_tool_calls)
+            if accumulated_text:
+                conversation_history.append(Message(role="assistant", content=accumulated_text))
 
             # Track assistant response in context
             usage = response.usage
@@ -601,7 +865,9 @@ async def chat_loop(
 
             # Finalize checkpoint
             if files_modified:
-                checkpoint_mgr.finalize_checkpoint(description=f"Modified: {', '.join(files_modified)}")
+                checkpoint_mgr.finalize_checkpoint(
+                    description=f"Modified: {', '.join(files_modified)}"
+                )
             else:
                 checkpoint_mgr.discard_checkpoint()
 
@@ -630,6 +896,7 @@ async def chat_loop(
     except Exception as e:
         console.print(f"[red]Error in chat loop: {e}[/red]")
         import traceback
+
         traceback.print_exc()
     finally:
         try:
