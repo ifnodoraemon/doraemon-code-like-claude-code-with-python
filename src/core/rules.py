@@ -238,3 +238,74 @@ def format_instructions_for_prompt(instructions: str) -> str:
 
 Follow these project-specific rules and conventions in all your responses.
 """
+
+
+# Memory file name
+MEMORY_FILE = "MEMORY.md"
+
+
+def load_project_memory(project_dir: Path | None = None) -> str | None:
+    """
+    Load MEMORY.md from project's .doraemon directory.
+
+    Args:
+        project_dir: Project directory (defaults to cwd)
+
+    Returns:
+        Content of .doraemon/MEMORY.md or None if not found
+    """
+    if project_dir is None:
+        project_dir = Path.cwd()
+
+    memory_file = project_dir / ".doraemon" / MEMORY_FILE
+    if memory_file.exists():
+        try:
+            content = memory_file.read_text(encoding="utf-8")
+            logger.info(f"Loaded project memory: {memory_file}")
+            return content
+        except Exception as e:
+            logger.error(f"Failed to read {MEMORY_FILE}: {e}")
+    return None
+
+
+def load_global_memory() -> str | None:
+    """
+    Load MEMORY.md from ~/.doraemon/.
+
+    Returns:
+        Content of global MEMORY.md or None if not found
+    """
+    global_memory = Path.home() / ".doraemon" / MEMORY_FILE
+    if global_memory.exists():
+        try:
+            content = global_memory.read_text(encoding="utf-8")
+            logger.info(f"Loaded global memory: {global_memory}")
+            return content
+        except Exception as e:
+            logger.error(f"Failed to read global {MEMORY_FILE}: {e}")
+    return None
+
+
+def format_memory_for_prompt(memory: str) -> str:
+    """
+    Format memory content for inclusion in system prompt.
+
+    Args:
+        memory: Raw memory text
+
+    Returns:
+        Formatted memory ready for system prompt
+    """
+    if not memory:
+        return ""
+
+    return f"""
+
+=== PROJECT MEMORY ===
+
+{memory.strip()}
+
+=== END PROJECT MEMORY ===
+
+Use this memory to inform your responses. Update it when you learn important project details.
+"""
