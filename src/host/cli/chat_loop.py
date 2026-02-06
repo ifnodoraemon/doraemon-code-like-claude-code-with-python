@@ -658,6 +658,7 @@ async def chat_loop(
         hook_mgr=hook_mgr,
         model_name=model_name,
         project=project,
+        permission_mgr=permission_mgr,
     )
 
     console.print(

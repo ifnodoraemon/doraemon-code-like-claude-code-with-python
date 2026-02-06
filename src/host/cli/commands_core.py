@@ -35,6 +35,7 @@ class CoreCommandHandler:
         hook_mgr,
         model_name: str,
         project: str,
+        permission_mgr=None,
     ):
         self.ctx = ctx
         self.tool_selector = tool_selector
@@ -48,6 +49,7 @@ class CoreCommandHandler:
         self.hook_mgr = hook_mgr
         self.model_name = model_name
         self.project = project
+        self.permission_mgr = permission_mgr
 
     async def handle_core_command(
         self,
@@ -95,6 +97,8 @@ class CoreCommandHandler:
                     result["tool_names"] = new_tool_names
                     result["tool_definitions"] = new_tool_definitions
                     self.hook_mgr.permission_mode = new_mode
+                    if self.permission_mgr:
+                        self.permission_mgr.set_mode(new_mode)
                     result["system_prompt"] = build_system_prompt(new_mode, active_skills_content)
                     console.print(
                         f"[green]Switched to {new_mode} mode ({len(new_tool_definitions)} tools)[/green]"

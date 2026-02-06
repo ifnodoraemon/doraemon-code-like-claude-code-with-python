@@ -11,9 +11,9 @@ from typing import Any
 
 from rich.console import Console
 
-from src.host.cli.commands_core import CoreCommandHandler, MODE_COLORS
-from src.host.cli.commands_session import SessionCommandHandler
 from src.host.cli.commands_config import ConfigCommandHandler
+from src.host.cli.commands_core import MODE_COLORS, CoreCommandHandler
+from src.host.cli.commands_session import SessionCommandHandler
 
 console = Console()
 
@@ -38,6 +38,7 @@ class CommandHandler:
         hook_mgr,
         model_name: str,
         project: str,
+        permission_mgr=None,
     ):
         self.ctx = ctx
         self.tool_selector = tool_selector
@@ -54,16 +55,47 @@ class CommandHandler:
 
         # Initialize specialized handlers
         self.core_handler = CoreCommandHandler(
-            ctx, tool_selector, registry, skill_mgr, checkpoint_mgr, task_mgr,
-            cost_tracker, cmd_history, session_mgr, hook_mgr, model_name, project
+            ctx,
+            tool_selector,
+            registry,
+            skill_mgr,
+            checkpoint_mgr,
+            task_mgr,
+            cost_tracker,
+            cmd_history,
+            session_mgr,
+            hook_mgr,
+            model_name,
+            project,
+            permission_mgr=permission_mgr,
         )
         self.session_handler = SessionCommandHandler(
-            ctx, tool_selector, registry, skill_mgr, checkpoint_mgr, task_mgr,
-            cost_tracker, cmd_history, session_mgr, hook_mgr, model_name, project
+            ctx,
+            tool_selector,
+            registry,
+            skill_mgr,
+            checkpoint_mgr,
+            task_mgr,
+            cost_tracker,
+            cmd_history,
+            session_mgr,
+            hook_mgr,
+            model_name,
+            project,
         )
         self.config_handler = ConfigCommandHandler(
-            ctx, tool_selector, registry, skill_mgr, checkpoint_mgr, task_mgr,
-            cost_tracker, cmd_history, session_mgr, hook_mgr, model_name, project
+            ctx,
+            tool_selector,
+            registry,
+            skill_mgr,
+            checkpoint_mgr,
+            task_mgr,
+            cost_tracker,
+            cmd_history,
+            session_mgr,
+            hook_mgr,
+            model_name,
+            project,
         )
 
     async def handle(
@@ -104,9 +136,16 @@ class CommandHandler:
 
         # Try core commands first (they may modify mode/tools)
         core_result = await self.core_handler.handle_core_command(
-            cmd, cmd_args, mode, tool_names, tool_definitions,
-            conversation_history, active_skills_content,
-            build_system_prompt, convert_tools_to_definitions, sensitive_tools
+            cmd,
+            cmd_args,
+            mode,
+            tool_names,
+            tool_definitions,
+            conversation_history,
+            active_skills_content,
+            build_system_prompt,
+            convert_tools_to_definitions,
+            sensitive_tools,
         )
         if core_result:
             return core_result
