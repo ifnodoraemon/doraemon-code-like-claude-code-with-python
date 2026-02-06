@@ -104,7 +104,7 @@ class ConversationSummary:
 class ContextConfig:
     """Configuration for context management."""
 
-    # Token limits (Gemini 2.0 Flash has 1M context, but we stay conservative)
+    # Token limits (dynamically set based on model)
     max_context_tokens: int = 100_000
     summarize_threshold: float = 0.7  # Summarize at 70% of max
     target_after_summary: float = 0.4  # Target 40% after summarization
@@ -119,6 +119,66 @@ class ContextConfig:
     # Persistence
     auto_save: bool = True
     save_directory: str = ".doraemon/conversations"
+
+
+# Model context window sizes (conservative limits to leave room for output)
+MODEL_CONTEXT_WINDOWS: dict[str, int] = {
+    # Google Gemini
+    "gemini-2.5-flash": 800_000,
+    "gemini-2.5-pro": 800_000,
+    "gemini-2.0-flash": 800_000,
+    "gemini-3-flash": 800_000,
+    "gemini-3-pro": 800_000,
+    # OpenAI
+    "gpt-4o": 100_000,
+    "gpt-4o-mini": 100_000,
+    "gpt-4-turbo": 100_000,
+    "gpt-4": 6_000,
+    "o1": 100_000,
+    "o3": 100_000,
+    # Anthropic Claude
+    "claude-opus": 150_000,
+    "claude-sonnet": 150_000,
+    "claude-haiku": 150_000,
+    "claude-3": 150_000,
+    "claude-3.5": 150_000,
+    "claude-4": 150_000,
+    # Ollama / local models
+    "llama": 6_000,
+    "mistral": 25_000,
+    "codellama": 12_000,
+    "deepseek": 50_000,
+    "qwen": 25_000,
+}
+
+DEFAULT_CONTEXT_WINDOW = 100_000
+
+
+def get_context_window_for_model(model_name: str) -> int:
+    """
+    Get the context window size for a model.
+
+    Uses prefix matching to handle versioned model names like
+    'gemini-2.5-flash-preview-05-20' or 'claude-sonnet-4-20250514'.
+    """
+    if not model_name:
+        return DEFAULT_CONTEXT_WINDOW
+
+    model_lower = model_name.lower()
+
+    # Try exact match first
+    if model_lower in MODEL_CONTEXT_WINDOWS:
+        return MODEL_CONTEXT_WINDOWS[model_lower]
+
+    # Try prefix matching (longest match wins)
+    best_match = ""
+    best_size = DEFAULT_CONTEXT_WINDOW
+    for prefix, size in MODEL_CONTEXT_WINDOWS.items():
+        if model_lower.startswith(prefix) and len(prefix) > len(best_match):
+            best_match = prefix
+            best_size = size
+
+    return best_size
 
 
 DEFAULT_CONFIG = ContextConfig()

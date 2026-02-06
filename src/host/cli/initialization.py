@@ -11,7 +11,7 @@ from pathlib import Path
 from src.core.background_tasks import get_task_manager
 from src.core.checkpoint import CheckpointConfig, CheckpointManager
 from src.core.command_history import BashModeExecutor, CommandHistory
-from src.core.context_manager import ContextConfig, ContextManager
+from src.core.context_manager import ContextConfig, ContextManager, get_context_window_for_model
 from src.core.cost_tracker import BudgetConfig, CostTracker
 from src.core.hooks import HookManager
 from src.core.model_client import ModelClient
@@ -38,9 +38,12 @@ def initialize_tool_selector() -> ToolSelector:
 
 
 def initialize_context_manager(project: str) -> ContextManager:
-    """Initialize the context manager."""
+    """Initialize the context manager with model-aware context window."""
+    model_name = os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview")
+    max_tokens = get_context_window_for_model(model_name)
+
     ctx_config = ContextConfig(
-        max_context_tokens=100_000,
+        max_context_tokens=max_tokens,
         summarize_threshold=0.7,
         keep_recent_messages=6,
         auto_save=True,

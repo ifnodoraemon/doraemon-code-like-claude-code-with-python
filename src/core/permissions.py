@@ -151,14 +151,41 @@ DEFAULT_RULES: list[PermissionRule] = [
         description="Deny access to sensitive files",
         level=PermissionLevel.DENY,
         paths=[
+            # Secrets and credentials
             "**/.env",
             "**/.env.*",
             "**/secrets.*",
             "**/credentials.*",
             "**/*.pem",
             "**/*.key",
+            "**/*.p12",
+            "**/*.pfx",
+            "**/*.jks",
             "**/id_rsa*",
+            "**/id_ed25519*",
             "**/.ssh/*",
+            # Cloud provider credentials
+            "**/.aws/*",
+            "**/.azure/*",
+            "**/.gcloud/*",
+            "**/.config/gcloud/*",
+            # Container/orchestration credentials
+            "**/.docker/config.json",
+            "**/.kube/config",
+            "**/.kube/*.yaml",
+            # Token and password files
+            "**/token",
+            "**/token.*",
+            "**/*password*",
+            "**/*secret*",
+            # Package manager tokens
+            "**/.npmrc",
+            "**/.pypirc",
+            "**/.gem/credentials",
+            # Database credentials
+            "**/.pgpass",
+            "**/.my.cnf",
+            "**/.mongocli.yaml",
         ],
         priority=100,
     ),

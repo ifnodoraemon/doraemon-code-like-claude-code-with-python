@@ -53,6 +53,12 @@ class ShellConfig:
             "mkfs",
             "dd if=/dev/zero",
             ":(){:|:&};:",  # fork bomb
+            "chmod -R 777 /",
+            "chown -R",
+            "> /dev/sda",
+            "mv / ",
+            "wget -O- | sh",
+            "curl -s | sh",
         ]
     )
 
@@ -60,10 +66,38 @@ class ShellConfig:
     sensitive_patterns: list[str] = field(
         default_factory=lambda: [
             "rm -rf",
+            "rm -r",
             "sudo",
             "chmod 777",
             "curl | bash",
             "wget | bash",
+            "pip install",
+            "npm install -g",
+            "apt install",
+            "apt remove",
+            "systemctl",
+            "service ",
+            "kill -9",
+            "pkill",
+            "docker rm",
+            "docker rmi",
+        ]
+    )
+
+    # Dangerous base commands to detect via shlex parsing
+    blocked_base_commands: list[str] = field(
+        default_factory=lambda: [
+            "mkfs",
+            "fdisk",
+            "parted",
+            "wipefs",
+            "shred",
+            "halt",
+            "poweroff",
+            "reboot",
+            "shutdown",
+            "init",
+            "telinit",
         ]
     )
 
@@ -124,33 +158,173 @@ def _cleanup_finished_processes():
 
 def _is_command_blocked(command: str, config: ShellConfig = DEFAULT_CONFIG) -> bool:
     """Check if a command is blocked for safety."""
+    import re
+    import shlex
+
     command_lower = command.lower().strip()
 
     # Remove quotes and escape sequences for better detection
-    # This helps prevent simple bypass attempts
-    normalized = command_lower.replace('"', '').replace("'", '').replace('\\', '')
+    normalized = command_lower.replace('"', "").replace("'", "").replace("\\", "")
+
+    # Check against blocked command strings
+    for blocked in config.blocked_commands:
+        blocked_lower = blocked.lower()
+        if blocked_lower in command_lower or blocked_lower in normalized:
+            return True
+
+    # Parse with shlex for structured analysis
+    try:
+        tokens = shlex.split(command_lower)
+    except ValueError:
+        tokens = command_lower.split()
+
+    if tokens:
+        # Check base command against blocked list
+        base_cmd = os.path.basename(tokens[0])
+        if base_cmd in config.blocked_base_commands:
+            return True
+
+        # Detect dangerous rm patterns even with variable interpolation
+        if base_cmd == "rm" and any(t in tokens for t in ["-rf", "-fr"]):
+            # Check for root paths
+            for t in tokens:
+                if t in ("/", "/*", "/.", "/.."):
+                    return True
+
+    # Check for multi-command chains (;, &&, ||) containing blocked commands
+    for separator in [";", "&&", "||"]:
+        if separator in command:
+            subcmds = command.split(separator)
+            for subcmd in subcmds:
+                subcmd = subcmd.strip()
+                if subcmd and _is_single_command_blocked(subcmd, config):
+                    return True
+
+    # Regex-based pattern checks for dangerous operations
+    dangerous_patterns = [
+        r">\s*/dev/sd",  # Writing to disk devices
+        r"\|\s*bash",  # Piping to bash
+        r"\|\s*sh\b",  # Piping to sh
+        r"\|\s*zsh\b",  # Piping to zsh
+        r"eval\s+",  # eval command (injection vector)
+        r"exec\s+\d*[<>]",  # exec with redirects
+    ]
+
+    for pattern in dangerous_patterns:
+        if re.search(pattern, command_lower):
+            return True
+
+    return False
+
+
+def _is_single_command_blocked(command: str, config: ShellConfig) -> bool:
+    """Check a single command (no chains) against blocked list."""
+    import shlex
+
+    command_lower = command.lower().strip()
+    normalized = command_lower.replace('"', "").replace("'", "").replace("\\", "")
 
     for blocked in config.blocked_commands:
         blocked_lower = blocked.lower()
         if blocked_lower in command_lower or blocked_lower in normalized:
             return True
 
-    # Additional checks for dangerous patterns
-    dangerous_patterns = [
-        r'>\s*/dev/sd',  # Writing to disk devices
-        r'>\s*/dev/null.*2>&1.*&',  # Hiding output and backgrounding
-        r'\|\s*bash',  # Piping to bash
-        r'\|\s*sh\b',  # Piping to sh
-        r'\$\(.*\)',  # Command substitution (potential injection)
-        r'`.*`',  # Backtick command substitution
-    ]
+    try:
+        tokens = shlex.split(command_lower)
+    except ValueError:
+        tokens = command_lower.split()
 
-    import re
-    for pattern in dangerous_patterns:
-        if re.search(pattern, command_lower):
+    if tokens:
+        base_cmd = os.path.basename(tokens[0])
+        if base_cmd in config.blocked_base_commands:
             return True
 
     return False
+
+
+def _check_git_safety(command: str) -> str | None:
+    """
+    Check git commands for dangerous operations.
+
+    Returns error message if blocked, None if safe.
+    """
+    import shlex
+
+    command_stripped = command.strip()
+
+    # Only check git commands
+    if not command_stripped.startswith("git "):
+        return None
+
+    # Parse command tokens safely
+    try:
+        tokens = shlex.split(command_stripped)
+    except ValueError:
+        tokens = command_stripped.split()
+
+    if len(tokens) < 2:
+        return None
+
+    # Extract git subcommand
+    subcommand = tokens[1]
+
+    # --- Force push protection ---
+    if subcommand == "push":
+        for token in tokens[2:]:
+            if token in ("--force", "-f", "--force-with-lease"):
+                # Check if pushing to main/master
+                for t in tokens[2:]:
+                    if t in ("main", "master", "origin/main", "origin/master"):
+                        return (
+                            "Error: Force push to main/master is blocked for safety. "
+                            "This could overwrite shared history."
+                        )
+                return (
+                    "Error: Force push (--force) is blocked for safety. "
+                    "Use --force-with-lease if you must, or ask the user to confirm."
+                )
+
+    # --- Destructive reset protection ---
+    if subcommand == "reset":
+        if "--hard" in tokens:
+            return (
+                "Warning: 'git reset --hard' will discard all uncommitted changes. "
+                "This is blocked for safety. Use 'git stash' first to preserve changes."
+            )
+
+    # --- Checkout discard protection ---
+    if subcommand == "checkout":
+        if "." in tokens or "--" in tokens:
+            # checkout . or checkout -- <files> discards changes
+            if "." in tokens:
+                return (
+                    "Error: 'git checkout .' will discard all uncommitted changes. "
+                    "Use 'git stash' to preserve them first."
+                )
+
+    # --- Clean protection ---
+    if subcommand == "clean":
+        if "-f" in tokens or "--force" in tokens:
+            return (
+                "Error: 'git clean -f' will permanently delete untracked files. "
+                "This is blocked for safety."
+            )
+
+    # --- Branch delete protection ---
+    if subcommand == "branch":
+        if "-D" in tokens:
+            for t in tokens[2:]:
+                if t in ("main", "master"):
+                    return "Error: Deleting main/master branch is blocked for safety."
+
+    # --- Hooks bypass protection ---
+    if "--no-verify" in tokens:
+        return (
+            "Error: --no-verify bypasses pre-commit hooks. "
+            "This is blocked unless explicitly authorized."
+        )
+
+    return None
 
 
 def _is_command_sensitive(command: str, config: ShellConfig = DEFAULT_CONFIG) -> bool:
@@ -213,6 +387,12 @@ def execute_command(
         logger.warning(f"Blocked dangerous command: {command}")
         return "Error: This command is blocked for safety reasons."
 
+    # Git safety check
+    git_safety_msg = _check_git_safety(command)
+    if git_safety_msg:
+        logger.warning(f"Git safety check failed: {command}")
+        return git_safety_msg
+
     # Validate and resolve working directory
     try:
         resolved_dir = validate_path(working_directory)
@@ -227,7 +407,7 @@ def execute_command(
     # Prepare environment with safety checks
     process_env = os.environ.copy()
     if env:
-        dangerous_env_vars = {'PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES'}
+        dangerous_env_vars = {"PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"}
         safe_env = {k: v for k, v in env.items() if k.upper() not in dangerous_env_vars}
         process_env.update(safe_env)
 
@@ -248,11 +428,12 @@ def execute_command(
 
         # Use a thread to read output to avoid blocking/buffering issues with select
         import queue
+
         output_queue: queue.Queue = queue.Queue()
 
         def reader_thread():
             try:
-                for line in iter(process.stdout.readline, ''):
+                for line in iter(process.stdout.readline, ""):
                     output_queue.put(line)
                 process.stdout.close()
             except Exception:
@@ -285,7 +466,10 @@ def execute_command(
             if time.time() - last_activity_time > timeout:
                 process.kill()
                 logger.warning(f"Command timed out due to inactivity ({timeout}s): {command}")
-                return "".join(output_lines) + f"\n\nError: Command timed out. No output for {timeout} seconds."
+                return (
+                    "".join(output_lines)
+                    + f"\n\nError: Command timed out. No output for {timeout} seconds."
+                )
 
             # Sleep briefly to avoid busy loop
             time.sleep(0.1)
@@ -337,6 +521,11 @@ def execute_command_background(
     if _is_command_blocked(command):
         return "Error: This command is blocked for safety reasons."
 
+    # Git safety check
+    git_safety_msg = _check_git_safety(command)
+    if git_safety_msg:
+        return git_safety_msg
+
     try:
         resolved_dir = validate_path(working_directory)
         if not os.path.isdir(resolved_dir):
@@ -347,7 +536,7 @@ def execute_command_background(
     process_env = os.environ.copy()
     if env:
         # Filter out dangerous environment variable overrides
-        dangerous_env_vars = {'PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES'}
+        dangerous_env_vars = {"PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"}
         safe_env = {k: v for k, v in env.items() if k.upper() not in dangerous_env_vars}
         process_env.update(safe_env)
 
