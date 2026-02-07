@@ -361,12 +361,11 @@ def _run_mypy(file_path: str) -> list[dict]:
 
 
 # ========================================
-# MCP Tools
+# Internal Implementation Functions
 # ========================================
 
 
-@mcp.tool()
-async def lsp_diagnostics(path: str, include_mypy: bool = False) -> str:
+async def _lsp_diagnostics_impl(path: str, include_mypy: bool = False) -> str:
     """
     Get code diagnostics (errors, warnings) for a file.
 
@@ -412,13 +411,12 @@ async def lsp_diagnostics(path: str, include_mypy: bool = False) -> str:
             results.append(f"L{line} [mypy:{severity}]: {message}")
 
     if not results:
-        return f"No issues found in {path} ✓"
+        return f"No issues found in {path}"
 
     return f"Diagnostics for {path}:\n\n" + "\n".join(results)
 
 
-@mcp.tool()
-async def lsp_completions(path: str, line: int, column: int) -> str:
+async def _lsp_completions_impl(path: str, line: int, column: int) -> str:
     """
     Get code completion suggestions at a specific position.
 
@@ -465,8 +463,7 @@ async def lsp_completions(path: str, line: int, column: int) -> str:
     return result
 
 
-@mcp.tool()
-async def lsp_hover(path: str, line: int, column: int) -> str:
+async def _lsp_hover_impl(path: str, line: int, column: int) -> str:
     """
     Get hover information (documentation, type info) at a position.
 
@@ -504,8 +501,7 @@ async def lsp_hover(path: str, line: int, column: int) -> str:
     return f"Info at {path}:{line}:{column}:\n\n{hover_info}"
 
 
-@mcp.tool()
-async def lsp_references(path: str, symbol: str) -> str:
+async def _lsp_references_impl(path: str, symbol: str) -> str:
     """
     Find all references to a symbol in the codebase.
 
@@ -550,8 +546,7 @@ async def lsp_references(path: str, symbol: str) -> str:
         return f"Error searching: {e}"
 
 
-@mcp.tool()
-async def lsp_rename(path: str, old_name: str, new_name: str, preview: bool = True) -> str:
+async def _lsp_rename_impl(path: str, old_name: str, new_name: str, preview: bool = True) -> str:
     """
     Rename a symbol across files.
 
@@ -600,7 +595,7 @@ async def lsp_rename(path: str, old_name: str, new_name: str, preview: bool = Tr
             changes.append(f"  {file_path}: {count} occurrence(s)")
 
         if preview:
-            result = f"Preview: Rename '{old_name}' → '{new_name}'\n\n"
+            result = f"Preview: Rename '{old_name}' -> '{new_name}'\n\n"
             result += "\n".join(changes)
             result += f"\n\nTotal: {len(files)} file(s) affected"
             result += "\n\nUse preview=False to apply changes."
@@ -619,7 +614,7 @@ async def lsp_rename(path: str, old_name: str, new_name: str, preview: bool = Tr
             except Exception as e:
                 logger.warning(f"Failed to rename in {file_path}: {e}")
 
-        return f"Renamed '{old_name}' → '{new_name}' in {applied} file(s)"
+        return f"Renamed '{old_name}' -> '{new_name}' in {applied} file(s)"
 
     except subprocess.TimeoutExpired:
         return "Search timed out"
@@ -627,8 +622,7 @@ async def lsp_rename(path: str, old_name: str, new_name: str, preview: bool = Tr
         return f"Error: {e}"
 
 
-@mcp.tool()
-async def lsp_definition(path: str, symbol: str) -> str:
+async def _lsp_definition_impl(path: str, symbol: str) -> str:
     """
     Find the definition of a symbol.
 
@@ -672,6 +666,224 @@ async def lsp_definition(path: str, symbol: str) -> str:
             continue
 
     return f"Definition not found for '{symbol}'"
+
+
+# ========================================
+# Unified LSP Tool
+# ========================================
+
+
+async def lsp(
+    operation: str,
+    path: str,
+    line: int | None = None,
+    character: int | None = None,
+    new_name: str | None = None,
+    symbol: str | None = None,
+    include_mypy: bool = False,
+    preview: bool = True,
+) -> str:
+    """
+    Unified LSP language service tool.
+
+    Provides IDE-level code intelligence including diagnostics, completions,
+    hover information, references, definitions, and rename refactoring.
+
+    Args:
+        operation: The LSP operation to perform. One of:
+            - "diagnostics": Get code errors/warnings for a file
+            - "completions": Get code completion suggestions at a position
+            - "hover": Get documentation/type info at a position
+            - "references": Find all references to a symbol
+            - "definition": Find where a symbol is defined
+            - "rename": Rename a symbol across files
+        path: Path to the file or directory
+        line: Line number (1-indexed, required for completions/hover)
+        character: Column number (1-indexed, required for completions/hover)
+        new_name: New name for rename operation
+        symbol: Symbol name for references/definition/rename operations
+        include_mypy: Include mypy type checking for diagnostics (slower)
+        preview: For rename, show preview without applying (default True)
+
+    Returns:
+        Operation-specific result string
+
+    Examples:
+        lsp("diagnostics", "src/main.py")
+        lsp("diagnostics", "src/main.py", include_mypy=True)
+        lsp("hover", "src/main.py", line=10, character=5)
+        lsp("completions", "src/main.py", line=10, character=5)
+        lsp("references", "src/", symbol="MyClass")
+        lsp("definition", "src/", symbol="my_function")
+        lsp("rename", "src/", symbol="old_name", new_name="new_name")
+        lsp("rename", "src/", symbol="old_name", new_name="new_name", preview=False)
+    """
+    valid_operations = {"diagnostics", "completions", "hover", "references", "definition", "rename"}
+
+    if operation not in valid_operations:
+        ops_str = ', '.join(sorted(valid_operations))
+        return f"Error: Invalid operation '{operation}'. Must be one of: {ops_str}"
+
+    # Dispatch to appropriate handler
+    if operation == "diagnostics":
+        return await _lsp_diagnostics_impl(path, include_mypy=include_mypy)
+
+    elif operation == "completions":
+        if line is None or character is None:
+            return "Error: 'completions' operation requires 'line' and 'character' parameters"
+        return await _lsp_completions_impl(path, line, character)
+
+    elif operation == "hover":
+        if line is None or character is None:
+            return "Error: 'hover' operation requires 'line' and 'character' parameters"
+        return await _lsp_hover_impl(path, line, character)
+
+    elif operation == "references":
+        if symbol is None:
+            return "Error: 'references' operation requires 'symbol' parameter"
+        return await _lsp_references_impl(path, symbol)
+
+    elif operation == "definition":
+        if symbol is None:
+            return "Error: 'definition' operation requires 'symbol' parameter"
+        return await _lsp_definition_impl(path, symbol)
+
+    elif operation == "rename":
+        if symbol is None:
+            return "Error: 'rename' operation requires 'symbol' parameter (the old name)"
+        if new_name is None:
+            return "Error: 'rename' operation requires 'new_name' parameter"
+        return await _lsp_rename_impl(path, symbol, new_name, preview=preview)
+
+    # Should never reach here
+    return f"Error: Unhandled operation '{operation}'"
+
+
+# ========================================
+# MCP Tools (Legacy - for backward compatibility)
+# ========================================
+
+
+@mcp.tool()
+async def lsp_diagnostics(path: str, include_mypy: bool = False) -> str:
+    """
+    Get code diagnostics (errors, warnings) for a file.
+
+    Uses ruff for fast linting and optionally mypy for type checking.
+    This is useful for finding issues before running code.
+
+    Args:
+        path: Path to the file to analyze
+        include_mypy: Include mypy type checking (slower but more thorough)
+
+    Returns:
+        Formatted list of diagnostics with line numbers and messages
+
+    Note: This is a legacy function. Prefer using lsp("diagnostics", path) instead.
+    """
+    return await _lsp_diagnostics_impl(path, include_mypy)
+
+
+@mcp.tool()
+async def lsp_completions(path: str, line: int, column: int) -> str:
+    """
+    Get code completion suggestions at a specific position.
+
+    Useful for understanding what methods/properties are available.
+
+    Args:
+        path: Path to the file
+        line: Line number (1-indexed)
+        column: Column number (1-indexed)
+
+    Returns:
+        List of completion suggestions with their types
+
+    Note: This is a legacy function. Prefer using lsp("completions", path, line, character) instead.
+    """
+    return await _lsp_completions_impl(path, line, column)
+
+
+@mcp.tool()
+async def lsp_hover(path: str, line: int, column: int) -> str:
+    """
+    Get hover information (documentation, type info) at a position.
+
+    Useful for understanding what a symbol means without leaving context.
+
+    Args:
+        path: Path to the file
+        line: Line number (1-indexed)
+        column: Column number (1-indexed)
+
+    Returns:
+        Documentation or type information for the symbol
+
+    Note: This is a legacy function. Prefer using lsp("hover", path, line, character) instead.
+    """
+    return await _lsp_hover_impl(path, line, column)
+
+
+@mcp.tool()
+async def lsp_references(path: str, symbol: str) -> str:
+    """
+    Find all references to a symbol in the codebase.
+
+    Uses simple grep-based search for now. Full LSP implementation
+    would use textDocument/references.
+
+    Args:
+        path: Starting directory to search
+        symbol: The symbol name to find references for
+
+    Returns:
+        List of files and lines that reference the symbol
+
+    Note: This is a legacy function. Prefer using lsp("references", path, symbol=symbol) instead.
+    """
+    return await _lsp_references_impl(path, symbol)
+
+
+@mcp.tool()
+async def lsp_rename(path: str, old_name: str, new_name: str, preview: bool = True) -> str:
+    """
+    Rename a symbol across files.
+
+    Currently uses simple find-replace. Full LSP implementation
+    would use textDocument/rename for safe refactoring.
+
+    Args:
+        path: File or directory to apply rename
+        old_name: Current name of the symbol
+        new_name: New name for the symbol
+        preview: If True, show changes without applying (default)
+
+    Returns:
+        Preview of changes or confirmation of applied changes
+
+    Note: This is a legacy function.
+        Prefer using lsp("rename", path, symbol=old_name, new_name=new_name) instead.
+    """
+    return await _lsp_rename_impl(path, old_name, new_name, preview)
+
+
+@mcp.tool()
+async def lsp_definition(path: str, symbol: str) -> str:
+    """
+    Find the definition of a symbol.
+
+    Searches for class, function, or variable definitions.
+
+    Args:
+        path: Directory to search in
+        symbol: The symbol to find the definition for
+
+    Returns:
+        File and line where the symbol is defined
+
+    Note: This is a legacy function. Prefer using lsp("definition", path, symbol=symbol) instead.
+    """
+    return await _lsp_definition_impl(path, symbol)
 
 
 if __name__ == "__main__":

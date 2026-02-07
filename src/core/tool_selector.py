@@ -57,11 +57,12 @@ ADVANCED_TOOLS = [
     "index_codebase",  # 索引代码库
     "execute_python",  # 执行 Python 代码
     "shell_background",  # 后台执行
-    "git_status",  # Git 状态
-    "git_diff",  # Git 差异
-    "git_log",  # Git 日志
-    "git_add",  # Git 暂存
-    "git_commit",  # Git 提交
+    "git",  # 统一 Git 工具（推荐）
+    "git_status",  # Git 状态（向后兼容）
+    "git_diff",  # Git 差异（向后兼容）
+    "git_log",  # Git 日志（向后兼容）
+    "git_add",  # Git 暂存（向后兼容）
+    "git_commit",  # Git 提交（向后兼容）
 ]
 
 

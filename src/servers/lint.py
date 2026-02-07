@@ -1,14 +1,29 @@
 """
-Code Quality and Linting MCP Server
+Unified Code Quality and Linting MCP Server
 
 Provides code analysis, linting, and type checking capabilities.
 Similar to Claude Code's ReadLints tool but more comprehensive.
 
-Features:
-- Ruff linting (Python)
-- MyPy type checking (Python)
-- ESLint (JavaScript/TypeScript)
-- General code quality metrics
+Design Philosophy:
+- Occam's Razor: Single unified `lint` tool replaces 8 scattered tools
+- Single Responsibility: Each operation has one clear purpose
+- Functional Cohesion: Related operations grouped via `operation` parameter
+- Parameterized Design: Use parameters instead of multiple tools
+
+Unified Tool:
+    lint(path, operation, language, fix)
+
+    Operations:
+    - check: Run linter (Ruff for Python, ESLint for JS)
+    - format: Format code (Ruff format for Python)
+    - typecheck: Type checking (MyPy for Python)
+    - security: Security-focused linting
+    - complexity: Code complexity analysis
+    - summary: Get lint summary by category
+    - all: Run all checks
+
+Legacy tools (lint_python_ruff, format_python_ruff, etc.) are kept
+for backward compatibility but delegate to the unified lint function.
 """
 
 import json
@@ -96,41 +111,59 @@ def _check_tool_installed(tool: str) -> bool:
         return False
 
 
+def _detect_language(path: str) -> str | None:
+    """
+    Auto-detect language based on file extension or directory contents.
+
+    Returns:
+        "python", "javascript", or None if cannot detect
+    """
+    try:
+        resolved_path = validate_path(path)
+    except (PermissionError, ValueError):
+        return None
+
+    if os.path.isfile(resolved_path):
+        ext = os.path.splitext(resolved_path)[1].lower()
+        if ext == ".py":
+            return "python"
+        elif ext in (".js", ".jsx", ".ts", ".tsx"):
+            return "javascript"
+        return None
+
+    # Check directory contents
+    has_python = False
+    has_js = False
+
+    for _, _, files in os.walk(resolved_path):
+        for f in files:
+            if f.endswith(".py"):
+                has_python = True
+            elif f.endswith((".js", ".jsx", ".ts", ".tsx")):
+                has_js = True
+        if has_python and has_js:
+            break
+
+    # Prefer Python if both exist
+    if has_python:
+        return "python"
+    if has_js:
+        return "javascript"
+    return None
+
+
 # ========================================
-# Python Linting (Ruff)
+# Internal Lint Operations
 # ========================================
 
 
-@mcp.tool()
-def lint_python_ruff(
-    path: str = ".",
+def _lint_check_python(
+    path: str,
     fix: bool = False,
     select: list[str] | None = None,
     ignore: list[str] | None = None,
 ) -> str:
-    """
-    Run Ruff linter on Python code.
-
-    Ruff is an extremely fast Python linter that covers:
-    - pycodestyle (E, W)
-    - Pyflakes (F)
-    - isort (I)
-    - pydocstyle (D)
-    - and many more...
-
-    Args:
-        path: File or directory to lint
-        fix: Automatically fix fixable issues
-        select: Rule codes to enable (e.g., ["E", "F", "I"])
-        ignore: Rule codes to ignore (e.g., ["E501"])
-
-    Returns:
-        Lint results with issues found
-
-    Example:
-        lint_python_ruff("src/")
-        lint_python_ruff("src/main.py", fix=True)
-    """
+    """Run Ruff linter on Python code."""
     if not _check_tool_installed("ruff"):
         return "Error: Ruff is not installed. Install with: pip install ruff"
 
@@ -160,7 +193,7 @@ def lint_python_ruff(
         if stdout.strip():
             issues = json.loads(stdout)
             if not issues:
-                return "✅ No issues found!"
+                return "No issues found!"
 
             # Format output
             lines = [f"Found {len(issues)} issue(s):\n"]
@@ -171,142 +204,26 @@ def lint_python_ruff(
                     f"[{severity}] {issue['code']}: {issue['message']}"
                 )
                 if issue.get("fix"):
-                    lines.append("    ↳ Auto-fixable")
+                    lines.append("    -> Auto-fixable")
 
             if fix:
-                lines.append("\n✨ Applied automatic fixes where possible.")
+                lines.append("\nApplied automatic fixes where possible.")
 
             return "\n".join(lines)
         else:
-            return "✅ No issues found!"
+            return "No issues found!"
 
     except json.JSONDecodeError:
         # Fallback to raw output
-        return stdout if stdout else "✅ No issues found!"
+        return stdout if stdout else "No issues found!"
 
 
-@mcp.tool()
-def format_python_ruff(
-    path: str = ".",
-    check_only: bool = False,
-) -> str:
-    """
-    Format Python code using Ruff formatter.
-
-    Args:
-        path: File or directory to format
-        check_only: Only check formatting without making changes
-
-    Returns:
-        Formatting result
-    """
-    if not _check_tool_installed("ruff"):
-        return "Error: Ruff is not installed. Install with: pip install ruff"
-
-    try:
-        resolved_path = validate_path(path)
-    except (PermissionError, ValueError) as e:
-        return f"Error: {e}"
-
-    args = ["ruff", "format", resolved_path]
-
-    if check_only:
-        args.append("--check")
-
-    exit_code, stdout, stderr = _run_command(args)
-
-    if exit_code == 0:
-        if check_only:
-            return "✅ All files are properly formatted."
-        return stdout if stdout else "✅ Formatting complete."
-    else:
-        if check_only:
-            return f"❌ Formatting issues found:\n{stdout}"
-        return f"Error: {stderr}"
-
-
-# ========================================
-# Python Type Checking (MyPy)
-# ========================================
-
-
-@mcp.tool()
-def typecheck_python_mypy(
-    path: str = ".",
-    strict: bool = False,
-    ignore_missing_imports: bool = True,
-) -> str:
-    """
-    Run MyPy type checker on Python code.
-
-    Args:
-        path: File or directory to check
-        strict: Enable strict mode (more rigorous checking)
-        ignore_missing_imports: Ignore imports that can't be resolved
-
-    Returns:
-        Type checking results
-
-    Example:
-        typecheck_python_mypy("src/")
-    """
-    if not _check_tool_installed("mypy"):
-        return "Error: MyPy is not installed. Install with: pip install mypy"
-
-    try:
-        resolved_path = validate_path(path)
-    except (PermissionError, ValueError) as e:
-        return f"Error: {e}"
-
-    args = ["mypy", resolved_path]
-
-    if strict:
-        args.append("--strict")
-    if ignore_missing_imports:
-        args.append("--ignore-missing-imports")
-
-    exit_code, stdout, stderr = _run_command(args, timeout=120)
-
-    if exit_code == 0:
-        return "✅ No type errors found!"
-
-    # Parse output
-    if stdout:
-        lines = stdout.strip().split("\n")
-        error_count = len([line for line in lines if ": error:" in line])
-        warning_count = len([line for line in lines if ": warning:" in line or ": note:" in line])
-
-        result = f"Found {error_count} error(s), {warning_count} warning(s)/note(s):\n\n{stdout}"
-        return result
-
-    return stderr if stderr else "Type checking complete."
-
-
-# ========================================
-# JavaScript/TypeScript Linting (ESLint)
-# ========================================
-
-
-@mcp.tool()
-def lint_javascript_eslint(
-    path: str = ".",
+def _lint_check_javascript(
+    path: str,
     fix: bool = False,
     ext: list[str] | None = None,
 ) -> str:
-    """
-    Run ESLint on JavaScript/TypeScript code.
-
-    Args:
-        path: File or directory to lint
-        fix: Automatically fix fixable issues
-        ext: File extensions to lint (default: [".js", ".jsx", ".ts", ".tsx"])
-
-    Returns:
-        Lint results
-
-    Requires:
-        ESLint must be installed in the project (npm install eslint)
-    """
+    """Run ESLint on JavaScript/TypeScript code."""
     # Check for npx (comes with npm)
     if not _check_tool_installed("npx"):
         return "Error: npx is not available. Make sure Node.js/npm is installed."
@@ -334,100 +251,13 @@ def lint_javascript_eslint(
         return "Error: ESLint is not installed. Run: npm install eslint"
 
     if exit_code == 0:
-        return "✅ No issues found!"
+        return "No issues found!"
 
     return stdout if stdout else stderr
 
 
-# ========================================
-# Multi-Language Lint
-# ========================================
-
-
-@mcp.tool()
-def lint_all(
-    path: str = ".",
-    fix: bool = False,
-) -> str:
-    """
-    Run all available linters on a path.
-
-    Automatically detects file types and runs appropriate linters:
-    - Python: Ruff
-    - JavaScript/TypeScript: ESLint (if available)
-
-    Args:
-        path: File or directory to lint
-        fix: Automatically fix fixable issues
-
-    Returns:
-        Combined lint results from all linters
-    """
-    results = []
-
-    # Check for Python files
-    try:
-        resolved_path = validate_path(path)
-    except (PermissionError, ValueError) as e:
-        return f"Error: {e}"
-
-    has_python = False
-    has_js = False
-
-    if os.path.isfile(resolved_path):
-        if resolved_path.endswith(".py"):
-            has_python = True
-        elif resolved_path.endswith((".js", ".jsx", ".ts", ".tsx")):
-            has_js = True
-    else:
-        # Check directory contents
-        for _root, _, files in os.walk(resolved_path):
-            for f in files:
-                if f.endswith(".py"):
-                    has_python = True
-                elif f.endswith((".js", ".jsx", ".ts", ".tsx")):
-                    has_js = True
-            if has_python and has_js:
-                break
-
-    # Run Python linter
-    if has_python and _check_tool_installed("ruff"):
-        results.append("=== Python (Ruff) ===")
-        results.append(lint_python_ruff(path, fix=fix))
-        results.append("")
-
-    # Run JS/TS linter
-    if has_js and _check_tool_installed("npx"):
-        results.append("=== JavaScript/TypeScript (ESLint) ===")
-        results.append(lint_javascript_eslint(path, fix=fix))
-        results.append("")
-
-    if not results:
-        return "No supported files found or no linters available."
-
-    return "\n".join(results)
-
-
-# ========================================
-# Code Quality Metrics
-# ========================================
-
-
-@mcp.tool()
-def code_complexity(
-    path: str = ".",
-    max_complexity: int = 10,
-) -> str:
-    """
-    Analyze code complexity using Ruff's mccabe checker.
-
-    Args:
-        path: File or directory to analyze
-        max_complexity: Threshold for flagging complex functions (default: 10)
-
-    Returns:
-        Functions that exceed the complexity threshold
-    """
+def _lint_format_python(path: str, check_only: bool = False) -> str:
+    """Format Python code using Ruff formatter."""
     if not _check_tool_installed("ruff"):
         return "Error: Ruff is not installed. Install with: pip install ruff"
 
@@ -436,61 +266,63 @@ def code_complexity(
     except (PermissionError, ValueError) as e:
         return f"Error: {e}"
 
-    # Use C901 (McCabe complexity) rule
-    args = [
-        "ruff",
-        "check",
-        resolved_path,
-        "--select",
-        "C901",
-        f"--max-complexity={max_complexity}",
-        "--output-format",
-        "json",
-    ]
+    args = ["ruff", "format", resolved_path]
+
+    if check_only:
+        args.append("--check")
 
     exit_code, stdout, stderr = _run_command(args)
 
-    if stderr and "error" in stderr.lower():
+    if exit_code == 0:
+        if check_only:
+            return "All files are properly formatted."
+        return stdout if stdout else "Formatting complete."
+    else:
+        if check_only:
+            return f"Formatting issues found:\n{stdout}"
         return f"Error: {stderr}"
 
+
+def _lint_typecheck_python(
+    path: str,
+    strict: bool = False,
+    ignore_missing_imports: bool = True,
+) -> str:
+    """Run MyPy type checker on Python code."""
+    if not _check_tool_installed("mypy"):
+        return "Error: MyPy is not installed. Install with: pip install mypy"
+
     try:
-        if stdout.strip():
-            issues = json.loads(stdout)
-            if not issues:
-                return f"✅ All functions have complexity ≤ {max_complexity}"
+        resolved_path = validate_path(path)
+    except (PermissionError, ValueError) as e:
+        return f"Error: {e}"
 
-            lines = [f"Functions with complexity > {max_complexity}:\n"]
-            for issue in issues:
-                lines.append(
-                    f"  {issue['filename']}:{issue['location']['row']} - {issue['message']}"
-                )
+    args = ["mypy", resolved_path]
 
-            return "\n".join(lines)
-        else:
-            return f"✅ All functions have complexity ≤ {max_complexity}"
+    if strict:
+        args.append("--strict")
+    if ignore_missing_imports:
+        args.append("--ignore-missing-imports")
 
-    except json.JSONDecodeError:
-        return stdout if stdout else f"✅ All functions have complexity ≤ {max_complexity}"
+    exit_code, stdout, stderr = _run_command(args, timeout=120)
+
+    if exit_code == 0:
+        return "No type errors found!"
+
+    # Parse output
+    if stdout:
+        lines = stdout.strip().split("\n")
+        error_count = len([line for line in lines if ": error:" in line])
+        warning_count = len([line for line in lines if ": warning:" in line or ": note:" in line])
+
+        result = f"Found {error_count} error(s), {warning_count} warning(s)/note(s):\n\n{stdout}"
+        return result
+
+    return stderr if stderr else "Type checking complete."
 
 
-@mcp.tool()
-def check_security(path: str = ".") -> str:
-    """
-    Run security-focused linting using Ruff's security rules (S).
-
-    Checks for common security issues:
-    - Hardcoded passwords
-    - SQL injection vulnerabilities
-    - Use of eval/exec
-    - Insecure random number generation
-    - And more...
-
-    Args:
-        path: File or directory to check
-
-    Returns:
-        Security issues found
-    """
+def _lint_security(path: str) -> str:
+    """Run security-focused linting using Ruff's security rules (S)."""
     if not _check_tool_installed("ruff"):
         return "Error: Ruff is not installed. Install with: pip install ruff"
 
@@ -519,9 +351,9 @@ def check_security(path: str = ".") -> str:
         if stdout.strip():
             issues = json.loads(stdout)
             if not issues:
-                return "✅ No security issues found!"
+                return "No security issues found!"
 
-            lines = [f"⚠️ Found {len(issues)} potential security issue(s):\n"]
+            lines = [f"Found {len(issues)} potential security issue(s):\n"]
             for issue in issues:
                 lines.append(
                     f"  {issue['filename']}:{issue['location']['row']} "
@@ -530,23 +362,80 @@ def check_security(path: str = ".") -> str:
 
             return "\n".join(lines)
         else:
-            return "✅ No security issues found!"
+            return "No security issues found!"
 
     except json.JSONDecodeError:
-        return stdout if stdout else "✅ No security issues found!"
+        return stdout if stdout else "No security issues found!"
 
 
-@mcp.tool()
-def get_lint_summary(path: str = ".") -> str:
-    """
-    Get a summary of all lint issues in a project.
+def _lint_complexity(path: str, max_complexity: int = 10) -> str:
+    """Analyze code complexity using Ruff's mccabe checker."""
+    if not _check_tool_installed("ruff"):
+        return "Error: Ruff is not installed. Install with: pip install ruff"
 
-    Args:
-        path: Project root path
+    try:
+        resolved_path = validate_path(path)
+    except (PermissionError, ValueError) as e:
+        return f"Error: {e}"
 
-    Returns:
-        Summary with counts by category
-    """
+    # Use C901 (McCabe complexity) rule
+    # Note: max_complexity is configured in pyproject.toml/ruff.toml, not CLI
+    args = [
+        "ruff",
+        "check",
+        resolved_path,
+        "--select",
+        "C901",
+        "--output-format",
+        "json",
+    ]
+
+    exit_code, stdout, stderr = _run_command(args)
+
+    if stderr and "error" in stderr.lower():
+        return f"Error: {stderr}"
+
+    try:
+        if stdout.strip():
+            issues = json.loads(stdout)
+            if not issues:
+                return f"All functions have complexity <= {max_complexity} (default threshold)"
+
+            # Filter issues based on max_complexity parameter
+            # Parse complexity from message like "`func` is too complex (15 > 10)"
+            filtered_issues = []
+            for issue in issues:
+                msg = issue.get("message", "")
+                # Extract complexity value from message
+                import re
+
+                match = re.search(r"\((\d+)\s*>", msg)
+                if match:
+                    complexity = int(match.group(1))
+                    if complexity > max_complexity:
+                        filtered_issues.append(issue)
+                else:
+                    filtered_issues.append(issue)
+
+            if not filtered_issues:
+                return f"All functions have complexity <= {max_complexity}"
+
+            lines = [f"Functions with complexity > {max_complexity}:\n"]
+            for issue in filtered_issues:
+                lines.append(
+                    f"  {issue['filename']}:{issue['location']['row']} - {issue['message']}"
+                )
+
+            return "\n".join(lines)
+        else:
+            return f"All functions have complexity <= {max_complexity}"
+
+    except json.JSONDecodeError:
+        return stdout if stdout else f"All functions have complexity <= {max_complexity}"
+
+
+def _lint_summary(path: str) -> str:
+    """Get a summary of all lint issues in a project."""
     if not _check_tool_installed("ruff"):
         return "Error: Ruff is not installed. Install with: pip install ruff"
 
@@ -595,24 +484,314 @@ def get_lint_summary(path: str = ".") -> str:
                 categories[cat_name] = categories.get(cat_name, 0) + 1
 
             if not categories:
-                return "✅ No issues found!"
+                return "No issues found!"
 
             lines = [f"Lint Summary for {path}:\n"]
             total = sum(categories.values())
 
             for cat, count in sorted(categories.items(), key=lambda x: -x[1]):
                 bar_len = int(count / total * 20) if total > 0 else 0
-                bar = "█" * bar_len + "░" * (20 - bar_len)
+                bar = "#" * bar_len + "-" * (20 - bar_len)
                 lines.append(f"  {cat:<25} {bar} {count:>4}")
 
             lines.append(f"\n  {'Total':<25} {'=' * 20} {total:>4}")
 
             return "\n".join(lines)
         else:
-            return "✅ No issues found!"
+            return "No issues found!"
 
     except json.JSONDecodeError:
-        return stdout if stdout else "✅ No issues found!"
+        return stdout if stdout else "No issues found!"
+
+
+# ========================================
+# Unified Lint Tool (Primary Interface)
+# ========================================
+
+
+@mcp.tool()
+def lint(
+    path: str = ".",
+    operation: str = "check",
+    language: str | None = None,
+    fix: bool = False,
+) -> str:
+    """
+    Unified code checking tool.
+
+    Consolidates 8 lint tools into one with operation parameter:
+    - check: Run linter (Ruff for Python, ESLint for JS)
+    - format: Format code (Ruff format for Python)
+    - typecheck: Type checking (MyPy for Python)
+    - security: Security-focused linting (Ruff S rules)
+    - complexity: Code complexity analysis (McCabe)
+    - summary: Get lint summary by category
+    - all: Run all checks
+
+    Args:
+        path: File or directory to check
+        operation: check | format | typecheck | security | complexity | summary | all
+        language: python | javascript | auto (default: auto-detect)
+        fix: Automatically fix fixable issues (for check/format operations)
+
+    Returns:
+        Lint results
+
+    Examples:
+        lint("src/")                             # Check src directory
+        lint("src/main.py", "format")            # Format a file
+        lint("src/", "typecheck")                # Type check
+        lint("src/", "security")                 # Security scan
+        lint("src/", "all")                      # Run all checks
+        lint("src/", "check", fix=True)          # Check and auto-fix
+    """
+    # Validate operation
+    valid_operations = ("check", "format", "typecheck", "security", "complexity", "summary", "all")
+    if operation not in valid_operations:
+        return f"Error: Invalid operation '{operation}'. Valid: {', '.join(valid_operations)}"
+
+    # Auto-detect language if not specified
+    detected_lang = language if language else _detect_language(path)
+
+    # Handle 'all' operation
+    if operation == "all":
+        results = []
+
+        # Run check
+        results.append("=== Lint Check ===")
+        results.append(lint(path, "check", language, fix))
+        results.append("")
+
+        # Run format check (not fix)
+        if detected_lang == "python":
+            results.append("=== Format Check ===")
+            results.append(_lint_format_python(path, check_only=True))
+            results.append("")
+
+            # Run typecheck
+            results.append("=== Type Check ===")
+            results.append(_lint_typecheck_python(path))
+            results.append("")
+
+            # Run security
+            results.append("=== Security Check ===")
+            results.append(_lint_security(path))
+            results.append("")
+
+            # Run complexity
+            results.append("=== Complexity Check ===")
+            results.append(_lint_complexity(path))
+            results.append("")
+
+        return "\n".join(results)
+
+    # Handle individual operations
+    if operation == "check":
+        if detected_lang == "python":
+            return _lint_check_python(path, fix=fix)
+        elif detected_lang == "javascript":
+            return _lint_check_javascript(path, fix=fix)
+        else:
+            # Try both if language not detected
+            results = []
+            if _check_tool_installed("ruff"):
+                results.append("=== Python (Ruff) ===")
+                results.append(_lint_check_python(path, fix=fix))
+            if _check_tool_installed("npx"):
+                results.append("=== JavaScript (ESLint) ===")
+                results.append(_lint_check_javascript(path, fix=fix))
+            if not results:
+                return "No supported files found or no linters available."
+            return "\n".join(results)
+
+    elif operation == "format":
+        if detected_lang == "javascript":
+            return "Error: JavaScript formatting not yet supported. Use Prettier directly."
+        # Default to Python formatting
+        return _lint_format_python(path, check_only=not fix)
+
+    elif operation == "typecheck":
+        if detected_lang == "javascript":
+            return "Error: TypeScript type checking not yet supported. Use tsc directly."
+        return _lint_typecheck_python(path)
+
+    elif operation == "security":
+        return _lint_security(path)
+
+    elif operation == "complexity":
+        return _lint_complexity(path)
+
+    elif operation == "summary":
+        return _lint_summary(path)
+
+    return f"Error: Unknown operation '{operation}'"
+
+
+# ========================================
+# Legacy Tools (Backward Compatibility)
+# ========================================
+
+
+@mcp.tool()
+def lint_python_ruff(
+    path: str = ".",
+    fix: bool = False,
+    select: list[str] | None = None,
+    ignore: list[str] | None = None,
+) -> str:
+    """
+    [DEPRECATED] Use lint(path, "check", "python") instead.
+
+    Run Ruff linter on Python code.
+
+    Args:
+        path: File or directory to lint
+        fix: Automatically fix fixable issues
+        select: Rule codes to enable (e.g., ["E", "F", "I"])
+        ignore: Rule codes to ignore (e.g., ["E501"])
+
+    Returns:
+        Lint results with issues found
+    """
+    return _lint_check_python(path, fix=fix, select=select, ignore=ignore)
+
+
+@mcp.tool()
+def format_python_ruff(
+    path: str = ".",
+    check_only: bool = False,
+) -> str:
+    """
+    [DEPRECATED] Use lint(path, "format") instead.
+
+    Format Python code using Ruff formatter.
+
+    Args:
+        path: File or directory to format
+        check_only: Only check formatting without making changes
+
+    Returns:
+        Formatting result
+    """
+    return _lint_format_python(path, check_only=check_only)
+
+
+@mcp.tool()
+def typecheck_python_mypy(
+    path: str = ".",
+    strict: bool = False,
+    ignore_missing_imports: bool = True,
+) -> str:
+    """
+    [DEPRECATED] Use lint(path, "typecheck") instead.
+
+    Run MyPy type checker on Python code.
+
+    Args:
+        path: File or directory to check
+        strict: Enable strict mode (more rigorous checking)
+        ignore_missing_imports: Ignore imports that can't be resolved
+
+    Returns:
+        Type checking results
+    """
+    return _lint_typecheck_python(
+        path, strict=strict, ignore_missing_imports=ignore_missing_imports
+    )
+
+
+@mcp.tool()
+def lint_javascript_eslint(
+    path: str = ".",
+    fix: bool = False,
+    ext: list[str] | None = None,
+) -> str:
+    """
+    [DEPRECATED] Use lint(path, "check", "javascript") instead.
+
+    Run ESLint on JavaScript/TypeScript code.
+
+    Args:
+        path: File or directory to lint
+        fix: Automatically fix fixable issues
+        ext: File extensions to lint (default: [".js", ".jsx", ".ts", ".tsx"])
+
+    Returns:
+        Lint results
+    """
+    return _lint_check_javascript(path, fix=fix, ext=ext)
+
+
+@mcp.tool()
+def lint_all(
+    path: str = ".",
+    fix: bool = False,
+) -> str:
+    """
+    [DEPRECATED] Use lint(path, "all") instead.
+
+    Run all available linters on a path.
+
+    Args:
+        path: File or directory to lint
+        fix: Automatically fix fixable issues
+
+    Returns:
+        Combined lint results from all linters
+    """
+    return lint(path, "all", fix=fix)
+
+
+@mcp.tool()
+def code_complexity(
+    path: str = ".",
+    max_complexity: int = 10,
+) -> str:
+    """
+    [DEPRECATED] Use lint(path, "complexity") instead.
+
+    Analyze code complexity using Ruff's mccabe checker.
+
+    Args:
+        path: File or directory to analyze
+        max_complexity: Threshold for flagging complex functions (default: 10)
+
+    Returns:
+        Functions that exceed the complexity threshold
+    """
+    return _lint_complexity(path, max_complexity=max_complexity)
+
+
+@mcp.tool()
+def check_security(path: str = ".") -> str:
+    """
+    [DEPRECATED] Use lint(path, "security") instead.
+
+    Run security-focused linting using Ruff's security rules (S).
+
+    Args:
+        path: File or directory to check
+
+    Returns:
+        Security issues found
+    """
+    return _lint_security(path)
+
+
+@mcp.tool()
+def get_lint_summary(path: str = ".") -> str:
+    """
+    [DEPRECATED] Use lint(path, "summary") instead.
+
+    Get a summary of all lint issues in a project.
+
+    Args:
+        path: Project root path
+
+    Returns:
+        Summary with counts by category
+    """
+    return _lint_summary(path)
 
 
 if __name__ == "__main__":

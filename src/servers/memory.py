@@ -75,10 +75,10 @@ def save_note(
             ids=[note_id]
         )
         logger.info(f"Saved note '{title}' to project '{collection_name}'")
-        return f"笔记 '{title}' 已保存到项目 {collection_name}。"
+        return f"Note '{title}' saved to project {collection_name}."
     except Exception as e:
         logger.error(f"Failed to save note '{title}': {e}")
-        return f"保存笔记失败: {e}"
+        return f"Failed to save note: {e}"
 
 
 @mcp.tool()
@@ -99,15 +99,133 @@ def search_notes(query: str, collection_name: str = "default", n_results: int = 
         metas = results.get("metadatas")
 
         if not docs or not docs[0] or not metas or not metas[0]:
-            return f"项目 {collection_name} 中未找到相关笔记。"
+            return f"No notes found in project {collection_name} matching query."
 
         output = []
         for doc, meta in zip(docs[0], metas[0], strict=True):
-            output.append(f"[标题: {meta.get('title', 'Untitled')}]\n{doc}")
+            output.append(f"[Title: {meta.get('title', 'Untitled')}]\n{doc}")
 
         return "\n---\n".join(output)
     except Exception as e:
-        return f"搜索失败: {e}"
+        return f"Search failed: {e}"
+
+
+@mcp.tool()
+def delete_note(title: str, collection_name: str = "default") -> str:
+    """Delete a note from the long-term memory by title."""
+    if collection is None:
+        return "Memory system is not initialized."
+
+    try:
+        # Find notes matching the title in the collection
+        results = collection.get(
+            where={"$and": [{"title": title}, {"project": collection_name}]}
+        )
+
+        if not results or not results.get("ids"):
+            return f"Note '{title}' not found in project {collection_name}."
+
+        # Delete all matching notes
+        collection.delete(ids=results["ids"])
+        logger.info(f"Deleted note '{title}' from project '{collection_name}'")
+        return f"Note '{title}' deleted from project {collection_name}."
+    except Exception as e:
+        logger.error(f"Failed to delete note '{title}': {e}")
+        return f"Failed to delete note: {e}"
+
+
+@mcp.tool()
+def list_notes(collection_name: str = "default", limit: int = 20) -> str:
+    """List all notes in a collection."""
+    if collection is None:
+        return "Memory system is not initialized."
+
+    try:
+        # Get all notes in the collection
+        results = collection.get(
+            where={"project": collection_name},
+            limit=limit
+        )
+
+        if not results or not results.get("ids"):
+            return f"No notes found in project {collection_name}."
+
+        output = [f"=== Notes in {collection_name} ==="]
+        metas = results.get("metadatas", [])
+        docs = results.get("documents", [])
+
+        for i, (meta, doc) in enumerate(zip(metas, docs, strict=False)):
+            title = meta.get("title", "Untitled") if meta else "Untitled"
+            tags = meta.get("tags", "") if meta else ""
+            preview = (doc[:80] + "...") if doc and len(doc) > 80 else (doc or "")
+            output.append(f"[{i+1}] {title}")
+            if tags:
+                output.append(f"    Tags: {tags}")
+            output.append(f"    {preview}")
+
+        return "\n".join(output)
+    except Exception as e:
+        logger.error(f"Failed to list notes: {e}")
+        return f"Failed to list notes: {e}"
+
+
+def note(
+    operation: str = "search",
+    title: str | None = None,
+    content: str | None = None,
+    query: str | None = None,
+    collection_name: str = "default",
+    tags: list[str] | None = None,
+    n_results: int = 3,
+) -> str:
+    """
+    Unified note tool for managing long-term memory.
+
+    Operations:
+      - save: Save a new note (requires title and content)
+      - search: Search notes by query (requires query)
+      - list: List all notes in a collection
+      - delete: Delete a note by title (requires title)
+
+    Args:
+        operation: Operation to perform ('save', 'search', 'list', 'delete')
+        title: Note title (required for save/delete)
+        content: Note content (required for save)
+        query: Search query (required for search)
+        collection_name: Project/collection name (default: 'default')
+        tags: Tags for the note (optional, for save)
+        n_results: Number of results to return (for search, default: 3)
+
+    Examples:
+        note("save", title="API Design", content="REST API guidelines...")
+        note("search", query="API")
+        note("list")
+        note("delete", title="Old Note")
+    """
+    operation = operation.lower()
+
+    if operation == "save":
+        if not title:
+            return "Error: 'title' is required for save operation."
+        if not content:
+            return "Error: 'content' is required for save operation."
+        return save_note(title=title, content=content, collection_name=collection_name, tags=tags)
+
+    elif operation == "search":
+        if not query:
+            return "Error: 'query' is required for search operation."
+        return search_notes(query=query, collection_name=collection_name, n_results=n_results)
+
+    elif operation == "list":
+        return list_notes(collection_name=collection_name)
+
+    elif operation == "delete":
+        if not title:
+            return "Error: 'title' is required for delete operation."
+        return delete_note(title=title, collection_name=collection_name)
+
+    else:
+        return f"Error: Unknown operation '{operation}'. Use 'save', 'search', 'list', or 'delete'."
 
 
 @mcp.tool()
@@ -126,14 +244,14 @@ def update_user_persona(key: str, value: str) -> str:
     with open(MEMORY_FILE, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    return f"已记住关于你的事实: {key} = {value}"
+    return f"Remembered about you: {key} = {value}"
 
 
 @mcp.tool()
 def get_user_persona() -> str:
     """Read current user persona."""
     if not os.path.exists(MEMORY_FILE):
-        return "暂无用户画像。"
+        return "No user persona yet."
     with open(MEMORY_FILE) as f:
         return f.read()
 

@@ -324,7 +324,15 @@ def _create_default_registry() -> ToolRegistry:
         failed_tools.append(("filesystem", str(e)))
 
     try:
-        # Computer/Execution Tools
+        # Unified Run Tool (Recommended - replaces shell_execute, execute_python, etc.)
+        from src.servers.run_unified import run
+
+        registry.register(run, sensitive=True, timeout=_get_timeout("run", 300.0))
+    except ImportError as e:
+        logger.warning(f"Failed to import unified run tool: {e}")
+
+    try:
+        # Computer/Execution Tools (Legacy - use run() instead)
         from src.servers.computer import execute_python, install_package
 
         registry.register(
@@ -337,9 +345,12 @@ def _create_default_registry() -> ToolRegistry:
         logger.warning(f"Failed to import computer tools: {e}")
 
     try:
-        # Memory Tools
-        from src.servers.memory import save_note, search_notes
+        # Memory Tools (Unified + Legacy aliases)
+        from src.servers.memory import note, save_note, search_notes
 
+        # Unified note tool (recommended)
+        registry.register(note, sensitive=True, timeout=_get_timeout("note", 60.0))
+        # Legacy aliases for backward compatibility
         registry.register(save_note, sensitive=True, timeout=_get_timeout("save_note", 60.0))
         registry.register(search_notes, sensitive=False, timeout=_get_timeout("search_notes", 60.0))
     except ImportError as e:
@@ -362,9 +373,12 @@ def _create_default_registry() -> ToolRegistry:
         logger.warning(f"Failed to import web tools: {e}")
 
     try:
-        # Task Tools
-        from src.servers.task import add_task, list_tasks, update_task_status
+        # Task Tools (Unified + Legacy aliases)
+        from src.servers.task import add_task, list_tasks, task, update_task_status
 
+        # Unified task tool (recommended)
+        registry.register(task, sensitive=False, timeout=_get_timeout("task", 60.0))
+        # Legacy aliases for backward compatibility
         registry.register(
             add_task, name="task_create", sensitive=False, timeout=_get_timeout("task_create", 60.0)
         )
@@ -401,9 +415,13 @@ def _create_default_registry() -> ToolRegistry:
         failed_tools.append(("shell", str(e)))
 
     try:
-        # Git Tools
-        from src.servers.git import git_add, git_commit, git_diff, git_log, git_status
+        # Git Tools - Unified tool + legacy aliases
+        from src.servers.git import git, git_add, git_commit, git_diff, git_log, git_status
 
+        # Register unified git tool (recommended)
+        registry.register(git, sensitive=True, timeout=_get_timeout("git", 60.0))
+
+        # Register legacy tools as aliases (for backward compatibility)
         registry.register(git_status, sensitive=False, timeout=_get_timeout("git_status", 60.0))
         registry.register(git_diff, sensitive=False, timeout=_get_timeout("git_diff", 60.0))
         registry.register(git_log, sensitive=False, timeout=_get_timeout("git_log", 60.0))
@@ -413,8 +431,9 @@ def _create_default_registry() -> ToolRegistry:
         logger.warning(f"Failed to import git tools: {e}")
 
     try:
-        # LSP Tools
+        # LSP Tools - Unified tool + legacy aliases
         from src.servers.lsp import (
+            lsp,
             lsp_completions,
             lsp_definition,
             lsp_diagnostics,
@@ -423,6 +442,12 @@ def _create_default_registry() -> ToolRegistry:
             lsp_rename,
         )
 
+        # Register unified LSP tool (recommended)
+        registry.register(
+            lsp, sensitive=False, timeout=_get_timeout("lsp", 120.0)
+        )
+
+        # Register legacy tools as aliases (for backward compatibility)
         registry.register(
             lsp_diagnostics, sensitive=False, timeout=_get_timeout("lsp_diagnostics", 120.0)
         )
@@ -441,7 +466,12 @@ def _create_default_registry() -> ToolRegistry:
         logger.warning(f"Failed to import LSP tools: {e}")
 
     try:
-        # Linting Tools
+        # Unified Linting Tool (Recommended)
+        from src.servers.lint import lint
+
+        registry.register(lint, sensitive=False, timeout=_get_timeout("lint", 180.0))
+
+        # Legacy Linting Tools (Backward Compatibility - Deprecated)
         from src.servers.lint import (
             check_security,
             code_complexity,

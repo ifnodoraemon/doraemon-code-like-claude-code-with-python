@@ -137,23 +137,23 @@ def list_tasks(status_filter: str | None = None) -> str:
     def render_node(node: dict, depth: int = 0):
         status = node.get("status", "pending")
         icon = {
-            "pending": "☐",
-            "in_progress": "⏳",
-            "completed": "✅",
-            "blocked": "✗",
-            "cancelled": "⊘",
-        }.get(status, "○")
+            "pending": "[ ]",
+            "in_progress": "[~]",
+            "completed": "[x]",
+            "blocked": "[!]",
+            "cancelled": "[-]",
+        }.get(status, "[ ]")
 
         indent = "  " * depth
         priority = node.get("priority", "medium")
-        priority_marker = {"critical": "🔴", "high": "🟠", "medium": "", "low": "⚪"}.get(
+        priority_marker = {"critical": "[!!]", "high": "[!]", "medium": "", "low": "[.]"}.get(
             priority, ""
         )
 
         output.append(f"{indent}{icon} [{node['id']}] {priority_marker}{node['title']}")
 
         if node.get("description"):
-            output.append(f"{indent}    ↳ {node['description'][:60]}...")
+            output.append(f"{indent}    -> {node['description'][:60]}...")
 
         for child in node.get("children", []):
             render_node(child, depth + 1)
@@ -181,6 +181,68 @@ def delete_task(task_id: str, delete_subtasks: bool = False) -> str:
         return f"Task {task_id} deleted."
     else:
         return f"Error: Task '{task_id}' not found."
+
+
+def task(
+    operation: str = "list",
+    title: str | None = None,
+    description: str | None = None,
+    task_id: str | None = None,
+    status: str | None = None,
+    priority: str = "medium",
+    parent_id: str | None = None,
+    delete_subtasks: bool = False,
+) -> str:
+    """
+    Unified task tool for project task management.
+
+    Operations:
+      - create: Create a new task (requires title)
+      - list: List all tasks (optional status filter via status param)
+      - update: Update task status (requires task_id and status)
+      - delete: Delete a task (requires task_id)
+
+    Args:
+        operation: Operation to perform ('create', 'list', 'update', 'delete')
+        title: Task title (required for create)
+        description: Task description (optional, for create)
+        task_id: Task ID (required for update/delete)
+        status: Task status ('pending', 'in_progress', 'completed', 'blocked', 'cancelled')
+        priority: Task priority ('low', 'medium', 'high', 'critical') - for create
+        parent_id: Parent task ID for creating subtasks
+        delete_subtasks: Whether to delete subtasks when deleting (default: False)
+
+    Examples:
+        task("create", title="Implement feature X", description="...")
+        task("list")
+        task("list", status="pending")
+        task("update", task_id="abc123", status="completed")
+        task("delete", task_id="abc123")
+    """
+    operation = operation.lower()
+
+    if operation == "create":
+        if not title:
+            return "Error: 'title' is required for create operation."
+        return add_task(title=title, description=description or "", parent_id=parent_id, priority=priority)
+
+    elif operation == "list":
+        return list_tasks(status_filter=status)
+
+    elif operation == "update":
+        if not task_id:
+            return "Error: 'task_id' is required for update operation."
+        if not status:
+            return "Error: 'status' is required for update operation."
+        return update_task_status(task_id=task_id, status=status)
+
+    elif operation == "delete":
+        if not task_id:
+            return "Error: 'task_id' is required for delete operation."
+        return delete_task(task_id=task_id, delete_subtasks=delete_subtasks)
+
+    else:
+        return f"Error: Unknown operation '{operation}'. Use 'create', 'list', 'update', or 'delete'."
 
 
 if __name__ == "__main__":
