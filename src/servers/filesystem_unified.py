@@ -738,6 +738,222 @@ def search(
 
 
 # ========================================
+# Notebook Operations (Claude Code Compatible)
+# ========================================
+
+
+@mcp.tool()
+def notebook_read(path: str) -> str:
+    """
+    Read a Jupyter notebook (.ipynb) file.
+
+    Returns all cells with their types, source code, and outputs.
+
+    Args:
+        path: Path to the notebook file
+
+    Returns:
+        Formatted notebook content with cell numbers, types, and outputs
+    """
+    import json
+
+    try:
+        valid_path = validate_path(path)
+        if not os.path.exists(valid_path):
+            return "Error: Notebook file not found."
+
+        if not path.endswith(".ipynb"):
+            return "Error: File must be a Jupyter notebook (.ipynb)"
+
+        with open(valid_path, encoding="utf-8") as f:
+            notebook = json.load(f)
+
+        cells = notebook.get("cells", [])
+        if not cells:
+            return "Notebook is empty."
+
+        result = []
+        for i, cell in enumerate(cells):
+            cell_type = cell.get("cell_type", "unknown")
+            source = "".join(cell.get("source", []))
+
+            result.append(f"=== Cell {i} ({cell_type}) ===")
+            result.append(source)
+
+            # Include outputs for code cells
+            if cell_type == "code":
+                outputs = cell.get("outputs", [])
+                if outputs:
+                    result.append("\n--- Output ---")
+                    for output in outputs:
+                        output_type = output.get("output_type", "")
+                        if output_type == "stream":
+                            text = "".join(output.get("text", []))
+                            result.append(text)
+                        elif output_type in ("execute_result", "display_data"):
+                            data = output.get("data", {})
+                            if "text/plain" in data:
+                                result.append("".join(data["text/plain"]))
+                        elif output_type == "error":
+                            result.append(f"Error: {output.get('ename', '')}: {output.get('evalue', '')}")
+
+            result.append("")
+
+        return "\n".join(result)
+
+    except json.JSONDecodeError:
+        return "Error: Invalid notebook format (not valid JSON)"
+    except Exception as e:
+        return f"Error reading notebook: {str(e)}"
+
+
+@mcp.tool()
+def notebook_edit(
+    path: str,
+    cell_index: int,
+    new_source: str,
+    cell_type: str | None = None,
+    operation: Literal["replace", "insert", "delete"] = "replace",
+) -> str:
+    """
+    Edit a Jupyter notebook cell.
+
+    Args:
+        path: Path to the notebook file
+        cell_index: Index of the cell to edit (0-based)
+        new_source: New source code for the cell
+        cell_type: Cell type ("code" or "markdown"), only for insert
+        operation: "replace" (default), "insert", or "delete"
+
+    Returns:
+        Success message or error
+    """
+    import json
+
+    try:
+        valid_path = validate_path(path)
+        if not os.path.exists(valid_path):
+            return "Error: Notebook file not found."
+
+        with open(valid_path, encoding="utf-8") as f:
+            notebook = json.load(f)
+
+        cells = notebook.get("cells", [])
+
+        if operation == "delete":
+            if cell_index < 0 or cell_index >= len(cells):
+                return f"Error: Cell index {cell_index} out of range (0-{len(cells)-1})"
+            del cells[cell_index]
+            notebook["cells"] = cells
+
+        elif operation == "insert":
+            if cell_index < 0 or cell_index > len(cells):
+                return f"Error: Cell index {cell_index} out of range for insert (0-{len(cells)})"
+            new_cell = {
+                "cell_type": cell_type or "code",
+                "source": new_source.split("\n"),
+                "metadata": {},
+            }
+            if cell_type == "code" or cell_type is None:
+                new_cell["outputs"] = []
+                new_cell["execution_count"] = None
+            cells.insert(cell_index, new_cell)
+            notebook["cells"] = cells
+
+        elif operation == "replace":
+            if cell_index < 0 or cell_index >= len(cells):
+                return f"Error: Cell index {cell_index} out of range (0-{len(cells)-1})"
+            cells[cell_index]["source"] = new_source.split("\n")
+            # Clear outputs for code cells
+            if cells[cell_index].get("cell_type") == "code":
+                cells[cell_index]["outputs"] = []
+                cells[cell_index]["execution_count"] = None
+
+        else:
+            return f"Error: Invalid operation '{operation}'"
+
+        with open(valid_path, "w", encoding="utf-8") as f:
+            json.dump(notebook, f, indent=1)
+
+        return f"Successfully {operation}d cell {cell_index} in {path}"
+
+    except json.JSONDecodeError:
+        return "Error: Invalid notebook format"
+    except Exception as e:
+        return f"Error editing notebook: {str(e)}"
+
+
+@mcp.tool()
+def multi_edit(
+    path: str,
+    edits: list[dict],
+) -> str:
+    """
+    Make multiple sequential edits to a single file.
+
+    Each edit is applied in order. If any edit fails, the operation stops
+    and the file is left in its state after the last successful edit.
+
+    Args:
+        path: Path to the file to edit
+        edits: List of edit operations, each with:
+            - old_string: Text to find and replace
+            - new_string: Replacement text
+
+    Returns:
+        Summary of edits made or error message
+
+    Example:
+        multi_edit("main.py", [
+            {"old_string": "foo", "new_string": "bar"},
+            {"old_string": "baz", "new_string": "qux"}
+        ])
+    """
+    try:
+        valid_path = validate_path(path)
+        if not os.path.exists(valid_path):
+            return "Error: File not found."
+
+        with open(valid_path, encoding="utf-8") as f:
+            content = f.read()
+
+        original_content = content
+        successful_edits = 0
+
+        for i, edit in enumerate(edits):
+            old_string = edit.get("old_string", "")
+            new_string = edit.get("new_string", "")
+
+            if not old_string:
+                return f"Error: Edit {i} missing 'old_string'"
+
+            if old_string not in content:
+                # Rollback and report error
+                with open(valid_path, "w", encoding="utf-8") as f:
+                    f.write(original_content)
+                return f"Error: Edit {i} failed - 'old_string' not found in file. Rolled back {successful_edits} edits."
+
+            # Check for uniqueness
+            count = content.count(old_string)
+            if count > 1:
+                with open(valid_path, "w", encoding="utf-8") as f:
+                    f.write(original_content)
+                return f"Error: Edit {i} failed - 'old_string' appears {count} times (must be unique). Rolled back."
+
+            content = content.replace(old_string, new_string, 1)
+            successful_edits += 1
+
+        # Write final result
+        with open(valid_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return f"Successfully applied {successful_edits} edits to {path}"
+
+    except Exception as e:
+        return f"Error in multi_edit: {str(e)}"
+
+
+# ========================================
 # Server Entry Point
 # ========================================
 

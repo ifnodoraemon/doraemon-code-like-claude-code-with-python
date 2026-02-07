@@ -303,11 +303,21 @@ def _create_default_registry() -> ToolRegistry:
 
     try:
         # Unified Filesystem Tools (Recommended)
-        from src.servers.filesystem_unified import read, search, write
+        from src.servers.filesystem_unified import (
+            multi_edit,
+            notebook_edit,
+            notebook_read,
+            read,
+            search,
+            write,
+        )
 
         registry.register(read, sensitive=False, timeout=_get_timeout("read", 60.0))
         registry.register(write, sensitive=True, timeout=_get_timeout("write", 120.0))
         registry.register(search, sensitive=False, timeout=_get_timeout("search", 120.0))
+        registry.register(notebook_read, sensitive=False, timeout=_get_timeout("notebook_read", 60.0))
+        registry.register(notebook_edit, sensitive=True, timeout=_get_timeout("notebook_edit", 60.0))
+        registry.register(multi_edit, sensitive=True, timeout=_get_timeout("multi_edit", 120.0))
 
     except ImportError as e:
         logger.error(f"Failed to import filesystem tools: {e}")
