@@ -325,14 +325,14 @@ class TestHelperFunctions:
         assert model_name == "gemini-2.0-flash"
 
     def test_get_model_name_pro(self):
-        """Test getting model name for PRO."""
+        """Test getting model name for PRO (inherits parent model)."""
         model_name = _get_model_name(SubagentModel.PRO, "gemini-2.0-flash")
-        assert model_name == "gemini-3-pro-preview"
+        assert model_name == "gemini-2.0-flash"
 
     def test_get_model_name_flash(self):
-        """Test getting model name for FLASH."""
+        """Test getting model name for FLASH (inherits parent model)."""
         model_name = _get_model_name(SubagentModel.FLASH, "gemini-2.0-flash")
-        assert model_name == "gemini-3-flash-preview"
+        assert model_name == "gemini-2.0-flash"
 
     def test_aggregate_results_empty(self):
         """Test aggregating empty results."""
@@ -509,7 +509,7 @@ class TestSubagentManager:
 
     def test_manager_initialization(self, manager):
         """Test manager initialization."""
-        assert manager.client is not None
+        assert manager.model_client is not None
         assert manager.tool_registry is not None
         assert manager.parent_model == "gemini-2.0-flash"
 
