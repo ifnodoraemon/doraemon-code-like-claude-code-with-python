@@ -711,6 +711,16 @@ async def chat_loop(
         permission_mgr=permission_mgr,
     )
 
+    # Setup tab completion for slash commands
+    slash_commands = [
+        "help", "init", "mode", "model", "context", "skills", "clear", "compact",
+        "reset", "tools", "debug", "commit", "review-pr", "sessions", "resume",
+        "rename", "export", "fork", "checkpoints", "rewind", "tasks", "task",
+        "plugins", "plugin", "theme", "vim", "thinking", "doctor", "workspace",
+        "add-dir", "cost", "agents", "history", "exit",
+    ]
+    cmd_history.setup_completer(slash_commands)
+
     console.print(
         Panel.fit(
             f"[bold blue]🤖 Doraemon Code[/bold blue]\n[dim]Type /help for commands. Mode: {mode}[/dim]",

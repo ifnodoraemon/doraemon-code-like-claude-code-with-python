@@ -247,6 +247,43 @@ class CommandHistory:
         except Exception as e:
             logger.warning(f"Failed to setup readline: {e}")
 
+    def setup_completer(self, commands: list[str]):
+        """
+        Setup tab completion for slash commands.
+
+        Args:
+            commands: List of available slash commands (without /)
+        """
+        self._completion_commands = sorted(commands)
+
+        def completer(text: str, state: int) -> str | None:
+            """Readline completer function."""
+            # Only complete if starting with /
+            line = readline.get_line_buffer()
+            if not line.startswith("/"):
+                return None
+
+            # Get the command part (without /)
+            cmd_part = line[1:]
+
+            # Find matching commands
+            matches = [
+                f"/{cmd}" for cmd in self._completion_commands
+                if cmd.startswith(cmd_part)
+            ]
+
+            if state < len(matches):
+                return matches[state]
+            return None
+
+        try:
+            readline.set_completer(completer)
+            readline.set_completer_delims(" \t\n")
+            readline.parse_and_bind("tab: complete")
+            logger.debug(f"Tab completion setup for {len(commands)} commands")
+        except Exception as e:
+            logger.warning(f"Failed to setup tab completion: {e}")
+
     def get_stats(self) -> dict[str, Any]:
         """Get history statistics."""
         return {
