@@ -63,6 +63,59 @@ def _is_context_overflow(error: Exception) -> bool:
     return any(indicator in msg for indicator in indicators)
 
 
+def expand_file_references(text: str) -> str:
+    """
+    Expand @file references in user input.
+
+    Supports:
+    - @./path/to/file - Include file content
+    - @./directory/ - Include directory listing
+    - @file.txt - Relative to current directory
+
+    Returns:
+        Text with file references expanded
+    """
+    import re
+    from pathlib import Path
+
+    # Pattern: @ followed by path (not starting with space)
+    pattern = r'@(\.?/?[\w\-./]+)'
+
+    def replace_reference(match):
+        ref_path = match.group(1)
+        path = Path(ref_path)
+
+        try:
+            if path.is_file():
+                # Read file content
+                content = path.read_text(encoding="utf-8", errors="replace")
+                # Truncate if too large
+                if len(content) > 50000:
+                    content = content[:50000] + "\n... [truncated]"
+                return f"\n```{path.suffix[1:] if path.suffix else 'text'}\n# File: {path}\n{content}\n```\n"
+
+            elif path.is_dir():
+                # List directory
+                files = sorted(path.iterdir())
+                listing = []
+                for f in files[:100]:  # Limit to 100 entries
+                    prefix = "📁 " if f.is_dir() else "📄 "
+                    listing.append(f"{prefix}{f.name}")
+                if len(files) > 100:
+                    listing.append(f"... and {len(files) - 100} more")
+                return f"\n```\n# Directory: {path}/\n" + "\n".join(listing) + "\n```\n"
+
+            else:
+                # Path doesn't exist, keep original
+                return match.group(0)
+
+        except Exception as e:
+            logger.warning(f"Failed to expand @{ref_path}: {e}")
+            return match.group(0)
+
+    return re.sub(pattern, replace_reference, text)
+
+
 def build_system_prompt(mode: str, skills_content: str = "") -> str:
     """Build the system prompt with mode, rules, memory, and skills."""
     config = load_config()
@@ -601,6 +654,9 @@ async def chat_loop(
     resume_session: str | None = None,
     session_name: str | None = None,
     prompt: str | None = None,
+    print_mode: bool = False,
+    max_turns: int | None = None,
+    tool_config: dict | None = None,
 ):
     """Main chat loop with automatic context management."""
 
@@ -614,8 +670,9 @@ async def chat_loop(
         else:
             initial_prompt = piped_input
 
-    headless = bool(initial_prompt)
-    if headless:
+    # Print mode implies headless
+    headless = bool(initial_prompt) or print_mode
+    if headless and not print_mode:
         console.print("[dim cyan]Running in headless mode[/dim cyan]")
 
     # Initialize model client
@@ -713,11 +770,12 @@ async def chat_loop(
 
     # Setup tab completion for slash commands
     slash_commands = [
-        "help", "init", "mode", "model", "context", "skills", "clear", "compact",
-        "reset", "tools", "debug", "commit", "review-pr", "review", "sessions", "resume",
-        "rename", "export", "fork", "checkpoints", "rewind", "tasks", "task",
-        "plugins", "plugin", "theme", "vim", "thinking", "doctor", "workspace",
-        "add-dir", "cost", "agents", "history", "exit",
+        "help", "init", "mode", "model", "status", "config", "context", "skills",
+        "clear", "compact", "reset", "tools", "debug", "doctor", "memory",
+        "commit", "review-pr", "review", "sessions", "resume", "rename", "export",
+        "fork", "checkpoints", "rewind", "tasks", "task", "plugins", "plugin",
+        "theme", "vim", "thinking", "workspace", "add-dir", "cost", "agents",
+        "history", "exit",
     ]
     cmd_history.setup_completer(slash_commands)
 
@@ -827,6 +885,9 @@ async def chat_loop(
 
             # Add to command history
             cmd_history.add(user_input)
+
+            # Expand @file references
+            user_input = expand_file_references(user_input)
 
             # Trigger UserPromptSubmit hook
             hook_result = await hook_mgr.trigger(
@@ -973,6 +1034,15 @@ async def chat_loop(
                     f"Cost: ${cost:.4f} | "
                     f"Ctx: {stats['usage_percent']}%[/dim]"
                 )
+
+            # Print mode: exit after first response
+            if print_mode:
+                break
+
+            # Max turns limit
+            if max_turns and turn_count >= max_turns:
+                console.print(f"[yellow]Reached max turns limit ({max_turns})[/yellow]")
+                break
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted[/yellow]")

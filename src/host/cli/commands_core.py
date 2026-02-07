@@ -161,6 +161,18 @@ class CoreCommandHandler:
         elif cmd == "review":
             result = await self._handle_review(cmd_args, conversation_history)
 
+        elif cmd == "status":
+            self._show_status(mode, tool_names)
+
+        elif cmd == "config":
+            await self._handle_config(cmd_args)
+
+        elif cmd == "memory":
+            await self._handle_memory(cmd_args)
+
+        elif cmd == "doctor":
+            self._run_doctor()
+
         else:
             return None
 
@@ -201,9 +213,12 @@ Project specific rules for Doraemon Code.
         """Show help text."""
         console.print("""
 [bold]Commands:[/bold]
+  /help           - Show this help
   /init           - Initialize project (create DORAEMON.md)
   /mode <name>    - Switch mode (plan/build)
   /model [name]   - Switch/list AI models
+  /status         - Show system status
+  /config         - Configure settings
   /context        - Show context/memory statistics
   /skills         - Show loaded skills
   /clear          - Clear conversation (keeps summaries)
@@ -211,6 +226,8 @@ Project specific rules for Doraemon Code.
   /reset          - Full reset (clears everything)
   /tools          - List available tools
   /debug          - Show debug info
+  /doctor         - Run diagnostic checks
+  /memory         - Edit MEMORY.md files
 
 [bold]Git Commands:[/bold]
   /commit [msg]   - Smart commit (auto-generates message if not provided)
@@ -752,3 +769,221 @@ Project specific rules for Doraemon Code.
             console.print(f"[bold]Turn {turn_num}[/bold] [{role_color}]{role_name}[/{role_color}]: {snippet}")
 
         console.print(f"\n[dim]Use /review goto <turn> to jump to a specific turn[/dim]")
+
+    def _show_status(self, mode: str, tool_names: list):
+        """Show system status information."""
+        import os
+
+        table = Table(title="System Status", show_header=False)
+        table.add_column("Key", style="cyan")
+        table.add_column("Value", style="green")
+
+        # Session info
+        table.add_row("Session ID", self.ctx.session_id)
+        table.add_row("Project", self.project)
+        table.add_row("Mode", mode)
+
+        # Model info
+        model = os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview")
+        table.add_row("Model", model)
+
+        gateway = os.getenv("DORAEMON_GATEWAY_URL")
+        if gateway:
+            table.add_row("Gateway", gateway)
+        else:
+            table.add_row("Mode", "Direct API")
+
+        # Context stats
+        stats = self.ctx.get_context_stats()
+        table.add_row("Messages", str(stats["messages"]))
+        table.add_row("Summaries", str(stats["summaries"]))
+        table.add_row("Est. Tokens", f"{stats['estimated_tokens']:,}")
+        table.add_row("Context Usage", f"{stats['usage_percent']}%")
+
+        # Tools
+        table.add_row("Tools Loaded", str(len(tool_names)))
+
+        # Cost
+        cost_stats = self.cost_tracker.get_stats()
+        table.add_row("Session Cost", f"${cost_stats.get('session_cost', 0):.4f}")
+
+        console.print(table)
+
+    async def _handle_config(self, cmd_args: list[str]):
+        """
+        Handle /config command - interactive configuration.
+
+        Usage:
+            /config              - Show current config
+            /config set <k> <v>  - Set a config value
+            /config model        - Change model interactively
+        """
+        import json
+        import os
+
+        config_path = Path.home() / ".doraemon" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Load config
+        if config_path.exists():
+            config_data = json.loads(config_path.read_text())
+        else:
+            config_data = {}
+
+        if not cmd_args:
+            # Show current config
+            table = Table(title="Configuration", show_header=True)
+            table.add_column("Key", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_column("Source", style="dim")
+
+            # Show env vars and config
+            table.add_row("model", os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview"), "env")
+            table.add_row("gateway_url", os.getenv("DORAEMON_GATEWAY_URL", "(not set)"), "env")
+            table.add_row("daily_budget", os.getenv("DORAEMON_DAILY_BUDGET", "0"), "env")
+            table.add_row("session_budget", os.getenv("DORAEMON_SESSION_BUDGET", "0"), "env")
+
+            for k, v in config_data.items():
+                table.add_row(k, str(v), "config.json")
+
+            console.print(table)
+            console.print("\n[dim]Use /config set <key> <value> to change settings[/dim]")
+            return
+
+        subcommand = cmd_args[0].lower()
+
+        if subcommand == "set" and len(cmd_args) >= 3:
+            key = cmd_args[1]
+            value = " ".join(cmd_args[2:])
+            config_data[key] = value
+            config_path.write_text(json.dumps(config_data, indent=2))
+            console.print(f"[green]Set {key} = {value}[/green]")
+
+        elif subcommand == "model":
+            # Interactive model selection
+            from rich.prompt import Prompt
+            models = [
+                "gemini-3-pro-preview",
+                "gemini-2.5-flash",
+                "gpt-4o",
+                "gpt-4o-mini",
+                "claude-sonnet-4-5-20250929",
+                "claude-opus-4-6",
+            ]
+            console.print("[bold]Available Models:[/bold]")
+            for i, m in enumerate(models, 1):
+                console.print(f"  {i}. {m}")
+            choice = Prompt.ask("Select model (number or name)", default="1")
+            if choice.isdigit() and 1 <= int(choice) <= len(models):
+                selected = models[int(choice) - 1]
+            else:
+                selected = choice
+            console.print(f"[green]Selected: {selected}[/green]")
+            console.print(f"[dim]Set DORAEMON_MODEL={selected} in your environment[/dim]")
+
+        else:
+            console.print("[red]Usage: /config [set <key> <value> | model][/red]")
+
+    async def _handle_memory(self, cmd_args: list[str]):
+        """
+        Handle /memory command - edit MEMORY.md files.
+
+        Usage:
+            /memory              - Edit project MEMORY.md
+            /memory global       - Edit global ~/.doraemon/MEMORY.md
+            /memory show         - Show current memory content
+        """
+        import os
+
+        project_memory = Path(".doraemon/MEMORY.md")
+        global_memory = Path.home() / ".doraemon" / "MEMORY.md"
+
+        if not cmd_args or cmd_args[0] == "project":
+            target = project_memory
+            target.parent.mkdir(parents=True, exist_ok=True)
+        elif cmd_args[0] == "global":
+            target = global_memory
+            target.parent.mkdir(parents=True, exist_ok=True)
+        elif cmd_args[0] == "show":
+            console.print("[bold cyan]Project Memory (.doraemon/MEMORY.md):[/bold cyan]")
+            if project_memory.exists():
+                console.print(project_memory.read_text())
+            else:
+                console.print("[dim](not found)[/dim]")
+
+            console.print("\n[bold cyan]Global Memory (~/.doraemon/MEMORY.md):[/bold cyan]")
+            if global_memory.exists():
+                console.print(global_memory.read_text())
+            else:
+                console.print("[dim](not found)[/dim]")
+            return
+        else:
+            console.print("[red]Usage: /memory [project|global|show][/red]")
+            return
+
+        # Create file if not exists
+        if not target.exists():
+            target.write_text("# Memory\n\nAdd notes here that should persist across sessions.\n")
+
+        # Open in editor
+        editor = os.getenv("EDITOR", "nano")
+        console.print(f"[dim]Opening {target} in {editor}...[/dim]")
+
+        import subprocess
+        try:
+            subprocess.run([editor, str(target)])
+            console.print("[green]Memory file saved.[/green]")
+        except Exception as e:
+            console.print(f"[red]Failed to open editor: {e}[/red]")
+            console.print(f"[dim]Edit manually: {target}[/dim]")
+
+    def _run_doctor(self):
+        """Run diagnostic checks (same as CLI doctor command)."""
+        import os
+        import sys
+
+        console.print("[bold]🔍 Doraemon Code Diagnostics[/bold]\n")
+
+        checks = []
+
+        # Python version
+        py_version = sys.version_info
+        py_ok = py_version >= (3, 10)
+        checks.append(("Python", f"{py_version.major}.{py_version.minor}.{py_version.micro}", py_ok))
+
+        # API keys
+        google_key = bool(os.getenv("GOOGLE_API_KEY"))
+        openai_key = bool(os.getenv("OPENAI_API_KEY"))
+        anthropic_key = bool(os.getenv("ANTHROPIC_API_KEY"))
+        gateway_url = os.getenv("DORAEMON_GATEWAY_URL")
+
+        if gateway_url:
+            checks.append(("Gateway", gateway_url, True))
+        else:
+            checks.append(("GOOGLE_API_KEY", "✓" if google_key else "✗", google_key))
+            checks.append(("OPENAI_API_KEY", "✓" if openai_key else "✗", openai_key))
+            checks.append(("ANTHROPIC_API_KEY", "✓" if anthropic_key else "✗", anthropic_key))
+
+        # Directories
+        checks.append((".doraemon/", "✓" if Path(".doraemon").exists() else "Will create", True))
+        checks.append(("DORAEMON.md", "✓" if Path("DORAEMON.md").exists() else "Use /init", Path("DORAEMON.md").exists()))
+
+        # Git
+        try:
+            result = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
+            checks.append(("Git", "✓" if result.returncode == 0 else "✗", result.returncode == 0))
+        except Exception:
+            checks.append(("Git", "✗", False))
+
+        # Display
+        table = Table(show_header=True)
+        table.add_column("Check", style="cyan")
+        table.add_column("Status")
+        table.add_column("", width=3)
+
+        for name, status, ok in checks:
+            icon = "✅" if ok else "❌"
+            style = "green" if ok else "red"
+            table.add_row(name, f"[{style}]{status}[/{style}]", icon)
+
+        console.print(table)
