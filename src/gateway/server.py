@@ -14,6 +14,7 @@ Usage:
 import json
 import logging
 import os
+import secrets
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -75,13 +76,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - restrict to configured origins
+ALLOWED_ORIGINS = os.getenv(
+    "DORAEMON_CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:8000,http://127.0.0.1:5173,http://127.0.0.1:8000",
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in ALLOWED_ORIGINS if o.strip()],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Gateway API key (optional)
@@ -102,7 +108,7 @@ def verify_api_key(authorization: str | None) -> bool:
     else:
         key = authorization
 
-    return key == GATEWAY_API_KEY
+    return secrets.compare_digest(key, GATEWAY_API_KEY)
 
 
 # Pydantic models for API
@@ -286,13 +292,19 @@ async def chat_completions(
 
 async def stream_response(request: ChatRequest):
     """Generate SSE stream for chat completion."""
-    assert router is not None
-    async for chunk in router.chat_stream(request):
-        if isinstance(chunk, ErrorResponse):
-            yield f"data: {json.dumps(chunk.to_dict())}\n\n"
-            break
+    if router is None:
+        yield f"data: {json.dumps({'error': 'Gateway not initialized'})}\n\n"
+        return
+    try:
+        async for chunk in router.chat_stream(request):
+            if isinstance(chunk, ErrorResponse):
+                yield f"data: {json.dumps(chunk.to_dict())}\n\n"
+                break
 
-        yield f"data: {json.dumps(chunk.to_dict())}\n\n"
+            yield f"data: {json.dumps(chunk.to_dict())}\n\n"
+    except Exception as e:
+        logger.error(f"Stream error: {e}")
+        yield f"data: {json.dumps({'error': 'Internal stream error'})}\n\n"
 
     yield "data: [DONE]\n\n"
 
