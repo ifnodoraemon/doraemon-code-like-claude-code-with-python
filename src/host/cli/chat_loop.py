@@ -86,6 +86,13 @@ def expand_file_references(text: str) -> str:
         path = Path(ref_path)
 
         try:
+            # Security: resolve and check path is within cwd
+            resolved = path.resolve()
+            cwd = Path.cwd().resolve()
+            if not str(resolved).startswith(str(cwd)):
+                logger.warning(f"Blocked @reference outside workspace: {ref_path}")
+                return match.group(0)
+
             if path.is_file():
                 # Read file content
                 content = path.read_text(encoding="utf-8", errors="replace")

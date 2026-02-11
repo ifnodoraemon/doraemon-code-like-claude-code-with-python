@@ -8,6 +8,7 @@ Provides access to evaluation results, trends, and task statistics.
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -23,9 +24,10 @@ logger = logging.getLogger(__name__)
 # Router setup
 router = APIRouter()
 
-# Templates setup
+# Templates setup (with autoescape enabled for security)
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
+templates.env.autoescape = True
 
 # Default eval results directory
 EVAL_RESULTS_DIR = Path(__file__).parent.parent.parent.parent / "eval_results"
@@ -38,6 +40,38 @@ class EvaluationRequest(BaseModel):
     n_trials: int = 1
     max_workers: int = 2
     model: str | None = None
+
+    @field_validator("task_set")
+    @classmethod
+    def validate_task_set(cls, v: str) -> str:
+        allowed = {"default", "quick", "full"}
+        if v not in allowed:
+            raise ValueError(f"task_set must be one of {allowed}")
+        return v
+
+    @field_validator("n_trials")
+    @classmethod
+    def validate_n_trials(cls, v: int) -> int:
+        if not 1 <= v <= 10:
+            raise ValueError("n_trials must be between 1 and 10")
+        return v
+
+    @field_validator("max_workers")
+    @classmethod
+    def validate_max_workers(cls, v: int) -> int:
+        if not 1 <= v <= 8:
+            raise ValueError("max_workers must be between 1 and 8")
+        return v
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, v: str | None) -> str | None:
+        if v is not None:
+            if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$', v):
+                raise ValueError("Invalid model name format")
+            if len(v) > 128:
+                raise ValueError("Model name too long")
+        return v
 
 
 class EvaluationProgress(BaseModel):
@@ -130,7 +164,19 @@ def load_evaluation_details(eval_id: str) -> dict[str, Any]:
     category = parts[0]
     timestamp = f"{parts[1]}_{parts[2]}"
 
+    # Validate category to prevent path traversal
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', category):
+        raise ValueError(f"Invalid category in evaluation ID: {category}")
+    if ".." in category or "/" in category:
+        raise ValueError("Invalid characters in evaluation ID")
+
     results_dir = get_eval_results_dir() / category
+    # Ensure resolved path is within eval results directory
+    try:
+        results_dir.resolve().relative_to(get_eval_results_dir().resolve())
+    except ValueError:
+        raise ValueError("Path traversal detected in evaluation ID") from None
+
     summary_file = results_dir / f"summary_{timestamp}.json"
     results_file = results_dir / f"results_{timestamp}.json"
 
@@ -386,6 +432,8 @@ async def get_evaluations(
     Returns:
         List of evaluation summaries.
     """
+    limit = min(max(1, limit), 100)
+    offset = max(0, offset)
     evaluations = list_evaluation_files()
 
     # Filter by category if specified
