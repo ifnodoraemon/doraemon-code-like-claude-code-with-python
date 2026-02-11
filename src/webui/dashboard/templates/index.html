@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Doraemon Code - Evaluation Dashboard</title>
     <link rel="stylesheet" href="/dashboard/static/dashboard.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+            integrity="sha384-e4NMVm2fBMSVPMoRRr672v/hlhEWLc+VnL8jCaceHDenBpFMJ+kXtSr0bMfrKHoO"
+            crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -192,7 +194,7 @@
                                 </td>
                                 <td>{{ "%.2f"|format(eval.total_time) }}s</td>
                                 <td>
-                                    <button class="btn btn-small btn-view" onclick="viewDetails('{{ eval.id }}')">
+                                    <button class="btn btn-small btn-view" data-eval-id="{{ eval.id }}" onclick="viewDetails(this.dataset.evalId)">
                                         View
                                     </button>
                                 </td>
@@ -258,8 +260,8 @@
 
     <!-- Pass data to JavaScript -->
     <script>
-        const trendsData = {{ trends | tojson | safe }};
-        const taskStats = {{ task_stats | tojson | safe }};
+        const trendsData = {{ trends | tojson }};
+        const taskStats = {{ task_stats | tojson }};
     </script>
     <script src="/dashboard/static/dashboard.js"></script>
 </body>
