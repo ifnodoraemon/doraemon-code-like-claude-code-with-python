@@ -330,8 +330,8 @@ async def stream_model_response(
     Returns:
         ChatResponse with accumulated content, tool_calls, usage.
     """
-    accumulated_content = ""
-    accumulated_thought = ""
+    content_parts: list[str] = []
+    thought_parts: list[str] = []
     accumulated_tool_calls: list[dict] = []
     last_usage = None
     finish_reason = None
@@ -342,10 +342,10 @@ async def stream_model_response(
         with Live("", console=console, refresh_per_second=12, transient=True) as live:
             async for chunk in stream:
                 if chunk.thought:
-                    accumulated_thought += chunk.thought
+                    thought_parts.append(chunk.thought)
                 if chunk.content:
-                    accumulated_content += chunk.content
-                    live.update(Markdown(accumulated_content))
+                    content_parts.append(chunk.content)
+                    live.update(Markdown("".join(content_parts)))
                 if chunk.tool_calls:
                     for tc_delta in chunk.tool_calls:
                         _merge_tool_call_delta(accumulated_tool_calls, tc_delta)
@@ -368,6 +368,9 @@ async def stream_model_response(
         logger.debug(f"Streaming failed, falling back to non-streaming: {e}")
         response = await model_client.chat(messages, tools=tools, model=model_name)
         return response
+
+    accumulated_content = "".join(content_parts) if content_parts else ""
+    accumulated_thought = "".join(thought_parts) if thought_parts else ""
 
     return ChatResponse(
         content=accumulated_content or None,
@@ -835,6 +838,11 @@ async def chat_loop(
                                 "[dim]Multi-line mode (close with matching delimiter)...[/dim]"
                             )
                             while True:
+                                if len(lines) >= 1000:
+                                    console.print(
+                                        "[yellow]Multi-line input limit (1000 lines) reached, closing automatically.[/yellow]"
+                                    )
+                                    break
                                 line = Prompt.ask("[dim]...[/dim]")
                                 lines.append(line)
                                 if delim in line:

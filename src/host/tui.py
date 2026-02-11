@@ -275,7 +275,7 @@ class DoraemonTUI(App):
             chat.add_message("assistant", help_text)
 
         elif command == "/clear":
-            chat_area = self.query_one("#chat_area", ChatArea)
+            chat_area = self.query_one("#chat-area", ChatArea)
             chat_area.chat_log.clear()
             self.conversation_history.clear()
             chat_area.add_message("system", "Chat and history cleared")

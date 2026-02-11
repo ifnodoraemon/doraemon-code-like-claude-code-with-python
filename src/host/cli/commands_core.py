@@ -439,7 +439,7 @@ Project specific rules for Doraemon Code.
         """Run a git command and return output."""
         try:
             result = subprocess.run(
-                ["git"] + args,
+                ["git"] + [str(a) for a in args],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -929,7 +929,7 @@ Project specific rules for Doraemon Code.
 
         import subprocess
         try:
-            subprocess.run([editor, str(target)])
+            subprocess.run([editor, str(target)], timeout=600)
             console.print("[green]Memory file saved.[/green]")
         except Exception as e:
             console.print(f"[red]Failed to open editor: {e}[/red]")
