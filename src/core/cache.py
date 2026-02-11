@@ -14,7 +14,6 @@ Features:
 import hashlib
 import json
 import logging
-import pickle
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -135,7 +134,7 @@ class ToolCache:
     def _estimate_size(self, value: Any) -> int:
         """Estimate size of a value in bytes."""
         try:
-            return len(pickle.dumps(value))
+            return len(json.dumps(value, default=str).encode())
         except Exception:
             return len(str(value))
 
@@ -330,7 +329,7 @@ class ToolCache:
             }
 
             self.config.persist_path.parent.mkdir(parents=True, exist_ok=True)
-            self.config.persist_path.write_bytes(pickle.dumps(data))
+            self.config.persist_path.write_text(json.dumps(data, default=str), encoding="utf-8")
 
         except Exception as e:
             logger.warning(f"Failed to save cache: {e}")
@@ -341,7 +340,7 @@ class ToolCache:
             return
 
         try:
-            data = pickle.loads(self.config.persist_path.read_bytes())
+            data = json.loads(self.config.persist_path.read_text(encoding="utf-8"))
 
             for key, entry_data in data.items():
                 # Skip expired entries
