@@ -201,204 +201,65 @@ def git(
 
 @mcp.tool()
 def git_status(path: str = ".") -> str:
-    """
-    Get the current git repository status.
-
-    Shows:
-    - Current branch
-    - Staged changes
-    - Unstaged changes
-    - Untracked files
-
-    Args:
-        path: Repository path (default: current directory)
-
-    Returns:
-        Git status output
-
-    Note: Prefer using git(operation="status") instead.
-    """
+    """Get the current git repository status."""
     return git(operation="status", path=path)
 
 
 @mcp.tool()
-def git_diff(
-    path: str = ".",
-    staged: bool = False,
-    file_path: str | None = None,
-) -> str:
-    """
-    Show changes in the repository.
-
-    Args:
-        path: Repository path
-        staged: If True, show staged changes; otherwise show unstaged changes
-        file_path: Specific file to diff (optional)
-
-    Returns:
-        Diff output showing changes
-
-    Note: Prefer using git(operation="diff") instead.
-    """
+def git_diff(path: str = ".", staged: bool = False, file_path: str | None = None) -> str:
+    """Show changes in the repository."""
     return git(operation="diff", path=path, staged=staged, file=file_path)
 
 
 @mcp.tool()
 def git_log(
-    path: str = ".",
-    count: int = 10,
-    oneline: bool = False,
-    author: str | None = None,
-    since: str | None = None,
+    path: str = ".", count: int = 10, oneline: bool = False,
+    author: str | None = None, since: str | None = None,
 ) -> str:
-    """
-    Show commit history.
-
-    Args:
-        path: Repository path
-        count: Number of commits to show (default: 10)
-        oneline: Use compact one-line format
-        author: Filter by author name/email
-        since: Show commits since date (e.g., "2024-01-01", "1 week ago")
-
-    Returns:
-        Commit history
-
-    Note: Prefer using git(operation="log") instead.
-    """
+    """Show commit history."""
     return git(operation="log", path=path, count=count, oneline=oneline, author=author, since=since)
 
 
 @mcp.tool()
-def git_show(
-    commit: str = "HEAD",
-    path: str = ".",
-    stat_only: bool = False,
-) -> str:
-    """
-    Show details of a specific commit.
-
-    Args:
-        commit: Commit hash or reference (default: HEAD)
-        path: Repository path
-        stat_only: Only show file statistics, not full diff
-
-    Returns:
-        Commit details
-    """
+def git_show(commit: str = "HEAD", path: str = ".", stat_only: bool = False) -> str:
+    """Show details of a specific commit."""
     if not _is_git_repo(path):
         return f"Error: {path} is not a git repository"
-
-    args = ["show", commit]
-    if stat_only:
-        args.append("--stat")
-
+    args = ["show", commit] + (["--stat"] if stat_only else [])
     success, output = _run_git_command(args, cwd=path)
     return output if success else f"Error: {output}"
 
 
-# ========================================
-# Staging and Committing
-# ========================================
-
-
 @mcp.tool()
-def git_add(
-    files: list[str] | str,
-    path: str = ".",
-) -> str:
-    """
-    Stage files for commit.
-
-    Args:
-        files: File(s) to stage. Use "." for all files, or a list of specific files
-        path: Repository path
-
-    Returns:
-        Confirmation or error message
-
-    Examples:
-        git_add(".")  # Stage all changes
-        git_add(["src/main.py", "README.md"])  # Stage specific files
-
-    Note: Prefer using git(operation="add") instead.
-    """
+def git_add(files: list[str] | str, path: str = ".") -> str:
+    """Stage files for commit. Use '.' for all files."""
     if isinstance(files, str):
         files = [files]
     return git(operation="add", path=path, files=files)
 
 
 @mcp.tool()
-def git_commit(
-    message: str,
-    path: str = ".",
-    add_all: bool = False,
-) -> str:
-    """
-    Create a commit with staged changes.
-
-    Args:
-        message: Commit message
-        path: Repository path
-        add_all: If True, automatically stage all tracked files before committing
-
-    Returns:
-        Commit confirmation or error message
-
-    Note:
-        The commit message should follow conventional commit format:
-        - feat: new feature
-        - fix: bug fix
-        - docs: documentation
-        - refactor: code refactoring
-        - test: adding tests
-        - chore: maintenance
-
-    Note: Prefer using git(operation="commit") instead.
-    """
+def git_commit(message: str, path: str = ".", add_all: bool = False) -> str:
+    """Create a commit with staged changes."""
     return git(operation="commit", path=path, message=message, add_all=add_all)
 
 
 @mcp.tool()
-def git_reset(
-    files: list[str] | str | None = None,
-    path: str = ".",
-    mode: str = "mixed",
-) -> str:
-    """
-    Unstage files or reset commits.
-
-    Args:
-        files: Specific files to unstage (None = reset staging area)
-        path: Repository path
-        mode: Reset mode - "soft" (keep changes staged), "mixed" (unstage), "hard" (discard)
-
-    Returns:
-        Confirmation or error message
-
-    Warning:
-        Using mode="hard" will DISCARD all uncommitted changes!
-    """
+def git_reset(files: list[str] | str | None = None, path: str = ".", mode: str = "mixed") -> str:
+    """Unstage files or reset commits. Modes: soft, mixed, hard."""
     if not _is_git_repo(path):
         return f"Error: {path} is not a git repository"
-
     if files:
-        # Unstage specific files
         if isinstance(files, str):
             files = [files]
         args = ["reset", "HEAD", "--"] + files
     else:
-        # Reset staging area or commits
-        if mode not in ["soft", "mixed", "hard"]:
-            return f"Error: Invalid mode '{mode}'. Use: soft, mixed, or hard"
+        if mode not in ("soft", "mixed", "hard"):
+            return f"Error: Invalid mode '{mode}'. Use: soft, mixed, hard"
         args = ["reset", f"--{mode}"]
-
     success, output = _run_git_command(args, cwd=path)
-
     if success:
-        if files:
-            return f"Unstaged: {', '.join(files)}"
-        return f"Reset completed (mode: {mode})"
+        return f"Unstaged: {', '.join(files)}" if files else f"Reset completed (mode: {mode})"
     return f"Error: {output}"
 
 

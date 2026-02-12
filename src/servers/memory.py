@@ -56,8 +56,7 @@ def save_note(
     if collection is None:
         return "Memory system is not initialized."
 
-    if tags is None:
-        tags = []
+    tags = tags or []
 
     if len(content) > 100000:
         return f"Error: Content too long ({len(content)} chars). Maximum allowed is 100000 characters."
