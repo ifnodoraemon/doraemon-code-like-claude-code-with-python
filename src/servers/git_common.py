@@ -99,11 +99,13 @@ def validate_git_ref(ref: str) -> tuple[bool, str]:
 
 
 def sanitize_git_arg(value: str) -> str:
-    """Sanitize git argument to prevent injection."""
-    # Remove any shell metacharacters
-    dangerous = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+    """Sanitize git argument to prevent shell and option injection."""
+    dangerous = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r", "\x00"]
     for char in dangerous:
         value = value.replace(char, "")
+    # Prevent git/gh option injection via dash-prefixed values
+    if value.startswith("-"):
+        value = " " + value
     return value
 
 
