@@ -13,112 +13,22 @@ Features:
 """
 
 import logging
-import subprocess
+import re
 
 from mcp.server.fastmcp import FastMCP
 
 from src.core.security import validate_path
+from src.servers.git_common import is_git_repo as _is_git_repo
+from src.servers.git_common import run_gh_command as _run_gh_command
+from src.servers.git_common import run_git_command as _run_git_command
+from src.servers.git_common import sanitize_git_arg as _sanitize_git_arg
+from src.servers.git_common import validate_git_ref as _validate_git_ref
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("DoraemonGit")
-
-
-# ========================================
-# Helper Functions
-# ========================================
-
-
-def _run_git_command(
-    args: list[str],
-    cwd: str = ".",
-    timeout: int = 30,
-) -> tuple[bool, str]:
-    """
-    Run a git command and return (success, output).
-
-    Args:
-        args: Git command arguments (without 'git' prefix)
-        cwd: Working directory
-        timeout: Timeout in seconds
-
-    Returns:
-        Tuple of (success: bool, output: str)
-    """
-    try:
-        resolved_cwd = validate_path(cwd)
-    except (PermissionError, ValueError) as e:
-        return False, f"Invalid path: {e}"
-
-    try:
-        result = subprocess.run(
-            ["git"] + args,
-            cwd=resolved_cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-
-        output = result.stdout
-        if result.stderr:
-            if output:
-                output += "\n"
-            output += result.stderr
-
-        return result.returncode == 0, output.strip()
-
-    except subprocess.TimeoutExpired:
-        return False, f"Git command timed out after {timeout}s"
-    except FileNotFoundError:
-        return False, "Git is not installed or not in PATH"
-    except Exception as e:
-        return False, f"Error: {str(e)}"
-
-
-def _is_git_repo(path: str = ".") -> bool:
-    """Check if the path is inside a git repository."""
-    success, _ = _run_git_command(["rev-parse", "--git-dir"], cwd=path)
-    return success
-
-
-def _validate_git_ref(ref: str) -> tuple[bool, str]:
-    """
-    Validate git reference (branch/tag name) is safe.
-
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    import re
-
-    if not ref:
-        return False, "Reference cannot be empty"
-
-    if len(ref) > 255:
-        return False, "Reference name too long"
-
-    # Git refs cannot contain: spaces, ~, ^, :, ?, *, [, \, control chars
-    if re.search(r'[~\^:?*\[\s\\]', ref):
-        return False, "Reference contains invalid characters"
-
-    # Cannot start with - (looks like option)
-    if ref.startswith('-'):
-        return False, "Reference cannot start with '-'"
-
-    # Cannot end with . or /
-    if ref.endswith('.') or ref.endswith('/'):
-        return False, "Reference cannot end with '.' or '/'"
-
-    # Cannot contain ..
-    if '..' in ref:
-        return False, "Reference cannot contain '..'"
-
-    # Cannot contain //
-    if '//' in ref:
-        return False, "Reference cannot contain '//'"
-
-    return True, ""
 
 
 # ========================================
@@ -717,48 +627,6 @@ def git_fetch(
 # ========================================
 # GitHub Integration (via gh CLI)
 # ========================================
-
-
-def _run_gh_command(args: list[str], cwd: str = ".", timeout: int = 30) -> tuple[bool, str]:
-    """Run a GitHub CLI command."""
-    try:
-        resolved_cwd = validate_path(cwd)
-    except (PermissionError, ValueError) as e:
-        return False, f"Invalid path: {e}"
-
-    try:
-        result = subprocess.run(
-            ["gh"] + args,
-            cwd=resolved_cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-
-        output = result.stdout
-        if result.stderr:
-            if output:
-                output += "\n"
-            output += result.stderr
-
-        return result.returncode == 0, output.strip()
-
-    except FileNotFoundError:
-        return False, "GitHub CLI (gh) is not installed. Install it from: https://cli.github.com/"
-    except subprocess.TimeoutExpired:
-        return False, f"Command timed out after {timeout}s"
-    except Exception as e:
-        return False, f"Error: {str(e)}"
-
-
-def _sanitize_git_arg(value: str) -> str:
-    """Sanitize a string to be safely used as a git/gh argument."""
-    # Remove or escape potentially dangerous characters
-    # This prevents command injection via crafted title/body
-    if value.startswith('-'):
-        # Prevent argument injection by prefixing with space
-        value = ' ' + value
-    return value
 
 
 @mcp.tool()
