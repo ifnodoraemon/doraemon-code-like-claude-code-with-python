@@ -59,6 +59,9 @@ def save_note(
     if tags is None:
         tags = []
 
+    if len(content) > 100000:
+        return f"Error: Content too long ({len(content)} chars). Maximum allowed is 100000 characters."
+
     try:
         # We use a single shared collection for now with metadata filtering if needed,
         # or we could create potential sub-collections.
@@ -167,66 +170,6 @@ def list_notes(collection_name: str = "default", limit: int = 20) -> str:
     except Exception as e:
         logger.error(f"Failed to list notes: {e}")
         return f"Failed to list notes: {e}"
-
-
-def note(
-    operation: str = "search",
-    title: str | None = None,
-    content: str | None = None,
-    query: str | None = None,
-    collection_name: str = "default",
-    tags: list[str] | None = None,
-    n_results: int = 3,
-) -> str:
-    """
-    Unified note tool for managing long-term memory.
-
-    Operations:
-      - save: Save a new note (requires title and content)
-      - search: Search notes by query (requires query)
-      - list: List all notes in a collection
-      - delete: Delete a note by title (requires title)
-
-    Args:
-        operation: Operation to perform ('save', 'search', 'list', 'delete')
-        title: Note title (required for save/delete)
-        content: Note content (required for save)
-        query: Search query (required for search)
-        collection_name: Project/collection name (default: 'default')
-        tags: Tags for the note (optional, for save)
-        n_results: Number of results to return (for search, default: 3)
-
-    Examples:
-        note("save", title="API Design", content="REST API guidelines...")
-        note("search", query="API")
-        note("list")
-        note("delete", title="Old Note")
-    """
-    operation = operation.lower()
-
-    if operation == "save":
-        if not title:
-            return "Error: 'title' is required for save operation."
-        if not content:
-            return "Error: 'content' is required for save operation."
-        return save_note(title=title, content=content, collection_name=collection_name, tags=tags)
-
-    elif operation == "search":
-        if not query:
-            return "Error: 'query' is required for search operation."
-        return search_notes(query=query, collection_name=collection_name, n_results=n_results)
-
-    elif operation == "list":
-        return list_notes(collection_name=collection_name)
-
-    elif operation == "delete":
-        if not title:
-            return "Error: 'title' is required for delete operation."
-        return delete_note(title=title, collection_name=collection_name)
-
-    else:
-        return f"Error: Unknown operation '{operation}'. Use 'save', 'search', 'list', or 'delete'."
-
 
 @mcp.tool()
 def update_user_persona(key: str, value: str) -> str:

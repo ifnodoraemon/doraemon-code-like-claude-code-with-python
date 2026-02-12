@@ -674,98 +674,7 @@ async def _lsp_definition_impl(path: str, symbol: str) -> str:
 
 
 # ========================================
-# Unified LSP Tool
-# ========================================
-
-
-async def lsp(
-    operation: str,
-    path: str,
-    line: int | None = None,
-    character: int | None = None,
-    new_name: str | None = None,
-    symbol: str | None = None,
-    include_mypy: bool = False,
-    preview: bool = True,
-) -> str:
-    """
-    Unified LSP language service tool.
-
-    Provides IDE-level code intelligence including diagnostics, completions,
-    hover information, references, definitions, and rename refactoring.
-
-    Args:
-        operation: The LSP operation to perform. One of:
-            - "diagnostics": Get code errors/warnings for a file
-            - "completions": Get code completion suggestions at a position
-            - "hover": Get documentation/type info at a position
-            - "references": Find all references to a symbol
-            - "definition": Find where a symbol is defined
-            - "rename": Rename a symbol across files
-        path: Path to the file or directory
-        line: Line number (1-indexed, required for completions/hover)
-        character: Column number (1-indexed, required for completions/hover)
-        new_name: New name for rename operation
-        symbol: Symbol name for references/definition/rename operations
-        include_mypy: Include mypy type checking for diagnostics (slower)
-        preview: For rename, show preview without applying (default True)
-
-    Returns:
-        Operation-specific result string
-
-    Examples:
-        lsp("diagnostics", "src/main.py")
-        lsp("diagnostics", "src/main.py", include_mypy=True)
-        lsp("hover", "src/main.py", line=10, character=5)
-        lsp("completions", "src/main.py", line=10, character=5)
-        lsp("references", "src/", symbol="MyClass")
-        lsp("definition", "src/", symbol="my_function")
-        lsp("rename", "src/", symbol="old_name", new_name="new_name")
-        lsp("rename", "src/", symbol="old_name", new_name="new_name", preview=False)
-    """
-    valid_operations = {"diagnostics", "completions", "hover", "references", "definition", "rename"}
-
-    if operation not in valid_operations:
-        ops_str = ', '.join(sorted(valid_operations))
-        return f"Error: Invalid operation '{operation}'. Must be one of: {ops_str}"
-
-    # Dispatch to appropriate handler
-    if operation == "diagnostics":
-        return await _lsp_diagnostics_impl(path, include_mypy=include_mypy)
-
-    elif operation == "completions":
-        if line is None or character is None:
-            return "Error: 'completions' operation requires 'line' and 'character' parameters"
-        return await _lsp_completions_impl(path, line, character)
-
-    elif operation == "hover":
-        if line is None or character is None:
-            return "Error: 'hover' operation requires 'line' and 'character' parameters"
-        return await _lsp_hover_impl(path, line, character)
-
-    elif operation == "references":
-        if symbol is None:
-            return "Error: 'references' operation requires 'symbol' parameter"
-        return await _lsp_references_impl(path, symbol)
-
-    elif operation == "definition":
-        if symbol is None:
-            return "Error: 'definition' operation requires 'symbol' parameter"
-        return await _lsp_definition_impl(path, symbol)
-
-    elif operation == "rename":
-        if symbol is None:
-            return "Error: 'rename' operation requires 'symbol' parameter (the old name)"
-        if new_name is None:
-            return "Error: 'rename' operation requires 'new_name' parameter"
-        return await _lsp_rename_impl(path, symbol, new_name, preview=preview)
-
-    # Should never reach here
-    return f"Error: Unhandled operation '{operation}'"
-
-
-# ========================================
-# MCP Tools (Legacy - for backward compatibility)
+# MCP Tools
 # ========================================
 
 
@@ -784,7 +693,6 @@ async def lsp_diagnostics(path: str, include_mypy: bool = False) -> str:
     Returns:
         Formatted list of diagnostics with line numbers and messages
 
-    Note: This is a legacy function. Prefer using lsp("diagnostics", path) instead.
     """
     return await _lsp_diagnostics_impl(path, include_mypy)
 
@@ -804,7 +712,6 @@ async def lsp_completions(path: str, line: int, column: int) -> str:
     Returns:
         List of completion suggestions with their types
 
-    Note: This is a legacy function. Prefer using lsp("completions", path, line, character) instead.
     """
     return await _lsp_completions_impl(path, line, column)
 
@@ -824,7 +731,6 @@ async def lsp_hover(path: str, line: int, column: int) -> str:
     Returns:
         Documentation or type information for the symbol
 
-    Note: This is a legacy function. Prefer using lsp("hover", path, line, character) instead.
     """
     return await _lsp_hover_impl(path, line, column)
 
@@ -844,7 +750,6 @@ async def lsp_references(path: str, symbol: str) -> str:
     Returns:
         List of files and lines that reference the symbol
 
-    Note: This is a legacy function. Prefer using lsp("references", path, symbol=symbol) instead.
     """
     return await _lsp_references_impl(path, symbol)
 
@@ -866,8 +771,6 @@ async def lsp_rename(path: str, old_name: str, new_name: str, preview: bool = Tr
     Returns:
         Preview of changes or confirmation of applied changes
 
-    Note: This is a legacy function.
-        Prefer using lsp("rename", path, symbol=old_name, new_name=new_name) instead.
     """
     return await _lsp_rename_impl(path, old_name, new_name, preview)
 
@@ -886,7 +789,6 @@ async def lsp_definition(path: str, symbol: str) -> str:
     Returns:
         File and line where the symbol is defined
 
-    Note: This is a legacy function. Prefer using lsp("definition", path, symbol=symbol) instead.
     """
     return await _lsp_definition_impl(path, symbol)
 
