@@ -5,6 +5,7 @@ All provider adapters must implement this interface.
 """
 
 import logging
+import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -46,6 +47,9 @@ class BaseAdapter(ABC):
     def __init__(self, config: AdapterConfig):
         self.config = config
         self._client: Any = None
+        self._health_cache: bool | None = None
+        self._health_cache_time: float = 0.0
+        self._health_cache_ttl: float = 30.0
 
     @abstractmethod
     async def initialize(self) -> None:
@@ -111,14 +115,25 @@ class BaseAdapter(ABC):
         return None
 
     async def health_check(self) -> bool:
-        """Check if the adapter is healthy."""
+        """Check if the adapter is healthy (cached for 30 seconds)."""
+        now = time.monotonic()
+        if (
+            self._health_cache is not None
+            and (now - self._health_cache_time) < self._health_cache_ttl
+        ):
+            return self._health_cache
         try:
-            # Try to list models or make a simple request
             models = self.get_models()
-            return len(models) > 0
+            self._health_cache = len(models) > 0
         except Exception as e:
-            logger.error(f"Health check failed for {self.provider_name}: {e}")
-            return False
+            logger.error(f"Health check failed for {self.provider_name}: {type(e).__name__}")
+            self._health_cache = False
+        self._health_cache_time = now
+        return self._health_cache
+
+    async def close(self) -> None:
+        """Clean up adapter resources. Override in subclasses if needed."""
+        self._client = None
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(provider={self.provider_name})"

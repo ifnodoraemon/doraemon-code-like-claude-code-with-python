@@ -172,13 +172,17 @@ class OpenAIAdapter(BaseAdapter):
                 if delta.tool_calls:
                     delta_tool_calls = []
                     for tc in delta.tool_calls:
+                        args: dict[str, Any] = {}
+                        if tc.function and tc.function.arguments:
+                            try:
+                                args = json.loads(tc.function.arguments)
+                            except json.JSONDecodeError:
+                                args = {}
                         delta_tool_calls.append(
                             ToolCall(
                                 id=tc.id or "",
                                 name=tc.function.name if tc.function else "",
-                                arguments=json.loads(tc.function.arguments)
-                                if tc.function and tc.function.arguments
-                                else {},
+                                arguments=args,
                             )
                         )
 
@@ -242,13 +246,21 @@ class OpenAIAdapter(BaseAdapter):
             if choice.message.tool_calls:
                 tool_calls = []
                 for tc in choice.message.tool_calls:
+                    args: dict[str, Any] = {}
+                    if tc.function.arguments:
+                        try:
+                            args = json.loads(tc.function.arguments)
+                        except json.JSONDecodeError:
+                            logger.warning(
+                                "Failed to parse tool call arguments: %s",
+                                tc.function.arguments[:200],
+                            )
+                            args = {}
                     tool_calls.append(
                         ToolCall(
                             id=tc.id,
                             name=tc.function.name,
-                            arguments=json.loads(tc.function.arguments)
-                            if tc.function.arguments
-                            else {},
+                            arguments=args,
                         )
                     )
 

@@ -19,9 +19,9 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .router import ModelRouter
@@ -58,13 +58,16 @@ def load_config() -> dict[str, Any]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize router on startup."""
+    """Initialize router on startup, clean up on shutdown."""
     global router
     config = load_config()
     router = ModelRouter(config)
     await router.initialize()
     logger.info("Model Gateway started")
     yield
+    if router:
+        await router.close()
+        router = None
     logger.info("Model Gateway stopped")
 
 
@@ -89,6 +92,37 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# Request body size limit (default 10 MB)
+MAX_REQUEST_BODY_BYTES = int(os.getenv("DORAEMON_MAX_REQUEST_BYTES", str(10 * 1024 * 1024)))
+
+
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    """Reject requests whose body exceeds the configured size limit."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_REQUEST_BODY_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Request body too large"},
+                )
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid Content-Length header"},
+            )
+
+    # Guard against chunked transfers without Content-Length
+    body = await request.body()
+    if len(body) > MAX_REQUEST_BODY_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "Request body too large"},
+        )
+
+    return await call_next(request)
 
 # Gateway API key (optional)
 GATEWAY_API_KEY = os.getenv("DORAEMON_GATEWAY_KEY")
