@@ -183,9 +183,14 @@ class PylspClient:
 
         uri = f"file://{os.path.abspath(file_path)}"
 
-        # Open the document
-        with open(file_path, encoding="utf-8", errors="replace") as f:
-            content = f.read()
+        # Read file content in executor to avoid blocking the event loop
+        loop = asyncio.get_running_loop()
+
+        def _read_file():
+            with open(file_path, encoding="utf-8", errors="replace") as f:
+                return f.read()
+
+        content = await loop.run_in_executor(None, _read_file)
 
         await self._send_notification("textDocument/didOpen", {
             "textDocument": {

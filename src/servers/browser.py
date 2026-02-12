@@ -21,6 +21,18 @@ async def get_browser():
         _browser = await _playwright.chromium.launch(headless=True)
     return _browser
 
+
+async def close_browser():
+    """Close the browser and playwright instances to release resources."""
+    global _browser, _playwright
+    if _browser is not None:
+        await _browser.close()
+        _browser = None
+    if _playwright is not None:
+        await _playwright.stop()
+        _playwright = None
+
+
 @mcp.tool()
 async def browse_page(url: str) -> str:
     """

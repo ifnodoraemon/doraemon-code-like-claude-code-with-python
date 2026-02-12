@@ -1,7 +1,9 @@
 import logging
 
+import httpx
 import trafilatura
 from duckduckgo_search import DDGS
+from duckduckgo_search.exceptions import DuckDuckGoSearchException
 from mcp.server.fastmcp import FastMCP
 
 # Setup logging
@@ -27,8 +29,11 @@ def search_internet(query: str, max_results: int = 5) -> str:
 
         logger.info(f"Found {len(results)} search results")
         return "\n".join(output)
-    except Exception as e:
+    except (DuckDuckGoSearchException, httpx.HTTPError, ConnectionError, TimeoutError) as e:
         logger.error(f"Search error: {e}")
+        return f"Search error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Unexpected search error: {type(e).__name__}: {e}")
         return f"Search error: {str(e)}"
 
 

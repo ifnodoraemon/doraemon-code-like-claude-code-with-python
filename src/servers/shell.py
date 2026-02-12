@@ -339,16 +339,43 @@ def _is_command_sensitive(command: str, config: ShellConfig = DEFAULT_CONFIG) ->
 
 
 def _truncate_output(output: str, max_size: int = DEFAULT_CONFIG.max_output_size) -> str:
-    """Truncate output if it exceeds max size."""
+    """Truncate output if it exceeds max size, preserving head and tail by lines."""
     if len(output) <= max_size:
         return output
 
-    half = max_size // 2
-    return (
-        output[:half]
-        + f"\n\n... [Output truncated: {len(output)} chars total, showing first and last {half} chars] ...\n\n"
-        + output[-half:]
+    lines = output.splitlines(keepends=True)
+    total_lines = len(lines)
+
+    # Allocate 40% head, 60% tail (errors/results usually at end)
+    head_budget = int(max_size * 0.4)
+    tail_budget = max_size - head_budget
+
+    head_lines: list[str] = []
+    head_chars = 0
+    for line in lines:
+        if head_chars + len(line) > head_budget:
+            break
+        head_lines.append(line)
+        head_chars += len(line)
+
+    tail_lines: list[str] = []
+    tail_chars = 0
+    for line in reversed(lines):
+        if tail_chars + len(line) > tail_budget:
+            break
+        tail_lines.insert(0, line)
+        tail_chars += len(line)
+
+    # Guard against overlap when few long lines exist
+    if len(head_lines) + len(tail_lines) >= total_lines:
+        return output
+
+    omitted = total_lines - len(head_lines) - len(tail_lines)
+    separator = (
+        f"\n\n... [{omitted} lines omitted, {len(output):,} chars total] ...\n\n"
     )
+
+    return "".join(head_lines) + separator + "".join(tail_lines)
 
 
 # ========================================
