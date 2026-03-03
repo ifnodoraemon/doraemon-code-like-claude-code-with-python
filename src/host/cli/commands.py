@@ -39,6 +39,7 @@ class CommandHandler:
         model_name: str,
         project: str,
         permission_mgr=None,
+        spec_mgr=None,
     ):
         self.ctx = ctx
         self.tool_selector = tool_selector
@@ -68,6 +69,7 @@ class CommandHandler:
             model_name,
             project,
             permission_mgr=permission_mgr,
+            spec_mgr=spec_mgr,
         )
         self.session_handler = SessionCommandHandler(
             ctx,
@@ -153,12 +155,12 @@ class CommandHandler:
         # Try session commands
         session_result = await self.session_handler.handle_session_command(cmd, cmd_args)
         if session_result:
-            return result
+            return session_result
 
         # Try config commands
         config_result = await self.config_handler.handle_config_command(cmd, cmd_args)
         if config_result:
-            return result
+            return config_result
 
         # Unknown command
         console.print(f"[yellow]Unknown command: {cmd}[/yellow]")

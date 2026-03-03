@@ -188,9 +188,9 @@ class ToolRegistry:
         """Get list of registered tool names."""
         return list(self._tools.keys())
 
-    def get_sensitive_tools(self) -> list[str]:
-        """Get list of sensitive tool names."""
-        return [name for name, tool in self._tools.items() if tool.sensitive]
+    def get_sensitive_tools(self) -> set[str]:
+        """Get set of sensitive tool names."""
+        return {name for name, tool in self._tools.items() if tool.sensitive}
 
     def is_sensitive(self, tool_name: str) -> bool:
         """Check if a tool is sensitive."""
@@ -532,6 +532,16 @@ def _create_default_registry() -> ToolRegistry:
         registry.register(switch_mode, sensitive=True, timeout=_get_timeout("switch_mode", 10.0))
     except ImportError as e:
         logger.warning(f"Failed to import system tools: {e}")
+
+    try:
+        # Spec Tools (for spec-driven development workflow)
+        from src.servers.spec import spec_check_item, spec_progress, spec_update_task
+
+        registry.register(spec_update_task, sensitive=False, timeout=_get_timeout("spec_update_task", 10.0))
+        registry.register(spec_check_item, sensitive=False, timeout=_get_timeout("spec_check_item", 10.0))
+        registry.register(spec_progress, sensitive=False, timeout=_get_timeout("spec_progress", 10.0))
+    except ImportError as e:
+        logger.warning(f"Failed to import spec tools: {e}")
 
     logger.info(f"Tool registry initialized with {len(registry.get_tool_names())} tools")
 

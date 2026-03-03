@@ -89,7 +89,9 @@ def expand_file_references(text: str) -> str:
             # Security: resolve and check path is within cwd
             resolved = path.resolve()
             cwd = Path.cwd().resolve()
-            if not str(resolved).startswith(str(cwd)):
+            try:
+                resolved.relative_to(cwd)
+            except ValueError:
                 logger.warning(f"Blocked @reference outside workspace: {ref_path}")
                 return match.group(0)
 
@@ -729,6 +731,13 @@ async def chat_loop(
 
     sensitive_tools = registry.get_sensitive_tools()
 
+    # Initialize spec manager
+    from src.core.spec_manager import SpecManager
+    from src.servers.spec import set_spec_manager
+
+    spec_mgr = SpecManager()
+    set_spec_manager(spec_mgr)
+
     # Handle session resume
     restore_session_history(session_mgr, ctx, resume_session)
 
@@ -776,6 +785,7 @@ async def chat_loop(
         model_name=model_name,
         project=project,
         permission_mgr=permission_mgr,
+        spec_mgr=spec_mgr,
     )
 
     # Setup tab completion for slash commands
@@ -785,7 +795,7 @@ async def chat_loop(
         "commit", "review-pr", "review", "sessions", "resume", "rename", "export",
         "fork", "checkpoints", "rewind", "tasks", "task", "plugins", "plugin",
         "theme", "vim", "thinking", "workspace", "add-dir", "cost", "agents",
-        "history", "exit",
+        "history", "spec", "exit",
     ]
     cmd_history.setup_completer(slash_commands)
 
