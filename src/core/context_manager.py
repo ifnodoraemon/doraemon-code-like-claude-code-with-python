@@ -11,10 +11,10 @@ Key improvements over naive approaches:
 4. Injects summary as user context (not system instruction)
 """
 
-import hashlib
 import json
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -31,18 +31,35 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Message:
-    """A conversation message."""
+    """A conversation message. content can be str or list[dict] for multimodal."""
 
     role: str  # "user", "assistant", "model"
-    content: str
+    content: str | list[dict]
     timestamp: float = field(default_factory=time.time)
     token_count: int | None = None  # Actual token count from API
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def text(self) -> str:
+        """Extract plain text from content (works for both str and multimodal)."""
+        from src.core.model_utils import get_content_text
+        return get_content_text(self.content)
+
     def to_dict(self) -> dict[str, Any]:
+        # For persistence: strip image base64 data, keep only path placeholders
+        content_for_save = self.content
+        if isinstance(self.content, list):
+            content_for_save = []
+            for part in self.content:
+                if part.get("type") == "image":
+                    # Save only a reference, not the base64 blob
+                    path = part.get("path", "unknown")
+                    content_for_save.append({"type": "text", "text": f"[Image: {path}]"})
+                else:
+                    content_for_save.append(part)
         return {
             "role": self.role,
-            "content": self.content,
+            "content": content_for_save,
             "timestamp": self.timestamp,
             "token_count": self.token_count,
             "metadata": self.metadata,
@@ -62,6 +79,13 @@ class Message:
         """Convert to API message format."""
         # Normalize role: Gemini uses "model" instead of "assistant"
         role = "model" if self.role == "assistant" else self.role
+        if isinstance(self.content, list):
+            parts = []
+            for part in self.content:
+                if part.get("type") == "text":
+                    parts.append({"text": part["text"]})
+                # Image parts are handled by provider-specific adapters
+            return {"role": role, "parts": parts or [{"text": ""}]}
         return {"role": role, "parts": [{"text": self.content}]}
 
 
@@ -121,37 +145,26 @@ class ContextConfig:
     save_directory: str = ".doraemon/conversations"
 
 
-# Model context window sizes (conservative limits to leave room for output)
+# Model context window sizes (latest generation only, from official docs 2026-03)
+# Source: developers.openai.com, platform.claude.com, ai.google.dev, api-docs.deepseek.com
 MODEL_CONTEXT_WINDOWS: dict[str, int] = {
-    # Google Gemini
-    "gemini-2.5-flash": 800_000,
-    "gemini-2.5-pro": 800_000,
-    "gemini-2.0-flash": 800_000,
-    "gemini-3-flash": 800_000,
-    "gemini-3-pro": 800_000,
-    # OpenAI
-    "gpt-4o": 100_000,
-    "gpt-4o-mini": 100_000,
-    "gpt-4-turbo": 100_000,
-    "gpt-4": 6_000,
-    "o1": 100_000,
-    "o3": 100_000,
-    # Anthropic Claude
-    "claude-opus": 150_000,
-    "claude-sonnet": 150_000,
-    "claude-haiku": 150_000,
-    "claude-3": 150_000,
-    "claude-3.5": 150_000,
-    "claude-4": 150_000,
-    # Ollama / local models
-    "llama": 6_000,
-    "mistral": 25_000,
-    "codellama": 12_000,
-    "deepseek": 50_000,
-    "qwen": 25_000,
+    # Google Gemini 3.x (latest gen, 2026)
+    "gemini-3.1-pro": 1_000_000,       # gemini-3.1-pro-preview
+    "gemini-3-flash": 1_000_000,       # gemini-3-flash-preview
+    "gemini-3.1-flash-lite": 1_000_000,  # gemini-3.1-flash-lite-preview
+    # OpenAI (latest gen, 2026)
+    "gpt-5.3": 400_000,               # 128K max output
+    "gpt-5.2": 400_000,               # 128K max output
+    # Anthropic Claude (latest gen, 2026)
+    "claude-opus-4-6": 200_000,        # 128K max output, 1M beta
+    "claude-sonnet-4-6": 200_000,      # 64K max output, 1M beta
+    "claude-haiku-4-5": 200_000,       # 64K max output (Haiku 最新就是 4.5)
+    # DeepSeek V3.2 (latest gen, 2025-2026)
+    "deepseek-chat": 128_000,          # 8K max output
+    "deepseek-reasoner": 128_000,      # 64K max output
 }
 
-DEFAULT_CONTEXT_WINDOW = 100_000
+DEFAULT_CONTEXT_WINDOW = 200_000
 
 
 def get_context_window_for_model(model_name: str) -> int:
@@ -222,7 +235,7 @@ class ContextManager:
         self.messages: list[Message] = []
         self.summaries: list[ConversationSummary] = []
         self.total_messages_ever: int = 0
-        self.session_id: str = hashlib.md5(str(time.time()).encode()).hexdigest()[:12]
+        self.session_id: str = uuid.uuid4().hex[:12]
 
         # Token tracking
         self._last_prompt_tokens: int = 0
@@ -236,8 +249,8 @@ class ContextManager:
     # Public API
     # ----------------------------------------
 
-    def add_user_message(self, content: str) -> Message:
-        """Add a user message."""
+    def add_user_message(self, content: str | list[dict]) -> Message:
+        """Add a user message (text or multimodal content)."""
         msg = Message(role="user", content=content)
         self.messages.append(msg)
         self.total_messages_ever += 1
@@ -459,8 +472,9 @@ class ContextManager:
         if user_msgs:
             parts.append("User requests/questions:")
             for i, m in enumerate(user_msgs[:5], 1):
-                preview = m.content[:150].replace("\n", " ")
-                if len(m.content) > 150:
+                text = m.text  # handles both str and multimodal
+                preview = text[:150].replace("\n", " ")
+                if len(text) > 150:
                     preview += "..."
                 parts.append(f"  {i}. {preview}")
 
@@ -478,11 +492,11 @@ class ContextManager:
 
         actions = []
         for m in assistant_msgs:
-            content_lower = m.content.lower()
+            content_lower = m.text.lower()
             for keyword in action_keywords:
                 if keyword in content_lower:
                     # Extract sentence containing keyword
-                    sentences = m.content.replace("\n", " ").split(". ")
+                    sentences = m.text.replace("\n", " ").split(". ")
                     for sent in sentences:
                         if keyword in sent.lower() and len(sent) < 200:
                             actions.append(sent.strip())
@@ -514,8 +528,17 @@ class ContextManager:
     # Token Estimation
     # ----------------------------------------
 
-    def _estimate_tokens(self, text: str) -> int:
-        """Estimate tokens for text."""
+    def _estimate_tokens(self, text: str | list[dict]) -> int:
+        """Estimate tokens for text or multimodal content."""
+        if isinstance(text, list):
+            from src.core.model_utils import TOKENS_PER_IMAGE
+            total = 0
+            for part in text:
+                if part.get("type") == "text":
+                    total += int(len(part.get("text", "")) / self.config.chars_per_token_estimate)
+                elif part.get("type") == "image":
+                    total += TOKENS_PER_IMAGE
+            return total
         return int(len(text) / self.config.chars_per_token_estimate)
 
     def _estimate_current_tokens(self) -> int:
@@ -643,8 +666,9 @@ def create_llm_summarizer(chat_fn: Callable[[str], str]) -> Callable[[list[Messa
         conversation_parts = []
         for msg in messages:
             role = "User" if msg.role == "user" else "Assistant"
-            content = msg.content[:1000]  # Truncate long messages
-            if len(msg.content) > 1000:
+            text = msg.text  # handles both str and multimodal
+            content = text[:1000]
+            if len(text) > 1000:
                 content += "... [truncated]"
             conversation_parts.append(f"{role}: {content}")
 

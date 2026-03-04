@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import sys
+from pathlib import Path
 
 from rich.console import Console
 from rich.live import Live
@@ -123,6 +124,49 @@ def expand_file_references(text: str) -> str:
             return match.group(0)
 
     return re.sub(pattern, replace_reference, text)
+
+
+def extract_image_references(text: str) -> tuple[str, list[str]]:
+    """
+    Extract @image references from user input.
+
+    Image files (png, jpg, etc.) are pulled out for multimodal handling
+    instead of being expanded as text.
+
+    Returns:
+        (text_without_images, image_paths) - cleaned text + valid image file paths
+    """
+    import re
+    from pathlib import Path
+
+    from src.core.model_utils import IMAGE_EXTENSIONS
+
+    pattern = r'@(\.?/?[\w\-./]+)'
+    image_paths = []
+
+    def replace_images(match):
+        ref_path = match.group(1)
+        path = Path(ref_path)
+
+        # Check if it's an image file
+        if path.suffix.lower() not in IMAGE_EXTENSIONS:
+            return match.group(0)  # Not an image, leave for expand_file_references
+
+        try:
+            resolved = path.resolve()
+            cwd = Path.cwd().resolve()
+            resolved.relative_to(cwd)
+        except ValueError:
+            return match.group(0)
+
+        if path.is_file():
+            image_paths.append(str(resolved))
+            return ""  # Remove from text
+
+        return match.group(0)
+
+    cleaned = re.sub(pattern, replace_images, text).strip()
+    return cleaned, image_paths
 
 
 def build_system_prompt(mode: str, skills_content: str = "",
@@ -948,7 +992,14 @@ async def chat_loop(
             # Add to command history
             cmd_history.add(user_input)
 
-            # Expand @file references
+            # Extract image references before expanding text file references
+            user_input, image_paths = extract_image_references(user_input)
+            if image_paths:
+                console.print(
+                    f"[dim cyan]Images: {', '.join(Path(p).name for p in image_paths)}[/dim cyan]"
+                )
+
+            # Expand @file references (text files only, images already extracted)
             user_input = expand_file_references(user_input)
 
             # Trigger UserPromptSubmit hook
@@ -966,8 +1017,21 @@ async def chat_loop(
             # Start checkpoint before processing
             checkpoint_mgr.begin_checkpoint(user_input, message_count=len(ctx.messages))
 
+            # Build message content (text or multimodal)
+            if image_paths:
+                from src.core.model_utils import make_image_part, make_text_part
+                content_parts = [make_text_part(user_input)]
+                for img_path in image_paths:
+                    try:
+                        content_parts.append(make_image_part(img_path))
+                    except Exception as e:
+                        console.print(f"[red]Failed to load image {img_path}: {e}[/red]")
+                user_content = content_parts
+            else:
+                user_content = user_input
+
             # Track user message in context
-            ctx.add_user_message(user_input)
+            ctx.add_user_message(user_content)
 
             # Check if we need to load/update skills
             new_skills_content = skill_mgr.get_skills_for_context(user_input)
@@ -979,7 +1043,7 @@ async def chat_loop(
                 system_prompt = build_system_prompt(mode, active_skills_content, spec_mgr=spec_mgr)
 
             # Add user message to conversation history
-            conversation_history.append(Message(role="user", content=user_input))
+            conversation_history.append(Message(role="user", content=user_content))
 
             # Build messages with system prompt
             messages_for_api = [
@@ -1005,7 +1069,7 @@ async def chat_loop(
                     ctx._force_summarize()
                     conversation_history.clear()
                     conversation_history = restore_conversation_history(ctx)
-                    conversation_history.append(Message(role="user", content=user_input))
+                    conversation_history.append(Message(role="user", content=user_content))
                     messages_for_api = [
                         Message(role="system", content=system_prompt)
                     ] + conversation_history

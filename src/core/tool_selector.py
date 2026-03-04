@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 READ_TOOLS = [
     "read",  # 统一读取（文件/目录/大纲/树）
     "search",  # 统一搜索（内容/文件名/符号）
+    "ask_user",  # 向用户提问
 ]
 
 # 写入工具 - 只有 build 模式可用

@@ -5,6 +5,7 @@ Client that connects directly to provider APIs (Google, OpenAI, Anthropic, Ollam
 """
 
 import asyncio
+import base64
 import json
 import logging
 import random
@@ -20,6 +21,7 @@ from src.core.model_utils import (
     Provider,
     StreamChunk,
     ToolDefinition,
+    get_content_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,68 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 INITIAL_DELAY = 1.0
 MAX_DELAY = 60.0
+
+
+def _build_google_content_parts(content, types_module):
+    """Convert content (str or multimodal list) to Google GenAI Parts."""
+    if isinstance(content, str):
+        return [types_module.Part(text=content)]
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if part.get("type") == "text":
+                parts.append(types_module.Part(text=part["text"]))
+            elif part.get("type") == "image":
+                source = part["source"]
+                parts.append(types_module.Part.from_bytes(
+                    data=base64.b64decode(source["data"]),
+                    mime_type=source["media_type"],
+                ))
+        return parts
+    return []
+
+
+def _build_openai_content_parts(content):
+    """Convert content (str or multimodal list) to OpenAI content format."""
+    if isinstance(content, str):
+        return content  # OpenAI accepts plain string
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if part.get("type") == "text":
+                parts.append({"type": "text", "text": part["text"]})
+            elif part.get("type") == "image":
+                source = part["source"]
+                data_url = f"data:{source['media_type']};base64,{source['data']}"
+                parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                })
+        return parts
+    return content or ""
+
+
+def _build_anthropic_content_parts(content):
+    """Convert content (str or multimodal list) to Anthropic content format."""
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if part.get("type") == "text":
+                parts.append({"type": "text", "text": part["text"]})
+            elif part.get("type") == "image":
+                source = part["source"]
+                parts.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": source["media_type"],
+                        "data": source["data"],
+                    },
+                })
+        return parts
+    return [{"type": "text", "text": str(content or "")}]
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -152,11 +216,18 @@ class DirectModelClient(BaseModelClient):
 
     def _detect_provider(self, model: str) -> Provider:
         """Detect provider from model name."""
+        matched_provider = None
         for provider, patterns in self.PROVIDER_PATTERNS.items():
             for pattern in patterns:
                 if model.startswith(pattern):
                     if provider in self._providers:
                         return provider
+                    matched_provider = provider
+        if matched_provider is not None:
+            raise RuntimeError(
+                f"Model '{model}' matched provider '{matched_provider.value}' "
+                f"but it is not configured. Check your API keys."
+            )
         # Default to first available
         if not self._providers:
             raise RuntimeError("No providers available. Check your API keys.")
@@ -204,14 +275,14 @@ class DirectModelClient(BaseModelClient):
             role = msg.get("role", "user")
 
             if role == "system":
-                system_instruction = msg.get("content", "")
+                system_instruction = get_content_text(msg.get("content", ""))
                 continue
 
             gemini_role = "user" if role == "user" else "model"
             parts = []
 
             if msg.get("content"):
-                parts.append(types.Part(text=msg["content"]))
+                parts.extend(_build_google_content_parts(msg["content"], types))
 
             if msg.get("thought"):
                 parts.append(types.Part(thought=msg["thought"]))
@@ -374,7 +445,11 @@ class DirectModelClient(BaseModelClient):
 
         msg_list = []
         for m in messages:
-            msg_list.append(m if isinstance(m, dict) else m.to_dict())
+            msg = m if isinstance(m, dict) else m.to_dict()
+            # Convert multimodal content to OpenAI format
+            if isinstance(msg.get("content"), list):
+                msg = {**msg, "content": _build_openai_content_parts(msg["content"])}
+            msg_list.append(msg)
 
         params = {
             "model": model,
@@ -449,7 +524,7 @@ class DirectModelClient(BaseModelClient):
             role = msg.get("role", "user")
 
             if role == "system":
-                system = msg.get("content", "")
+                system = get_content_text(msg.get("content", ""))
                 continue
 
             if role == "tool":
@@ -460,7 +535,7 @@ class DirectModelClient(BaseModelClient):
                             {
                                 "type": "tool_result",
                                 "tool_use_id": msg.get("tool_call_id"),
-                                "content": msg.get("content", ""),
+                                "content": get_content_text(msg.get("content", "")),
                             }
                         ],
                     }
@@ -468,7 +543,7 @@ class DirectModelClient(BaseModelClient):
             else:
                 content = []
                 if msg.get("content"):
-                    content.append({"type": "text", "text": msg["content"]})
+                    content.extend(_build_anthropic_content_parts(msg["content"]))
                 if msg.get("tool_calls"):
                     for tc in msg["tool_calls"]:
                         func = tc.get("function", {})
@@ -563,10 +638,12 @@ class DirectModelClient(BaseModelClient):
         msg_list = []
         for m in messages:
             msg = m if isinstance(m, dict) else m.to_dict()
+            # Ollama doesn't support multimodal - extract text only
+            content = get_content_text(msg.get("content", ""))
             msg_list.append(
                 {
                     "role": msg.get("role", "user"),
-                    "content": msg.get("content", ""),
+                    "content": content,
                 }
             )
 
@@ -648,14 +725,14 @@ class DirectModelClient(BaseModelClient):
             role = msg.get("role", "user")
 
             if role == "system":
-                system_instruction = msg.get("content", "")
+                system_instruction = get_content_text(msg.get("content", ""))
                 continue
 
             gemini_role = "user" if role == "user" else "model"
             parts = []
 
             if msg.get("content"):
-                parts.append(types.Part(text=msg["content"]))
+                parts.extend(_build_google_content_parts(msg["content"], types))
             if msg.get("thought"):
                 parts.append(types.Part(thought=msg["thought"]))
             if msg.get("tool_calls"):
@@ -779,7 +856,11 @@ class DirectModelClient(BaseModelClient):
 
         msg_list = []
         for m in messages:
-            msg_list.append(m if isinstance(m, dict) else m.to_dict())
+            msg = m if isinstance(m, dict) else m.to_dict()
+            # Convert multimodal content to OpenAI format
+            if isinstance(msg.get("content"), list):
+                msg = {**msg, "content": _build_openai_content_parts(msg["content"])}
+            msg_list.append(msg)
 
         params = {
             "model": model,
@@ -995,6 +1076,6 @@ class DirectModelClient(BaseModelClient):
     async def close(self) -> None:
         """Close all provider clients."""
         for provider, client in self._providers.items():
-            if provider == Provider.OLLAMA and hasattr(client, "aclose"):
+            if hasattr(client, "aclose"):
                 await client.aclose()
         self._providers.clear()

@@ -5,12 +5,70 @@ Provides utility functions and data classes for the unified model client.
 Includes message conversion, tool definitions, and response handling.
 """
 
+import base64
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ========================================
+# Image / Multimodal Helpers
+# ========================================
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+
+MIME_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
+}
+
+# Estimated tokens per image for context tracking
+TOKENS_PER_IMAGE = 1000
+
+
+def make_image_part(image_path: str) -> dict:
+    """Create a multimodal image content part from a file path (base64-encoded)."""
+    path = Path(image_path)
+    ext = path.suffix.lower()
+    mime_type = MIME_TYPES.get(ext, "image/jpeg")
+
+    with open(path, "rb") as f:
+        b64_data = base64.b64encode(f.read()).decode("utf-8")
+
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": mime_type, "data": b64_data},
+        "path": str(path),  # metadata for display/serialization
+    }
+
+
+def make_text_part(text: str) -> dict:
+    """Create a multimodal text content part."""
+    return {"type": "text", "text": text}
+
+
+def get_content_text(content: str | list[dict] | None) -> str:
+    """Extract plain text from content (str or multimodal parts list)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    # list of parts
+    return " ".join(p.get("text", "") for p in content if p.get("type") == "text")
+
+
+def is_image_path(path_str: str) -> bool:
+    """Check if a path string looks like an image file."""
+    return Path(path_str).suffix.lower() in IMAGE_EXTENSIONS
 
 
 class ClientMode(Enum):
@@ -29,9 +87,9 @@ class Provider(Enum):
 
 @dataclass
 class Message:
-    """Unified message format."""
+    """Unified message format. content can be str or list[dict] for multimodal."""
     role: str
-    content: str | None = None
+    content: str | list[dict] | None = None
     thought: str | None = None  # Reasoning/thought process
     tool_calls: list[dict] | None = None
     tool_call_id: str | None = None
@@ -161,7 +219,7 @@ class ClientConfig:
 
         return cls(
             mode=mode,
-            model=os.getenv("DORAEMON_MODEL", "gemini-3-pro-preview"),
+            model=os.getenv("DORAEMON_MODEL", "gemini-2.5-flash-preview"),
             # Gateway settings
             gateway_url=gateway_url,
             gateway_key=os.getenv("DORAEMON_API_KEY"),

@@ -526,6 +526,14 @@ def _create_default_registry() -> ToolRegistry:
         logger.warning(f"Failed to import semantic search tools: {e}")
 
     try:
+        # AskUser Tool
+        from src.servers.ask_user import ask_user
+
+        registry.register(ask_user, sensitive=False, timeout=_get_timeout("ask_user", 300.0))
+    except ImportError as e:
+        logger.warning(f"Failed to import ask_user tool: {e}")
+
+    try:
         # System Tools
         from src.servers.system import switch_mode
 

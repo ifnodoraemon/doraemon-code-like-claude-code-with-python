@@ -73,6 +73,14 @@ async def execute_tool(
     if pre_hook.modified_input:
         args = pre_hook.modified_input
 
+    # ask_user: block in headless mode (it requires interactive terminal)
+    if tool_name == "ask_user" and headless:
+        return {
+            "tool_call_id": tool_call_id,
+            "name": tool_name,
+            "result": "Headless mode: Cannot ask user for input.",
+        }
+
     # Permission system check (if available)
     if permission_mgr:
         # Determine operation type from tool name
@@ -212,7 +220,7 @@ def detect_tool_loop(
     """
     try:
         args_str_normalized = json.dumps(args, sort_keys=True)
-    except json.JSONDecodeError:
+    except (TypeError, ValueError):
         args_str_normalized = "{}"
 
     current_call_signature = f"{tool_name}:{args_str_normalized}"
