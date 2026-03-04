@@ -1,8 +1,11 @@
 
+import asyncio
 import logging
 
 from mcp.server.fastmcp import FastMCP
 from playwright.async_api import Browser, async_playwright
+
+from src.core.security import validate_path
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -13,13 +16,15 @@ mcp = FastMCP("DoraemonBrowser")
 # Global browser instance
 _browser: Browser | None = None
 _playwright = None
+_browser_lock = asyncio.Lock()
 
 async def get_browser():
     global _browser, _playwright
-    if _browser is None:
-        _playwright = await async_playwright().start()
-        _browser = await _playwright.chromium.launch(headless=True)
-    return _browser
+    async with _browser_lock:
+        if _browser is None:
+            _playwright = await async_playwright().start()
+            _browser = await _playwright.chromium.launch(headless=True)
+        return _browser
 
 
 async def close_browser():
@@ -69,6 +74,10 @@ async def take_screenshot(url: str, path: str) -> str:
     Take a screenshot of a webpage.
     """
     logger.info(f"Screenshotting: {url} -> {path}")
+    try:
+        validate_path(path)
+    except (ValueError, PermissionError) as e:
+        return f"Error: {e}"
     try:
         browser = await get_browser()
         page = await browser.new_page()

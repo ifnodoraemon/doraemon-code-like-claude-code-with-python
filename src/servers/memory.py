@@ -1,12 +1,10 @@
+import hashlib
 import json
 import logging
 import os
 from typing import Any
 
-import chromadb
 from mcp.server.fastmcp import FastMCP
-
-from src.services.embeddings import RemoteEmbeddingFunction
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -24,28 +22,40 @@ mcp = FastMCP("DoraemonMemory")
 PERSIST_DIR = ".doraemon/chroma_db"
 MEMORY_FILE = ".doraemon/memory.json"
 
-# Ensure directory exists
-os.makedirs(".doraemon", exist_ok=True)
+# Lazy-initialized globals
+_initialized = False
+embedding_fn = None
+client = None
+collection = None
+COLLECTION_NAME = None
 
 
-# Initialize ChromaDB with Remote Embeddings
-embedding_fn = RemoteEmbeddingFunction()
-client = chromadb.PersistentClient(path=PERSIST_DIR)
+def _ensure_initialized():
+    """Lazily initialize ChromaDB and embeddings on first use."""
+    global _initialized, embedding_fn, client, collection, COLLECTION_NAME
+    if _initialized:
+        return
+    _initialized = True
 
-# Note: If the collection was created with a different dimension (e.g. 384 from MiniLM),
-# switching to OpenAI (1536) or Gemini (768) will cause errors.
-# We handle this by using a dynamic collection name based on the provider.
-PROVIDER = embedding_fn.provider
-COLLECTION_NAME = f"doraemon_notes_{PROVIDER}"
+    os.makedirs(".doraemon", exist_ok=True)
 
-try:
-    collection = client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        embedding_function=embedding_fn
-    )
-except Exception as e:
-    logger.error(f"Failed to initialize ChromaDB collection: {e}")
-    collection = None
+    try:
+        import chromadb
+        from src.services.embeddings import RemoteEmbeddingFunction
+
+        embedding_fn = RemoteEmbeddingFunction()
+        client = chromadb.PersistentClient(path=PERSIST_DIR)
+
+        PROVIDER = embedding_fn.provider
+        COLLECTION_NAME = f"doraemon_notes_{PROVIDER}"
+
+        collection = client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            embedding_function=embedding_fn
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize ChromaDB collection: {e}")
+        collection = None
 
 
 @mcp.tool()
@@ -53,6 +63,7 @@ def save_note(
     title: str, content: str, collection_name: str = "default", tags: list[str] | None = None
 ) -> str:
     """Save a note to the long-term memory (Vector DB)."""
+    _ensure_initialized()
     if collection is None:
         return "Memory system is not initialized."
 
@@ -66,7 +77,7 @@ def save_note(
         # or we could create potential sub-collections.
         # To keep it simple and avoid model dimension mismatches across collections, we use the main one.
 
-        note_id = f"{collection_name}_{title}_{hash(content)}"
+        note_id = f"{collection_name}_{title}_{hashlib.sha256(content.encode()).hexdigest()[:12]}"
 
         # Add metadata for filtering
         metadatas: list[dict[str, Any]] = [{"title": title, "tags": ",".join(tags), "project": collection_name}]
@@ -86,6 +97,7 @@ def save_note(
 @mcp.tool()
 def search_notes(query: str, collection_name: str = "default", n_results: int = 3) -> str:
     """Search for notes in the long-term memory."""
+    _ensure_initialized()
     if collection is None:
         return "Memory system is not initialized."
 
@@ -115,6 +127,7 @@ def search_notes(query: str, collection_name: str = "default", n_results: int = 
 @mcp.tool()
 def delete_note(title: str, collection_name: str = "default") -> str:
     """Delete a note from the long-term memory by title."""
+    _ensure_initialized()
     if collection is None:
         return "Memory system is not initialized."
 
@@ -139,6 +152,7 @@ def delete_note(title: str, collection_name: str = "default") -> str:
 @mcp.tool()
 def list_notes(collection_name: str = "default", limit: int = 20) -> str:
     """List all notes in a collection."""
+    _ensure_initialized()
     if collection is None:
         return "Memory system is not initialized."
 

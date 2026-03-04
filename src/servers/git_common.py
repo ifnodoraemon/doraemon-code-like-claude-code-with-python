@@ -8,6 +8,7 @@ import logging
 import subprocess
 
 from src.core.security import validate_path
+from src.core.subprocess_utils import prepare_safe_env
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ def run_git_command(
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=prepare_safe_env(),
         )
 
         output = result.stdout
@@ -148,6 +150,7 @@ def run_gh_command(args: list[str], cwd: str = ".", timeout: int = 30) -> tuple[
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=prepare_safe_env(),
         )
 
         output = result.stdout

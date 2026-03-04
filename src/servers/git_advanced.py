@@ -41,6 +41,8 @@ def git_stash(action: str = "push", path: str = ".", message: str | None = None)
     if action == "push" and message:
         args.extend(["-m", message])
     success, output = _run_git_command(args, cwd=path)
+    if not success:
+        return f"Error: {output}"
     return output if output else f"Stash {action} completed"
 
 
@@ -118,9 +120,7 @@ def gh_pr_create(
     title: str, body: str, path: str = ".", base: str | None = None, draft: bool = False,
 ) -> str:
     """Create a GitHub Pull Request."""
-    safe_title = _sanitize_git_arg(title)
-    safe_body = _sanitize_git_arg(body)
-    args = ["pr", "create", "--title", safe_title, "--body", safe_body]
+    args = ["pr", "create", "--title", title, "--body", body]
     if base:
         if not re.match(r'^[\w\-/]+$', base):
             return "Error: Invalid base branch name"

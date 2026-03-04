@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from mcp.server.fastmcp import FastMCP
 
 from src.core.security import validate_path
+from src.core.subprocess_utils import prepare_safe_env
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -162,12 +163,11 @@ _DANGEROUS_ENV_VARS = frozenset({
 
 
 def _prepare_safe_env(env: dict[str, str] | None) -> dict[str, str]:
-    """Build process env, filtering dangerous overrides."""
-    process_env = os.environ.copy()
-    if env:
-        safe = {k: v for k, v in env.items() if k.upper() not in _DANGEROUS_ENV_VARS}
-        process_env.update(safe)
-    return process_env
+    """Build process env, filtering dangerous overrides.
+
+    Delegates to the shared subprocess_utils.prepare_safe_env.
+    """
+    return prepare_safe_env(env)
 
 
 # ========================================
@@ -481,7 +481,9 @@ def execute_command(
         output = _truncate_output(output)
 
         if not output.strip():
-            return f"Command completed successfully (exit code: {return_code})"
+            if return_code == 0:
+                return f"Command completed successfully (exit code: 0)"
+            return f"Command completed (exit code: {return_code})"
 
         return output
 
@@ -541,8 +543,8 @@ def execute_command_background(
             shell=True,
             executable=DEFAULT_CONFIG.shell,
             cwd=resolved_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             env=process_env,
             start_new_session=True,  # Detach from parent
         )

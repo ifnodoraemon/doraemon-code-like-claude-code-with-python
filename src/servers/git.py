@@ -213,7 +213,7 @@ def git_diff(path: str = ".", staged: bool = False, file_path: str | None = None
 
 @mcp.tool()
 def git_log(
-    path: str = ".", count: int = 10, oneline: bool = False,
+    path: str = ".", count: int = 10, oneline: bool = True,
     author: str | None = None, since: str | None = None,
 ) -> str:
     """Show commit history."""

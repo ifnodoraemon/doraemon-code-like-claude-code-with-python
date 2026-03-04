@@ -38,7 +38,7 @@ def git_checkout(target: str, path: str = ".", create: bool = False) -> str:
         return err
     if err := check_ref(target, "target"):
         return err
-    args = ["checkout"] + (["-b"] if create else []) + ["--", target]
+    args = ["checkout"] + (["-b"] if create else []) + [target]
     success, output = _run_git_command(args, cwd=path)
     return output if success else f"Error: {output}"
 

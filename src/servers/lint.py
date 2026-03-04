@@ -198,7 +198,9 @@ def _lint_check_python(
             # Format output
             lines = [f"Found {len(issues)} issue(s):\n"]
             for issue in issues:
-                severity = "error" if issue.get("fix") is None else "warning"
+                code = issue.get("code", "")
+                # E/F codes are errors, W codes are warnings
+                severity = "error" if code and code[0] in ("E", "F") else "warning"
                 lines.append(
                     f"  {issue['filename']}:{issue['location']['row']}:{issue['location']['column']} "
                     f"[{severity}] {issue['code']}: {issue['message']}"
@@ -450,7 +452,6 @@ def _lint_summary(path: str) -> str:
         resolved_path,
         "--output-format",
         "json",
-        "--statistics",
     ]
 
     exit_code, stdout, stderr = _run_command(args)

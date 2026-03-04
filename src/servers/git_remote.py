@@ -56,8 +56,12 @@ def git_fetch(path: str = ".", remote: str = "origin", prune: bool = False) -> s
     """Fetch changes from remote without merging."""
     if err := require_repo(path):
         return err
+    if err := check_ref(remote, "remote"):
+        return err
     args = ["fetch", remote] + (["--prune"] if prune else [])
     success, output = _run_git_command(args, cwd=path, timeout=60)
+    if not success:
+        return f"Error: {output}"
     return output if output else "Fetch completed (up to date)"
 
 

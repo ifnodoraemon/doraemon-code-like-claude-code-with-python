@@ -153,7 +153,8 @@ def list_tasks(status_filter: str | None = None) -> str:
         output.append(f"{indent}{icon} [{node['id']}] {priority_marker}{node['title']}")
 
         if node.get("description"):
-            output.append(f"{indent}    -> {node['description'][:60]}...")
+            desc = node['description']
+            output.append(f"{indent}    -> {desc[:60]}{'...' if len(desc) > 60 else ''}")
 
         for child in node.get("children", []):
             render_node(child, depth + 1)

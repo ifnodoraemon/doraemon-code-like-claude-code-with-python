@@ -247,9 +247,11 @@ def glob_files(pattern: str, exclude: list[str] | None = None, max_results: int 
             matches = filtered
 
         if len(matches) > max_results:
+            total_count = len(matches)
             matches = matches[:max_results]
             truncated = True
         else:
+            total_count = len(matches)
             truncated = False
 
         matches = sorted(matches)
@@ -260,7 +262,7 @@ def glob_files(pattern: str, exclude: list[str] | None = None, max_results: int 
         result = "\n".join(matches)
 
         if truncated:
-            result += f"\n\n[Showing first {max_results} of {len(matches)} matches]"
+            result += f"\n\n[Showing first {max_results} of {total_count} matches]"
         else:
             result = f"Found {len(matches)} file(s):\n\n" + result
 
@@ -851,7 +853,7 @@ def notebook_edit(
                 return f"Error: Cell index {cell_index} out of range for insert (0-{len(cells)})"
             new_cell = {
                 "cell_type": cell_type or "code",
-                "source": new_source.split("\n"),
+                "source": new_source.splitlines(keepends=True),
                 "metadata": {},
             }
             if cell_type == "code" or cell_type is None:

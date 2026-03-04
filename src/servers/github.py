@@ -2,8 +2,13 @@
 import logging
 import os
 
-from github import Auth, Github
 from mcp.server.fastmcp import FastMCP
+
+try:
+    from github import Auth, Github
+    _PYGITHUB_AVAILABLE = True
+except ImportError:
+    _PYGITHUB_AVAILABLE = False
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -11,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 mcp = FastMCP("DoraemonGitHub")
 
-def get_github_client() -> Github | None:
+def get_github_client() -> "Github | None":
+    if not _PYGITHUB_AVAILABLE:
+        return None
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         return None

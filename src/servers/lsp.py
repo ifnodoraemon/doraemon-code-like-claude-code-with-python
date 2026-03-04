@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from mcp.server.fastmcp import FastMCP
 
 from src.core.security import validate_path
+from src.core.subprocess_utils import prepare_safe_env
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -132,29 +133,32 @@ class PylspClient:
         content = json.dumps(request)
         message = f"Content-Length: {len(content)}\r\n\r\n{content}"
 
-        try:
-            self._process.stdin.write(message.encode())
-            self._process.stdin.flush()
+        loop = asyncio.get_running_loop()
 
-            # Read response
-            headers = {}
-            while True:
-                line = self._process.stdout.readline().decode()
-                if line == "\r\n":
-                    break
-                if ":" in line:
-                    key, value = line.strip().split(":", 1)
-                    headers[key.strip()] = value.strip()
+        def _do_io():
+            try:
+                self._process.stdin.write(message.encode())
+                self._process.stdin.flush()
 
-            content_length = int(headers.get("Content-Length", 0))
-            if content_length:
-                content = self._process.stdout.read(content_length).decode()
-                return json.loads(content)
+                # Read response
+                headers = {}
+                while True:
+                    line = self._process.stdout.readline().decode()
+                    if line == "\r\n":
+                        break
+                    if ":" in line:
+                        key, value = line.strip().split(":", 1)
+                        headers[key.strip()] = value.strip()
 
-        except Exception as e:
-            logger.error(f"LSP request failed: {e}")
+                content_length = int(headers.get("Content-Length", 0))
+                if content_length:
+                    content = self._process.stdout.read(content_length).decode()
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"LSP request failed: {e}")
+            return None
 
-        return None
+        return await loop.run_in_executor(None, _do_io)
 
     async def _send_notification(self, method: str, params: dict):
         """Send an LSP notification (no response expected)."""
@@ -217,9 +221,14 @@ class PylspClient:
 
         uri = f"file://{os.path.abspath(file_path)}"
 
-        # Open the document first
-        with open(file_path, encoding="utf-8", errors="replace") as f:
-            content = f.read()
+        # Open the document first (in executor to avoid blocking)
+        loop = asyncio.get_running_loop()
+
+        def _read_file():
+            with open(file_path, encoding="utf-8", errors="replace") as f:
+                return f.read()
+
+        content = await loop.run_in_executor(None, _read_file)
 
         await self._send_notification("textDocument/didOpen", {
             "textDocument": {
@@ -264,9 +273,14 @@ class PylspClient:
 
         uri = f"file://{os.path.abspath(file_path)}"
 
-        # Open the document first
-        with open(file_path, encoding="utf-8", errors="replace") as f:
-            content = f.read()
+        # Open the document first (in executor to avoid blocking)
+        loop = asyncio.get_running_loop()
+
+        def _read_file():
+            with open(file_path, encoding="utf-8", errors="replace") as f:
+                return f.read()
+
+        content = await loop.run_in_executor(None, _read_file)
 
         await self._send_notification("textDocument/didOpen", {
             "textDocument": {
@@ -322,35 +336,31 @@ async def _get_lsp_client() -> PylspClient | None:
 
 
 def _run_ruff(file_path: str) -> list[dict]:
-    """Run ruff for quick Python diagnostics."""
+    """Run ruff for quick Python diagnostics, delegating to lint module."""
     try:
-        result = subprocess.run(
-            ["ruff", "check", "--output-format=json", file_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
+        from src.servers.lint import _run_command
+        exit_code, stdout, stderr = _run_command(
+            ["ruff", "check", "--output-format=json", file_path]
         )
-        if result.stdout:
-            return json.loads(result.stdout)
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        if stdout:
+            return json.loads(stdout)
+    except (ImportError, json.JSONDecodeError):
         pass
     return []
 
 
 def _run_mypy(file_path: str) -> list[dict]:
-    """Run mypy for type checking."""
+    """Run mypy for type checking, delegating to lint module."""
     try:
-        result = subprocess.run(
+        from src.servers.lint import _run_command
+        exit_code, stdout, stderr = _run_command(
             ["mypy", "--show-error-codes", "--no-error-summary", file_path],
-            capture_output=True,
-            text=True,
             timeout=60,
         )
         diagnostics = []
-        for line in result.stdout.strip().split("\n"):
+        for line in stdout.strip().split("\n"):
             if not line:
                 continue
-            # Parse mypy output: file:line: severity: message
             match = re.match(r"(.+):(\d+): (error|warning|note): (.+)", line)
             if match:
                 diagnostics.append({
@@ -360,7 +370,7 @@ def _run_mypy(file_path: str) -> list[dict]:
                     "message": match.group(4),
                 })
         return diagnostics
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except ImportError:
         pass
     return []
 
@@ -470,18 +480,13 @@ async def lsp_references(path: str, symbol: str) -> str:
         return f"Error: {e}"
 
     try:
-        result = subprocess.run(
-            ["grep", "-rn", "--include=*.py", symbol, valid_path],
-            capture_output=True, text=True, timeout=30,
-        )
-        lines = [l for l in result.stdout.strip().split("\n") if l]
-        if not lines:
+        from src.servers.filesystem_unified import grep_search
+        result = grep_search(pattern=symbol, include="*.py", path=valid_path)
+        if not result or result.startswith("No matches"):
             return f"No references found for '{symbol}'"
-        if len(lines) > 50:
-            lines = lines[:50] + ["... (showing first 50)"]
-        return f"References to '{symbol}':\n\n" + "\n".join(lines)
-    except subprocess.TimeoutExpired:
-        return "Search timed out"
+        return f"References to '{symbol}':\n\n{result}"
+    except ImportError:
+        return f"Error: filesystem_unified module not available"
     except Exception as e:
         return f"Error searching: {e}"
 
@@ -532,7 +537,7 @@ async def lsp_rename(
                 with open(fp, encoding="utf-8") as f:
                     content = f.read()
                 with open(fp, "w", encoding="utf-8") as f:
-                    f.write(content.replace(old_name, new_name))
+                    f.write(re.sub(r'\b' + re.escape(old_name) + r'\b', new_name, content))
                 applied += 1
             except Exception as e:
                 logger.warning(f"Failed to rename in {fp}: {e}")
@@ -554,13 +559,13 @@ async def lsp_definition(path: str, symbol: str) -> str:
 
     for pattern in [f"class {symbol}", f"def {symbol}", f"{symbol} = ", f"{symbol}:"]:
         try:
-            result = subprocess.run(
-                ["grep", "-rn", "--include=*.py", pattern, valid_path],
-                capture_output=True, text=True, timeout=30,
-            )
-            lines = [l for l in result.stdout.strip().split("\n") if l]
-            if lines:
-                return f"Definition of '{symbol}':\n\n{lines[0]}"
+            from src.servers.filesystem_unified import grep_search
+            result = grep_search(pattern=pattern, include="*.py", path=valid_path)
+            if result and not result.startswith("No matches"):
+                first_line = result.strip().split("\n")[0]
+                return f"Definition of '{symbol}':\n\n{first_line}"
+        except ImportError:
+            return f"Error: filesystem_unified module not available"
         except Exception:
             continue
 

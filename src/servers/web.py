@@ -41,6 +41,8 @@ def search_internet(query: str, max_results: int = 5) -> str:
 def fetch_page(url: str) -> str:
     """Fetch and extract main content from a URL."""
     logger.info(f"Fetching URL: {url}")
+    if not url.startswith(("http://", "https://")):
+        return "Error: Only http/https URLs are allowed"
     try:
         downloaded = trafilatura.fetch_url(url)
         if downloaded is None:
