@@ -1101,7 +1101,7 @@ Project specific rules for Doraemon Code.
         from src.core.prompts import PROMPTS
 
         build_tools = self.tool_selector.get_tools_for_mode("build")
-        spec_tools = ["spec_update_task", "spec_check_item", "spec_progress"]
+        spec_tools = self.tool_selector.get_spec_tools()
         exec_tools = list(set(build_tools + spec_tools))
 
         extra = PROMPTS["spec_execute"]

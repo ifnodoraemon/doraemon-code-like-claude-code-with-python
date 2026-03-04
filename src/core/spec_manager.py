@@ -97,6 +97,22 @@ class SpecManager:
     def is_active(self) -> bool:
         return self._session is not None and self._session.phase != SpecPhase.COMPLETE
 
+    def is_draft_write_allowed(self, path: str) -> bool:
+        """Check if a write to `path` is allowed during DRAFT phase.
+
+        During DRAFT, writes are restricted to the spec directory only.
+        Returns True if not in DRAFT phase or if path is within spec_dir.
+        """
+        if not self._session or self._session.phase != SpecPhase.DRAFT:
+            return True
+        try:
+            resolved = Path(path).resolve()
+            spec_resolved = self._session.spec_path.resolve()
+            resolved.relative_to(spec_resolved)
+            return True
+        except ValueError:
+            return False
+
     # ── Session lifecycle ─────────────────────────────────────
 
     def create_spec(self, description: str) -> SpecSession:

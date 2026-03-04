@@ -125,8 +125,9 @@ def expand_file_references(text: str) -> str:
     return re.sub(pattern, replace_reference, text)
 
 
-def build_system_prompt(mode: str, skills_content: str = "") -> str:
-    """Build the system prompt with mode, rules, memory, and skills."""
+def build_system_prompt(mode: str, skills_content: str = "",
+                        spec_mgr=None) -> str:
+    """Build the system prompt with mode, rules, memory, skills, and spec context."""
     config = load_config()
     persona = config.get("persona", {})
 
@@ -154,6 +155,23 @@ def build_system_prompt(mode: str, skills_content: str = "") -> str:
     # Add active skills (loaded on-demand based on context)
     if skills_content:
         system_prompt += f"\n\n{skills_content}"
+
+    # Auto-inject spec context when spec is active
+    if spec_mgr and spec_mgr.is_active:
+        from src.core.prompts import PROMPTS
+        from src.core.spec_manager import SpecPhase
+
+        phase = spec_mgr.phase
+        if phase in (SpecPhase.DRAFT, SpecPhase.REVIEW):
+            system_prompt += f"\n\n{PROMPTS['spec_draft']}"
+            system_prompt += (
+                f"\n\n<user_requirement>\n{spec_mgr.session.description}\n</user_requirement>"
+            )
+        elif phase == SpecPhase.EXECUTE:
+            system_prompt += f"\n\n{PROMPTS['spec_execute']}"
+            spec_content = spec_mgr.get_all_spec_content()
+            if spec_content:
+                system_prompt += f"\n\n<spec_documents>\n{spec_content}\n</spec_documents>"
 
     return system_prompt
 
@@ -398,6 +416,7 @@ async def process_tool_calls(
     tool_definitions=None,
     system_prompt: str = "",
     permission_mgr=None,
+    spec_mgr=None,
 ) -> tuple[str, list[str], list[Message]]:
     """
     Process tool calls from model response with agentic loop.
@@ -490,6 +509,24 @@ async def process_tool_calls(
                         }
                     )
                     continue
+
+                # Spec DRAFT phase: restrict writes to spec directory only
+                if spec_mgr and tool_name == "write":
+                    write_path = args.get("path", "")
+                    if write_path and not spec_mgr.is_draft_write_allowed(write_path):
+                        msg = (
+                            f"Blocked: During spec DRAFT phase, writes are restricted "
+                            f"to the spec directory. Cannot write to: {write_path}"
+                        )
+                        console.print(f"[red]🚫 {msg}[/red]")
+                        tool_results.append(
+                            {
+                                "tool_call_id": tool_call_id,
+                                "name": tool_name,
+                                "result": f"Error: {msg}",
+                            }
+                        )
+                        continue
 
                 pending_calls.append((tool_name, args, tool_call_id))
 
@@ -759,7 +796,7 @@ async def chat_loop(
 
     # Build system prompt
     active_skills_content = ""
-    system_prompt = build_system_prompt(mode, active_skills_content)
+    system_prompt = build_system_prompt(mode, active_skills_content, spec_mgr=spec_mgr)
 
     # Restore conversation history
     conversation_history = restore_conversation_history(ctx)
@@ -939,7 +976,7 @@ async def chat_loop(
                 new_active = skill_mgr.get_active_skills()
                 if new_active:
                     console.print(f"[dim cyan]Skills loaded: {', '.join(new_active)}[/dim cyan]")
-                system_prompt = build_system_prompt(mode, active_skills_content)
+                system_prompt = build_system_prompt(mode, active_skills_content, spec_mgr=spec_mgr)
 
             # Add user message to conversation history
             conversation_history.append(Message(role="user", content=user_input))
@@ -1006,7 +1043,45 @@ async def chat_loop(
                 tool_definitions=tool_definitions,
                 system_prompt=system_prompt,
                 permission_mgr=permission_mgr,
+                spec_mgr=spec_mgr,
             )
+
+            # ── Spec auto state transitions ──────────────────────
+            if spec_mgr.is_active and mode == "spec":
+                from src.core.spec_manager import SpecPhase
+
+                phase = spec_mgr.phase
+
+                # DRAFT → REVIEW: auto-detect when all 3 docs are written
+                if phase == SpecPhase.DRAFT and spec_mgr.check_draft_complete():
+                    console.print(Panel(
+                        "[bold magenta]Spec documents complete![/bold magenta]\n\n"
+                        "[dim]Review the generated spec.md, tasks.md, checklist.md.\n"
+                        "Use /spec approve to begin execution, or provide feedback to revise.[/dim]",
+                        border_style="magenta",
+                    ))
+
+                # EXECUTE → COMPLETE: auto-detect when all tasks & checks done
+                elif phase == SpecPhase.EXECUTE:
+                    p = spec_mgr.get_progress()
+                    if (p["tasks_total"] > 0 and p["tasks_done"] == p["tasks_total"]
+                            and p["checks_done"] == p["checks_total"]):
+                        spec_mgr.advance_phase(SpecPhase.COMPLETE)
+                        # Restore build mode
+                        mode = "build"
+                        tool_names = tool_selector.get_tools_for_mode("build")
+                        genai_tools = registry.get_genai_tools(tool_names)
+                        tool_definitions = convert_tools_to_definitions(genai_tools)
+                        system_prompt = build_system_prompt(
+                            mode, active_skills_content, spec_mgr=spec_mgr,
+                        )
+                        console.print(Panel(
+                            f"[bold green]Spec Complete![/bold green]\n"
+                            f"All {p['tasks_total']} tasks and "
+                            f"{p['checks_total']} checks passed.\n\n"
+                            f"[dim]Returned to build mode.[/dim]",
+                            border_style="green",
+                        ))
 
             # Add final assistant text to conversation history
             # (intermediate assistant+tool messages are already appended by process_tool_calls)

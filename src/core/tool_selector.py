@@ -65,6 +65,13 @@ ADVANCED_TOOLS = [
     "git_commit",  # Git 提交（向后兼容）
 ]
 
+# Spec 工具 - spec-driven 开发工作流
+SPEC_TOOLS = [
+    "spec_update_task",  # 更新任务状态
+    "spec_check_item",  # 勾选验证项
+    "spec_progress",  # 查看进度报告
+]
+
 
 @dataclass
 class ToolConfig:
@@ -142,8 +149,12 @@ class ToolSelector:
 
     def get_all_builtin_tools(self) -> list[str]:
         """获取所有内置工具"""
-        all_tools = set(READ_TOOLS + WRITE_TOOLS + AUX_TOOLS + ADVANCED_TOOLS)
+        all_tools = set(READ_TOOLS + WRITE_TOOLS + AUX_TOOLS + ADVANCED_TOOLS + SPEC_TOOLS)
         return list(all_tools)
+
+    def get_spec_tools(self) -> list[str]:
+        """获取 spec 工具列表"""
+        return SPEC_TOOLS.copy()
 
     def get_tool_categories(self) -> dict[str, list[str]]:
         """获取工具分类（用于显示）"""
@@ -152,6 +163,7 @@ class ToolSelector:
             "write": WRITE_TOOLS,
             "aux": AUX_TOOLS,
             "advanced": ADVANCED_TOOLS,
+            "spec": SPEC_TOOLS,
             "mcp": self.mcp_tools,
         }
 

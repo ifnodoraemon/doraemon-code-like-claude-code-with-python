@@ -259,3 +259,26 @@ class TestSpecManager:
         p = mgr.get_progress()
         assert p["percent"] == 0
         assert p["tasks_total"] == 0
+
+    def test_is_draft_write_allowed_in_spec_dir(self, mgr):
+        session = mgr.create_spec("Test")
+        spec_dir = session.spec_path
+        assert mgr.is_draft_write_allowed(str(spec_dir / "spec.md"))
+        assert mgr.is_draft_write_allowed(str(spec_dir / "tasks.md"))
+        assert mgr.is_draft_write_allowed(str(spec_dir / "subdir" / "file.txt"))
+
+    def test_is_draft_write_blocked_outside_spec_dir(self, mgr):
+        mgr.create_spec("Test")
+        assert not mgr.is_draft_write_allowed("/tmp/evil.py")
+        assert not mgr.is_draft_write_allowed("src/main.py")
+
+    def test_is_draft_write_allowed_non_draft_phase(self, mgr):
+        mgr.create_spec("Test")
+        mgr.advance_phase(SpecPhase.EXECUTE)
+        # In EXECUTE phase, writes to any path are allowed
+        assert mgr.is_draft_write_allowed("/tmp/anything.py")
+        assert mgr.is_draft_write_allowed("src/main.py")
+
+    def test_is_draft_write_allowed_no_session(self, mgr):
+        # No active session → allow (no restriction applies)
+        assert mgr.is_draft_write_allowed("src/main.py")
