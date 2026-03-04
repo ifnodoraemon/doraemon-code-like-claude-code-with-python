@@ -12,10 +12,10 @@ Features:
 """
 
 import gzip
-import hashlib
 import json
 import logging
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -134,7 +134,8 @@ class CheckpointManager:
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
         # Load existing checkpoints
-        self._load_index()
+        if not self._load_index():
+            return
         self._cleanup_old_checkpoints()
 
     # ----------------------------------------
@@ -189,8 +190,10 @@ class CheckpointManager:
             file_path = Path(path)
 
             if file_path.exists():
-                # Check file size
-                size = file_path.stat().st_size
+                # Cache stat() result to avoid TOCTOU
+                stat_result = file_path.stat()
+                size = stat_result.st_size
+                mtime = stat_result.st_mtime
                 if size > self.config.max_file_size:
                     logger.warning(f"File too large for snapshot: {path} ({size} bytes)")
                     # Still record metadata, just not content
@@ -199,7 +202,7 @@ class CheckpointManager:
                         content=None,
                         exists=True,
                         size=size,
-                        mtime=file_path.stat().st_mtime,
+                        mtime=mtime,
                     )
                 else:
                     content = file_path.read_text(encoding="utf-8", errors="replace")
@@ -208,7 +211,7 @@ class CheckpointManager:
                         content=content,
                         exists=True,
                         size=size,
-                        mtime=file_path.stat().st_mtime,
+                        mtime=mtime,
                     )
             else:
                 # File doesn't exist yet
@@ -393,8 +396,7 @@ class CheckpointManager:
 
     def _generate_id(self) -> str:
         """Generate a unique checkpoint ID."""
-        timestamp = str(time.time())
-        return hashlib.md5(timestamp.encode()).hexdigest()[:12]
+        return uuid.uuid4().hex[:12]
 
     def _restore_file(self, snapshot: FileSnapshot):
         """Restore a file from snapshot."""
@@ -481,11 +483,11 @@ class CheckpointManager:
         }
         index_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-    def _load_index(self):
-        """Load checkpoint index."""
+    def _load_index(self) -> bool:
+        """Load checkpoint index. Returns True on success."""
         index_path = self._base_dir / "index.json"
         if not index_path.exists():
-            return
+            return True
 
         try:
             data = json.loads(index_path.read_text(encoding="utf-8"))
@@ -507,9 +509,11 @@ class CheckpointManager:
                     )
 
             logger.info(f"Loaded {len(self.checkpoints)} checkpoints")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to load checkpoint index: {e}")
+            return False
 
     def _cleanup_old_checkpoints(self):
         """Remove checkpoints older than retention period."""

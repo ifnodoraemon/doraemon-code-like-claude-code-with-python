@@ -129,6 +129,8 @@ class RetryPolicy:
                 raise
 
         # All retries failed
+        if last_exception is None:
+            raise RuntimeError("No attempts were made")
         raise last_exception
 
     async def execute_async(self, func: Callable[..., T], *args, **kwargs) -> T:
@@ -149,6 +151,8 @@ class RetryPolicy:
             except Exception:
                 raise
 
+        if last_exception is None:
+            raise RuntimeError("No attempts were made")
         raise last_exception
 
     def _calculate_delay(self, attempt: int, exception: Exception) -> float:
@@ -314,8 +318,44 @@ class CircuitBreaker:
             elif state_at_call == CircuitState.HALF_OPEN or self.state == CircuitState.HALF_OPEN:
                 self.state = CircuitState.OPEN
 
+    async def call_async(self, func: Callable[..., T], *args, **kwargs) -> T:
+        """Execute async function with circuit breaker protection."""
+        with self._lock:
+            if self.state == CircuitState.OPEN:
+                if (
+                    self.last_failure_time
+                    and time.time() - self.last_failure_time >= self.config.timeout
+                ):
+                    self.state = CircuitState.HALF_OPEN
+                    self.success_count = 0
+                else:
+                    remaining = (
+                        self.config.timeout - (time.time() - self.last_failure_time)
+                        if self.last_failure_time
+                        else self.config.timeout
+                    )
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker is OPEN. "
+                        f"Try again in {remaining:.1f}s"
+                    )
+            current_state = self.state
+
+        try:
+            result = await func(*args, **kwargs)
+            self._on_success(current_state)
+            return result
+        except Exception:
+            self._on_failure(current_state)
+            raise
+
     def protected(self, func: Callable) -> Callable:
         """Decorator for circuit breaker protection"""
+
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                return await self.call_async(func, *args, **kwargs)
+            return async_wrapper
 
         @wraps(func)
         def wrapper(*args, **kwargs):

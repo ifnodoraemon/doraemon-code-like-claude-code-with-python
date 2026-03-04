@@ -32,6 +32,8 @@ class CacheEntry:
     expires_at: float
     hits: int = 0
     size_bytes: int = 0
+    tool_name: str = ""
+    last_accessed: float = 0.0
 
     @property
     def is_expired(self) -> bool:
@@ -173,6 +175,7 @@ class ToolCache:
             return None
 
         entry.hits += 1
+        entry.last_accessed = time.time()
         self._stats["hits"] += 1
         return entry.value
 
@@ -202,12 +205,15 @@ class ToolCache:
         ttl = ttl or self.get_ttl(tool)
         size = self._estimate_size(value)
 
+        now = time.time()
         entry = CacheEntry(
             key=key,
             value=value,
-            created_at=time.time(),
-            expires_at=time.time() + ttl,
+            created_at=now,
+            expires_at=now + ttl,
             size_bytes=size,
+            tool_name=tool,
+            last_accessed=now,
         )
 
         # Update memory tracking
@@ -247,10 +253,9 @@ class ToolCache:
 
     def invalidate_tool(self, tool: str):
         """Invalidate all entries for a tool."""
-        prefix = tool + ":"
         keys_to_remove = [
             k for k, v in self._cache.items()
-            if self._make_key(tool, {}).startswith(prefix[:10])
+            if v.tool_name == tool
         ]
         for key in keys_to_remove:
             self._remove(key)
@@ -305,8 +310,8 @@ class ToolCache:
             self._stats["evictions"] += 1
             return
 
-        # Evict entry with oldest access (fewest hits as approximation)
-        lru_key = min(self._cache.keys(), key=lambda k: self._cache[k].hits)
+        # Evict least recently accessed entry
+        lru_key = min(self._cache.keys(), key=lambda k: self._cache[k].last_accessed)
         self._remove(lru_key)
         self._stats["evictions"] += 1
 

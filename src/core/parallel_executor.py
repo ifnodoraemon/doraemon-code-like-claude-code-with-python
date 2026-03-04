@@ -334,7 +334,7 @@ class ParallelExecutor:
                     )
                 else:
                     # Sync handler
-                    output = await asyncio.get_event_loop().run_in_executor(
+                    output = await asyncio.get_running_loop().run_in_executor(
                         None, self._tool_handler, call.name, call.arguments
                     )
 
@@ -480,16 +480,22 @@ class ParallelExecutor:
         # Start all tasks
         tasks = [asyncio.create_task(run_one(call)) for call in stage]
 
-        # Collect results as they complete
-        results = []
-        for _ in range(len(stage)):
-            result = await result_queue.get()
-            results.append(result)
+        try:
+            # Collect results as they complete
+            results = []
+            for _ in range(len(stage)):
+                result = await result_queue.get()
+                results.append(result)
 
-        # Ensure all tasks are done
-        await asyncio.gather(*tasks, return_exceptions=True)
+            # Ensure all tasks are done
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-        return results
+            return results
+        except BaseException:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            raise
 
 
 async def execute_tools_streaming(

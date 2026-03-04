@@ -221,31 +221,35 @@ class GatewayModelClient(BaseModelClient):
         if tool_list:
             payload["tools"] = tool_list
 
-        async with self._client.stream("POST", "/v1/chat/completions", json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if not line or not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data)
-                    choices = chunk.get("choices", [])
-                    if not choices:
+        try:
+            async with self._client.stream("POST", "/v1/chat/completions", json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data: "):
                         continue
-                    choice = choices[0]
-                    delta = choice.get("delta", {})
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        choices = chunk.get("choices", [])
+                        if not choices:
+                            continue
+                        choice = choices[0]
+                        delta = choice.get("delta", {})
 
-                    yield StreamChunk(
-                        content=delta.get("content"),
-                        thought=delta.get("thought"),
-                        tool_calls=delta.get("tool_calls"),
-                        finish_reason=choice.get("finish_reason"),
-                        usage=chunk.get("usage"),
-                    )
-                except json.JSONDecodeError:
-                    continue
+                        yield StreamChunk(
+                            content=delta.get("content"),
+                            thought=delta.get("thought"),
+                            tool_calls=delta.get("tool_calls"),
+                            finish_reason=choice.get("finish_reason"),
+                            usage=chunk.get("usage"),
+                        )
+                    except json.JSONDecodeError:
+                        continue
+        except (httpx.StreamError, httpx.RemoteProtocolError) as e:
+            logger.error(f"Stream connection error: {e}")
+            raise
 
     async def list_models(self) -> list[dict]:
         """List available models from gateway."""

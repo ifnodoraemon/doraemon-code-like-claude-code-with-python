@@ -9,10 +9,10 @@ Enhanced session management with support for:
 - Multi-session management
 """
 
-import hashlib
 import json
 import logging
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -142,8 +142,7 @@ class SessionManager:
 
     def _generate_id(self) -> str:
         """Generate a unique session ID."""
-        timestamp = str(time.time())
-        return hashlib.md5(timestamp.encode()).hexdigest()[:12]
+        return uuid.uuid4().hex[:12]
 
     def _get_session_path(self, session_id: str) -> Path:
         """Get path for session data file."""

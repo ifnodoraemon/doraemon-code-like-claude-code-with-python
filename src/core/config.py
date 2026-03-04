@@ -69,6 +69,9 @@ def load_config(override_path: str | None = None, validate: bool = True) -> dict
     except ValueError as e:
         logger.error(f"Configuration validation failed: {e}")
         raise
+    except (PermissionError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to load configuration: {e}", exc_info=True)
+        raise
     except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
+        logger.error(f"Failed to load configuration: {e}", exc_info=True)
         return get_default_config()
