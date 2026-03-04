@@ -23,7 +23,7 @@ class GatewayConfig:
     def from_env(cls) -> "GatewayConfig":
         return cls(
             base_url=os.getenv("DORAEMON_GATEWAY_URL", "http://localhost:8000"),
-            api_key=os.getenv("DORAEMON_API_KEY"),
+            api_key=os.getenv("DORAEMON_GATEWAY_KEY"),
             timeout=float(os.getenv("DORAEMON_GATEWAY_TIMEOUT", "120")),
         )
 

@@ -361,8 +361,8 @@ def main():
     """Run the gateway server."""
     import uvicorn
 
-    host = os.getenv("GATEWAY_HOST", "0.0.0.0")
-    port = int(os.getenv("GATEWAY_PORT", "8000"))
+    host = os.getenv("DORAEMON_GATEWAY_HOST", "0.0.0.0")
+    port = int(os.getenv("DORAEMON_GATEWAY_PORT", "8000"))
 
     print(f"Starting Doraemon Model Gateway on {host}:{port}")
     uvicorn.run(app, host=host, port=port)
