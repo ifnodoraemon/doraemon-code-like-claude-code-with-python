@@ -82,7 +82,7 @@ class TestSpecProgress:
         assert "build-auth" in result
         assert "Tasks" in result
         assert "Checklist" in result
-        assert "0%" in result
+        assert "0% overall" in result
 
     def test_progress_with_completed(self, spec_mgr):
         spec_mgr.create_spec("Test")
@@ -92,4 +92,4 @@ class TestSpecProgress:
         spec_mgr.check_item("C1", True)
 
         result = spec_progress()
-        assert "66%" in result  # 2 of 3
+        assert "66% overall" in result  # 2 of 3

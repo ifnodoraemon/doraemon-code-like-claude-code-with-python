@@ -25,6 +25,23 @@ def set_spec_manager(mgr) -> None:
     _spec_mgr = mgr
 
 
+def _require_active() -> str | None:
+    """Return error string if no active session, else None."""
+    if not _spec_mgr or not _spec_mgr.is_active:
+        return "Error: No active spec session"
+    return None
+
+
+def _progress_suffix() -> str:
+    """Format a one-line progress summary for tool responses."""
+    p = _spec_mgr.get_progress()
+    return (
+        f"Tasks {p['tasks_done']}/{p['tasks_total']}, "
+        f"checks {p['checks_done']}/{p['checks_total']}, "
+        f"{p['percent']}% overall"
+    )
+
+
 @mcp.tool()
 def spec_update_task(task_id: str, status: str) -> str:
     """Update a task's status in the current spec session.
@@ -36,16 +53,10 @@ def spec_update_task(task_id: str, status: str) -> str:
     Returns:
         Progress summary or error message
     """
-    if not _spec_mgr or not _spec_mgr.is_active:
-        return "Error: No active spec session"
-
+    if err := _require_active():
+        return err
     if _spec_mgr.update_task_status(task_id, status):
-        p = _spec_mgr.get_progress()
-        return (
-            f"Updated {task_id} → {status}. "
-            f"Progress: {p['tasks_done']}/{p['tasks_total']} tasks, "
-            f"{p['percent']}% overall"
-        )
+        return f"Updated {task_id} → {status}. {_progress_suffix()}"
     return f"Error: Task {task_id} not found or invalid status '{status}'"
 
 
@@ -60,17 +71,11 @@ def spec_check_item(item_id: str, checked: bool = True) -> str:
     Returns:
         Progress summary or error message
     """
-    if not _spec_mgr or not _spec_mgr.is_active:
-        return "Error: No active spec session"
-
+    if err := _require_active():
+        return err
     if _spec_mgr.check_item(item_id, checked):
-        p = _spec_mgr.get_progress()
         mark = "checked" if checked else "unchecked"
-        return (
-            f"{item_id} {mark}. "
-            f"Checklist: {p['checks_done']}/{p['checks_total']}, "
-            f"{p['percent']}% overall"
-        )
+        return f"{item_id} {mark}. {_progress_suffix()}"
     return f"Error: Checklist item {item_id} not found"
 
 
@@ -81,18 +86,16 @@ def spec_progress() -> str:
     Returns:
         Formatted progress report with task and checklist status
     """
-    if not _spec_mgr or not _spec_mgr.is_active:
-        return "No active spec session"
+    if err := _require_active():
+        return err
 
     session = _spec_mgr.session
-    p = _spec_mgr.get_progress()
-
     lines = [
         f"# Spec Progress: {session.name}",
         f"Phase: {session.phase.value}",
-        f"Overall: {p['percent']}%",
+        f"Overall: {_progress_suffix()}",
         "",
-        f"## Tasks ({p['tasks_done']}/{p['tasks_total']})",
+        f"## Tasks",
     ]
 
     status_icons = {"done": "✅", "in_progress": "🔄", "pending": "⬜", "skipped": "⏭️"}
@@ -101,7 +104,7 @@ def spec_progress() -> str:
         lines.append(f"  {icon} {task.id}: {task.title}")
 
     lines.append("")
-    lines.append(f"## Checklist ({p['checks_done']}/{p['checks_total']})")
+    lines.append("## Checklist")
     for item in session.checklist:
         icon = "✅" if item.checked else "⬜"
         lines.append(f"  {icon} {item.id}: {item.description}")

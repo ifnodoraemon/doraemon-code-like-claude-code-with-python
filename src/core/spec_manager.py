@@ -178,36 +178,38 @@ class SpecManager:
 
     # ── Task & checklist updates ──────────────────────────────
 
-    def update_task_status(self, task_id: str, status: str) -> bool:
-        """Update a task's status and sync tasks.md on disk."""
+    def _update_item(self, collection: list, item_id: str, apply, sync_fn) -> bool:
+        """Find item by id, apply mutation, sync to disk. Shared by task/check updates."""
         if not self._session:
             return False
-        valid_statuses = ("pending", "in_progress", "done", "skipped")
-        if status not in valid_statuses:
-            return False
-
-        for task in self._session.tasks:
-            if task.id == task_id:
-                task.status = status
+        for item in collection:
+            if item.id == item_id:
+                apply(item)
                 self._session.updated_at = time.time()
-                self._sync_tasks_md()
+                sync_fn()
                 self._save_meta()
                 return True
         return False
+
+    def update_task_status(self, task_id: str, status: str) -> bool:
+        """Update a task's status and sync tasks.md on disk."""
+        if status not in ("pending", "in_progress", "done", "skipped"):
+            return False
+        return self._update_item(
+            self._session.tasks if self._session else [],
+            task_id,
+            lambda t: setattr(t, "status", status),
+            self._sync_tasks_md,
+        )
 
     def check_item(self, item_id: str, checked: bool = True) -> bool:
         """Mark a checklist item as checked/unchecked and sync checklist.md."""
-        if not self._session:
-            return False
-
-        for item in self._session.checklist:
-            if item.id == item_id:
-                item.checked = checked
-                self._session.updated_at = time.time()
-                self._sync_checklist_md()
-                self._save_meta()
-                return True
-        return False
+        return self._update_item(
+            self._session.checklist if self._session else [],
+            item_id,
+            lambda c: setattr(c, "checked", checked),
+            self._sync_checklist_md,
+        )
 
     # ── Progress tracking ─────────────────────────────────────
 
@@ -249,98 +251,66 @@ class SpecManager:
 
     # ── List / resume ─────────────────────────────────────────
 
-    def list_specs(self) -> list[dict]:
-        """List all spec sessions found on disk."""
-        specs = []
+    def _iter_meta(self):
+        """Yield parsed meta.json dicts from all spec directories."""
         if not self._root.exists():
-            return specs
-
+            return
         for meta_path in sorted(self._root.glob("*/meta.json")):
             try:
-                data = json.loads(meta_path.read_text(encoding="utf-8"))
-                specs.append({
-                    "id": data["id"],
-                    "name": data["name"],
-                    "description": data["description"],
-                    "phase": data["phase"],
-                    "updated_at": data["updated_at"],
-                })
+                yield json.loads(meta_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, KeyError):
                 continue
-        return specs
+
+    def list_specs(self) -> list[dict]:
+        """List all spec sessions found on disk."""
+        keys = ("id", "name", "description", "phase", "updated_at")
+        return [{k: d[k] for k in keys} for d in self._iter_meta()]
 
     def resume_spec(self, name_or_id: str) -> SpecSession | None:
         """Resume a previously saved spec session by name or id."""
-        if not self._root.exists():
-            return None
-
-        for meta_path in self._root.glob("*/meta.json"):
-            try:
-                data = json.loads(meta_path.read_text(encoding="utf-8"))
-                if data.get("id") == name_or_id or data.get("name") == name_or_id:
-                    self._session = self._load_session(data)
-                    logger.info(f"Resumed spec: {self._session.id} ({self._session.name})")
-                    return self._session
-            except (json.JSONDecodeError, KeyError):
-                continue
+        for data in self._iter_meta():
+            if data.get("id") == name_or_id or data.get("name") == name_or_id:
+                self._session = self._load_session(data)
+                logger.info(f"Resumed spec: {self._session.id} ({self._session.name})")
+                return self._session
         return None
 
     # ── Internal: parsing ─────────────────────────────────────
 
+    @staticmethod
+    def _parse_checkboxes(content: str, prefix: str):
+        """Yield (id, text, is_checked) tuples from markdown checkbox lines."""
+        pattern = re.compile(rf"^-\s+\[([ xX])\]\s+({prefix}\d+):\s*(.+)$", re.MULTILINE)
+        for m in pattern.finditer(content):
+            check_char, item_id, text = m.groups()
+            yield item_id, text.strip(), check_char.lower() == "x"
+
     def _parse_tasks(self, content: str) -> list[SpecTask]:
         """Parse tasks from markdown content. Format: - [ ] T1: Title"""
-        tasks = []
-        # Match: - [ ] T1: title  or  - [x] T1: title
-        pattern = re.compile(r"^-\s+\[([ xX])\]\s+(T\d+):\s*(.+)$", re.MULTILINE)
-        for match in pattern.finditer(content):
-            check_char, task_id, title = match.groups()
-            status = "done" if check_char.lower() == "x" else "pending"
-            tasks.append(SpecTask(id=task_id, title=title.strip(), status=status))
-        return tasks
+        return [
+            SpecTask(id=i, title=t, status="done" if checked else "pending")
+            for i, t, checked in self._parse_checkboxes(content, "T")
+        ]
 
     def _parse_checklist(self, content: str) -> list[SpecCheckItem]:
         """Parse checklist from markdown content. Format: - [ ] C1: Description"""
-        items = []
-        pattern = re.compile(r"^-\s+\[([ xX])\]\s+(C\d+):\s*(.+)$", re.MULTILINE)
-        for match in pattern.finditer(content):
-            check_char, item_id, desc = match.groups()
-            checked = check_char.lower() == "x"
-            items.append(SpecCheckItem(id=item_id, description=desc.strip(), checked=checked))
-        return items
+        return [
+            SpecCheckItem(id=i, description=t, checked=checked)
+            for i, t, checked in self._parse_checkboxes(content, "C")
+        ]
 
     # ── Internal: sync markdown on disk ───────────────────────
 
-    def _sync_tasks_md(self) -> None:
-        """Rewrite tasks.md to reflect current task statuses."""
+    def _sync_md(self, filename: str, items: list, checked_fn) -> None:
+        """Rewrite a markdown file's checkboxes to match in-memory state."""
         if not self._session:
             return
-        path = self._session.spec_path / "tasks.md"
+        path = self._session.spec_path / filename
         if not path.exists():
             return
         content = path.read_text(encoding="utf-8")
-
-        for task in self._session.tasks:
-            check = "x" if task.status == "done" else " "
-            # Replace the checkbox for this task ID
-            content = re.sub(
-                rf"^(-\s+\[)[ xX](\]\s+{re.escape(task.id)}:)",
-                rf"\g<1>{check}\g<2>",
-                content,
-                flags=re.MULTILINE,
-            )
-        path.write_text(content, encoding="utf-8")
-
-    def _sync_checklist_md(self) -> None:
-        """Rewrite checklist.md to reflect current check states."""
-        if not self._session:
-            return
-        path = self._session.spec_path / "checklist.md"
-        if not path.exists():
-            return
-        content = path.read_text(encoding="utf-8")
-
-        for item in self._session.checklist:
-            check = "x" if item.checked else " "
+        for item in items:
+            check = "x" if checked_fn(item) else " "
             content = re.sub(
                 rf"^(-\s+\[)[ xX](\]\s+{re.escape(item.id)}:)",
                 rf"\g<1>{check}\g<2>",
@@ -349,25 +319,25 @@ class SpecManager:
             )
         path.write_text(content, encoding="utf-8")
 
+    def _sync_tasks_md(self) -> None:
+        self._sync_md("tasks.md",
+                      self._session.tasks if self._session else [],
+                      lambda t: t.status == "done")
+
+    def _sync_checklist_md(self) -> None:
+        self._sync_md("checklist.md",
+                      self._session.checklist if self._session else [],
+                      lambda c: c.checked)
+
     # ── Internal: persistence ─────────────────────────────────
 
     def _save_meta(self) -> None:
         """Persist session state to meta.json."""
         if not self._session:
             return
+        data = asdict(self._session)
+        data["phase"] = self._session.phase.value  # enum → string
         path = self._session.spec_path / "meta.json"
-        data = {
-            "id": self._session.id,
-            "name": self._session.name,
-            "description": self._session.description,
-            "phase": self._session.phase.value,
-            "spec_dir": self._session.spec_dir,
-            "created_at": self._session.created_at,
-            "updated_at": self._session.updated_at,
-            "tasks": [asdict(t) for t in self._session.tasks],
-            "checklist": [asdict(c) for c in self._session.checklist],
-            "revision_count": self._session.revision_count,
-        }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def _load_session(self, data: dict) -> SpecSession:

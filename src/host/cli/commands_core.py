@@ -1008,6 +1008,22 @@ Project specific rules for Doraemon Code.
 
     # ── Spec Mode ─────────────────────────────────────────────
 
+    def _make_tool_state(self, mode: str, tool_names: list[str],
+                         active_skills_content: str,
+                         build_system_prompt, convert_tools_to_definitions,
+                         extra_prompt: str = "") -> dict:
+        """Build the state dict for a mode switch (tools + system prompt)."""
+        genai_tools = self.registry.get_genai_tools(tool_names)
+        prompt = build_system_prompt(mode, active_skills_content)
+        if extra_prompt:
+            prompt += f"\n\n{extra_prompt}"
+        return {
+            "mode": "spec",
+            "tool_names": tool_names,
+            "tool_definitions": convert_tools_to_definitions(genai_tools),
+            "system_prompt": prompt,
+        }
+
     async def _handle_spec(
         self,
         cmd_args: list[str],
@@ -1027,13 +1043,12 @@ Project specific rules for Doraemon Code.
             console.print("[red]Usage: /spec <description> | approve | status | list | resume <name> | abort[/red]")
             return None
 
+        # Bind callables once for sub-methods
+        bsp, ctd = build_system_prompt, convert_tools_to_definitions
         subcmd = cmd_args[0].lower()
 
         if subcmd == "approve":
-            return self._spec_approve(
-                mode, active_skills_content,
-                build_system_prompt, convert_tools_to_definitions,
-            )
+            return self._spec_approve(active_skills_content, bsp, ctd)
         elif subcmd == "status":
             self._spec_status()
             return None
@@ -1045,48 +1060,26 @@ Project specific rules for Doraemon Code.
             if not name:
                 console.print("[red]Usage: /spec resume <name_or_id>[/red]")
                 return None
-            return self._spec_resume(
-                name, mode, active_skills_content,
-                build_system_prompt, convert_tools_to_definitions,
-            )
+            return self._spec_resume(name, active_skills_content, bsp, ctd)
         elif subcmd == "abort":
-            return self._spec_abort(
-                mode, active_skills_content,
-                build_system_prompt, convert_tools_to_definitions,
-            )
+            return self._spec_abort(active_skills_content, bsp, ctd)
         else:
-            # Treat entire args as description for new spec
             description = " ".join(cmd_args)
-            return self._spec_start(
-                description, active_skills_content,
-                build_system_prompt, convert_tools_to_definitions,
-            )
+            return self._spec_start(description, active_skills_content, bsp, ctd)
 
-    def _spec_start(
-        self, description: str, active_skills_content: str,
-        build_system_prompt, convert_tools_to_definitions,
-    ) -> dict:
-        """Start a new spec session (DRAFT phase)."""
+    def _spec_draft_state(self, description: str, session,
+                          active_skills_content: str,
+                          build_system_prompt, convert_tools_to_definitions) -> dict:
+        """Build state dict for DRAFT phase (no session creation)."""
         from src.core.prompts import PROMPTS
-        from src.core.spec_manager import SpecPhase
 
-        if self.spec_mgr.is_active:
-            console.print("[yellow]A spec is already active. Use /spec abort first.[/yellow]")
-            return {}
-
-        session = self.spec_mgr.create_spec(description)
-
-        # Use plan tools + write (for generating spec docs)
         plan_tools = self.tool_selector.get_tools_for_mode("plan")
-        # Add write tool so LLM can create spec documents
         draft_tools = list(set(plan_tools + ["write"]))
-        genai_tools = self.registry.get_genai_tools(draft_tools)
-        new_defs = convert_tools_to_definitions(genai_tools)
 
-        # Build system prompt with spec_draft context
-        spec_prompt = build_system_prompt("plan", active_skills_content)
-        spec_prompt += f"\n\n{PROMPTS['spec_draft']}"
-        spec_prompt += f"\n\n<user_requirement>\n{description}\n</user_requirement>"
+        extra = (
+            f"{PROMPTS['spec_draft']}\n\n"
+            f"<user_requirement>\n{description}\n</user_requirement>"
+        )
 
         console.print(Panel(
             f"[bold magenta]Spec Mode: DRAFT[/bold magenta]\n"
@@ -1097,19 +1090,53 @@ Project specific rules for Doraemon Code.
             border_style="magenta",
         ))
 
-        return {
-            "mode": "spec",
-            "tool_names": draft_tools,
-            "tool_definitions": new_defs,
-            "system_prompt": spec_prompt,
-        }
+        return self._make_tool_state(
+            "plan", draft_tools, active_skills_content,
+            build_system_prompt, convert_tools_to_definitions, extra,
+        )
 
-    def _spec_approve(
-        self, mode: str, active_skills_content: str,
-        build_system_prompt, convert_tools_to_definitions,
-    ) -> dict:
-        """Approve spec and transition to EXECUTE phase."""
+    def _spec_execute_state(self, active_skills_content: str,
+                            build_system_prompt, convert_tools_to_definitions) -> dict:
+        """Build state dict for EXECUTE phase (no phase transition)."""
         from src.core.prompts import PROMPTS
+
+        build_tools = self.tool_selector.get_tools_for_mode("build")
+        spec_tools = ["spec_update_task", "spec_check_item", "spec_progress"]
+        exec_tools = list(set(build_tools + spec_tools))
+
+        extra = PROMPTS["spec_execute"]
+        spec_content = self.spec_mgr.get_all_spec_content()
+        if spec_content:
+            extra += f"\n\n<spec_documents>\n{spec_content}\n</spec_documents>"
+
+        p = self.spec_mgr.get_progress()
+        console.print(Panel(
+            f"[bold magenta]Spec Mode: EXECUTE[/bold magenta]\n"
+            f"Tasks: {p['tasks_total']} | Checks: {p['checks_total']}\n\n"
+            f"[dim]Executing tasks in order. Progress tracked automatically.[/dim]",
+            border_style="magenta",
+        ))
+
+        return self._make_tool_state(
+            "build", exec_tools, active_skills_content,
+            build_system_prompt, convert_tools_to_definitions, extra,
+        )
+
+    def _spec_start(self, description: str, active_skills_content: str,
+                    build_system_prompt, convert_tools_to_definitions) -> dict:
+        """Start a new spec session (DRAFT phase)."""
+        if self.spec_mgr.is_active:
+            console.print("[yellow]A spec is already active. Use /spec abort first.[/yellow]")
+            return {}
+        session = self.spec_mgr.create_spec(description)
+        return self._spec_draft_state(
+            description, session, active_skills_content,
+            build_system_prompt, convert_tools_to_definitions,
+        )
+
+    def _spec_approve(self, active_skills_content: str,
+                      build_system_prompt, convert_tools_to_definitions) -> dict:
+        """Approve spec and transition to EXECUTE phase."""
         from src.core.spec_manager import SpecPhase
 
         if not self.spec_mgr.is_active:
@@ -1129,37 +1156,10 @@ Project specific rules for Doraemon Code.
                 console.print("[yellow]Spec documents not complete yet. Need: spec.md, tasks.md, checklist.md[/yellow]")
                 return {}
 
-        # Transition to EXECUTE
         self.spec_mgr.advance_phase(SpecPhase.EXECUTE)
-
-        # Use build tools + spec tools
-        build_tools = self.tool_selector.get_tools_for_mode("build")
-        spec_tools = ["spec_update_task", "spec_check_item", "spec_progress"]
-        exec_tools = list(set(build_tools + spec_tools))
-        genai_tools = self.registry.get_genai_tools(exec_tools)
-        new_defs = convert_tools_to_definitions(genai_tools)
-
-        # Build system prompt with spec context
-        spec_prompt = build_system_prompt("build", active_skills_content)
-        spec_prompt += f"\n\n{PROMPTS['spec_execute']}"
-        spec_content = self.spec_mgr.get_all_spec_content()
-        if spec_content:
-            spec_prompt += f"\n\n<spec_documents>\n{spec_content}\n</spec_documents>"
-
-        p = self.spec_mgr.get_progress()
-        console.print(Panel(
-            f"[bold magenta]Spec Mode: EXECUTE[/bold magenta]\n"
-            f"Tasks: {p['tasks_total']} | Checks: {p['checks_total']}\n\n"
-            f"[dim]Executing tasks in order. Progress tracked automatically.[/dim]",
-            border_style="magenta",
-        ))
-
-        return {
-            "mode": "spec",
-            "tool_names": exec_tools,
-            "tool_definitions": new_defs,
-            "system_prompt": spec_prompt,
-        }
+        return self._spec_execute_state(
+            active_skills_content, build_system_prompt, convert_tools_to_definitions,
+        )
 
     def _spec_status(self) -> None:
         """Show current spec progress."""
@@ -1180,7 +1180,6 @@ Project specific rules for Doraemon Code.
         table.add_row("Progress", f"{p['percent']}%")
         console.print(table)
 
-        # Show task details
         if session.tasks:
             status_icons = {"done": "✅", "in_progress": "🔄", "pending": "⬜", "skipped": "⏭️"}
             console.print("\n[bold]Tasks:[/bold]")
@@ -1208,10 +1207,8 @@ Project specific rules for Doraemon Code.
             table.add_row(s["id"], s["name"], s["phase"], updated)
         console.print(table)
 
-    def _spec_resume(
-        self, name_or_id: str, mode: str, active_skills_content: str,
-        build_system_prompt, convert_tools_to_definitions,
-    ) -> dict:
+    def _spec_resume(self, name_or_id: str, active_skills_content: str,
+                     build_system_prompt, convert_tools_to_definitions) -> dict:
         """Resume a previous spec session."""
         from src.core.spec_manager import SpecPhase
 
@@ -1223,21 +1220,18 @@ Project specific rules for Doraemon Code.
         console.print(f"[green]Resumed spec: {session.name} (phase: {session.phase.value})[/green]")
 
         if session.phase in (SpecPhase.DRAFT, SpecPhase.REVIEW):
-            return self._spec_start(
-                session.description, active_skills_content,
+            return self._spec_draft_state(
+                session.description, session, active_skills_content,
                 build_system_prompt, convert_tools_to_definitions,
             )
         elif session.phase == SpecPhase.EXECUTE:
-            return self._spec_approve(
-                mode, active_skills_content,
-                build_system_prompt, convert_tools_to_definitions,
+            return self._spec_execute_state(
+                active_skills_content, build_system_prompt, convert_tools_to_definitions,
             )
         return {}
 
-    def _spec_abort(
-        self, mode: str, active_skills_content: str,
-        build_system_prompt, convert_tools_to_definitions,
-    ) -> dict:
+    def _spec_abort(self, active_skills_content: str,
+                    build_system_prompt, convert_tools_to_definitions) -> dict:
         """Abort the current spec and return to build mode."""
         if not self.spec_mgr.is_active:
             console.print("[yellow]No active spec to abort.[/yellow]")
@@ -1246,16 +1240,12 @@ Project specific rules for Doraemon Code.
         name = self.spec_mgr.session.name
         self.spec_mgr.abort()
 
-        # Restore build mode
         build_tools = self.tool_selector.get_tools_for_mode("build")
-        genai_tools = self.registry.get_genai_tools(build_tools)
-        new_defs = convert_tools_to_definitions(genai_tools)
+        state = self._make_tool_state(
+            "build", build_tools, active_skills_content,
+            build_system_prompt, convert_tools_to_definitions,
+        )
+        state["mode"] = "build"  # override "spec" default from _make_tool_state
 
         console.print(f"[yellow]Spec '{name}' aborted. Returned to build mode.[/yellow]")
-
-        return {
-            "mode": "build",
-            "tool_names": build_tools,
-            "tool_definitions": new_defs,
-            "system_prompt": build_system_prompt("build", active_skills_content),
-        }
+        return state
