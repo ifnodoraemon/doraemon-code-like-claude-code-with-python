@@ -41,6 +41,7 @@ def _ensure_initialized():
 
     try:
         import chromadb
+
         from src.services.embeddings import RemoteEmbeddingFunction
 
         embedding_fn = RemoteEmbeddingFunction()

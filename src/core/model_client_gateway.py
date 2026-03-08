@@ -8,6 +8,8 @@ import json
 import logging
 from collections.abc import AsyncIterator, Sequence
 
+import httpx
+
 from src.core.model_client_base import BaseModelClient
 from src.core.model_utils import (
     ChatResponse,
@@ -25,8 +27,7 @@ class GatewayModelClient(BaseModelClient):
 
     def __init__(self, config: ClientConfig):
         self.config = config
-        from httpx import AsyncClient
-        self._client: AsyncClient | None = None
+        self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self):
         """Context manager entry - ensure client is connected."""
@@ -56,7 +57,9 @@ class GatewayModelClient(BaseModelClient):
         )
         logger.info(f"Connected to gateway: {self.config.gateway_url}")
 
-    async def _make_api_call(self, endpoint: str, payload: dict | None = None, method: str = "POST") -> dict:
+    async def _make_api_call(
+        self, endpoint: str, payload: dict | None = None, method: str = "POST"
+    ) -> dict:
         """
         Make API call with automatic retry on transient errors.
 
@@ -94,6 +97,7 @@ class GatewayModelClient(BaseModelClient):
                 await self.connect()
             if self._client is None:
                 from src.core.errors import ConfigurationError
+
                 raise ConfigurationError("Failed to initialize HTTP client")
 
             try:
@@ -109,25 +113,25 @@ class GatewayModelClient(BaseModelClient):
                     raise RateLimitError(
                         "Rate limit exceeded",
                         retry_after=retry_after,
-                        context={"endpoint": endpoint, "status": 429}
+                        context={"endpoint": endpoint, "status": 429},
                     ) from e
                 elif e.response.status_code >= 500:
                     raise TransientError(
                         f"Server error: {e.response.status_code}",
                         retry_after=2.0,
-                        context={"endpoint": endpoint, "status": e.response.status_code}
+                        context={"endpoint": endpoint, "status": e.response.status_code},
                     ) from e
                 else:
                     raise DoraemonException(
                         f"API error: {e.response.status_code} - {e.response.text}",
                         category=ErrorCategory.PERMANENT,
-                        context={"endpoint": endpoint, "status": e.response.status_code}
+                        context={"endpoint": endpoint, "status": e.response.status_code},
                     ) from e
             except httpx.RequestError as e:
                 raise TransientError(
                     f"Network error: {str(e)}",
                     retry_after=2.0,
-                    context={"endpoint": endpoint, "error": str(e)}
+                    context={"endpoint": endpoint, "error": str(e)},
                 ) from e
 
         return await _call()
@@ -202,14 +206,14 @@ class GatewayModelClient(BaseModelClient):
 
         if self._client is None:
             from src.core.errors import ConfigurationError
+
             raise ConfigurationError("Failed to initialize HTTP client for gateway mode")
 
         msg_list = [m.to_dict() if isinstance(m, Message) else m for m in messages]
         tool_list = None
         if tools:
             tool_list = [
-                t.to_openai_format() if isinstance(t, ToolDefinition) else t
-                for t in tools
+                t.to_openai_format() if isinstance(t, ToolDefinition) else t for t in tools
             ]
 
         payload = {
@@ -222,7 +226,9 @@ class GatewayModelClient(BaseModelClient):
             payload["tools"] = tool_list
 
         try:
-            async with self._client.stream("POST", "/v1/chat/completions", json=payload) as response:
+            async with self._client.stream(
+                "POST", "/v1/chat/completions", json=payload
+            ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line or not line.startswith("data: "):

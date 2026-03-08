@@ -16,7 +16,6 @@ from src.core.security import validate_path
 from src.servers.git_common import check_ref, require_repo
 from src.servers.git_common import run_gh_command as _run_gh_command
 from src.servers.git_common import run_git_command as _run_git_command
-from src.servers.git_common import sanitize_git_arg as _sanitize_git_arg
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -23,7 +23,6 @@ from dataclasses import dataclass
 from mcp.server.fastmcp import FastMCP
 
 from src.core.security import validate_path
-from src.core.subprocess_utils import prepare_safe_env
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -486,7 +485,7 @@ async def lsp_references(path: str, symbol: str) -> str:
             return f"No references found for '{symbol}'"
         return f"References to '{symbol}':\n\n{result}"
     except ImportError:
-        return f"Error: filesystem_unified module not available"
+        return "Error: filesystem_unified module not available"
     except Exception as e:
         return f"Error searching: {e}"
 
@@ -565,7 +564,7 @@ async def lsp_definition(path: str, symbol: str) -> str:
                 first_line = result.strip().split("\n")[0]
                 return f"Definition of '{symbol}':\n\n{first_line}"
         except ImportError:
-            return f"Error: filesystem_unified module not available"
+            return "Error: filesystem_unified module not available"
         except Exception:
             continue
 

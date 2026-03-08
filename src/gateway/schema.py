@@ -13,6 +13,7 @@ from typing import Any
 
 class Role(str, Enum):
     """Message roles."""
+
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
@@ -21,6 +22,7 @@ class Role(str, Enum):
 
 class FinishReason(str, Enum):
     """Reason for completion."""
+
     STOP = "stop"
     TOOL_CALLS = "tool_calls"
     LENGTH = "length"
@@ -30,6 +32,7 @@ class FinishReason(str, Enum):
 @dataclass
 class ToolCall:
     """A tool/function call from the model."""
+
     id: str
     name: str
     arguments: dict[str, Any]
@@ -57,6 +60,7 @@ class ToolCall:
 @dataclass
 class ToolResult:
     """Result from a tool execution."""
+
     tool_call_id: str
     content: str
 
@@ -70,14 +74,17 @@ class ToolResult:
 @dataclass
 class ChatMessage:
     """A chat message in the unified format."""
+
     role: Role | str
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None  # For tool response messages
     name: str | None = None  # Optional name for the message author
 
-    def to_dict(self) -> dict:
-        result = {"role": self.role.value if isinstance(self.role, Role) else self.role}
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "role": self.role.value if isinstance(self.role, Role) else self.role
+        }
         if self.content is not None:
             result["content"] = self.content
         if self.tool_calls:
@@ -106,6 +113,7 @@ class ChatMessage:
 @dataclass
 class ToolDefinition:
     """Definition of a tool/function that the model can call."""
+
     name: str
     description: str
     parameters: dict[str, Any]  # JSON Schema format
@@ -124,6 +132,7 @@ class ToolDefinition:
 @dataclass
 class ChatRequest:
     """Unified chat request format."""
+
     model: str
     messages: list[ChatMessage]
     tools: list[ToolDefinition] | None = None
@@ -188,6 +197,7 @@ class ChatRequest:
 @dataclass
 class Usage:
     """Token usage statistics."""
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -203,6 +213,7 @@ class Usage:
 @dataclass
 class Choice:
     """A single completion choice."""
+
     index: int
     message: ChatMessage
     finish_reason: FinishReason | str | None = None
@@ -221,6 +232,7 @@ class Choice:
 @dataclass
 class ChatResponse:
     """Unified chat response format."""
+
     id: str
     model: str
     choices: list[Choice]
@@ -264,6 +276,7 @@ class ChatResponse:
 @dataclass
 class StreamChunk:
     """A streaming response chunk."""
+
     id: str
     model: str
     delta_content: str | None = None
@@ -271,8 +284,8 @@ class StreamChunk:
     finish_reason: str | None = None
     usage: Usage | None = None
 
-    def to_dict(self) -> dict:
-        delta = {}
+    def to_dict(self) -> dict[str, Any]:
+        delta: dict[str, Any] = {}
         if self.delta_content:
             delta["content"] = self.delta_content
         if self.delta_tool_calls:
@@ -296,6 +309,7 @@ class StreamChunk:
 @dataclass
 class ModelInfo:
     """Information about an available model."""
+
     id: str
     name: str
     provider: str
@@ -325,12 +339,13 @@ class ModelInfo:
 @dataclass
 class ErrorResponse:
     """Error response format."""
+
     error: str
     code: str
     details: dict[str, Any] | None = None
 
-    def to_dict(self) -> dict:
-        result = {
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
             "error": {
                 "message": self.error,
                 "code": self.code,

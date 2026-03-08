@@ -74,7 +74,9 @@ class TestGatewayModelClient:
         )
 
         mock_client.post.side_effect = [
-            HTTPStatusError("Rate limited", request=rate_limit_response.request, response=rate_limit_response),
+            HTTPStatusError(
+                "Rate limited", request=rate_limit_response.request, response=rate_limit_response
+            ),
             success_response,
         ]
 
@@ -118,7 +120,11 @@ class TestGatewayModelClient:
         )
 
         mock_client.post.side_effect = [
-            HTTPStatusError("Server error", request=server_error_response.request, response=server_error_response),
+            HTTPStatusError(
+                "Server error",
+                request=server_error_response.request,
+                response=server_error_response,
+            ),
             success_response,
         ]
 
@@ -157,9 +163,7 @@ class TestGatewayModelClient:
         )
 
         mock_client.post.side_effect = HTTPStatusError(
-            "Bad request",
-            request=client_error_response.request,
-            response=client_error_response
+            "Bad request", request=client_error_response.request, response=client_error_response
         )
 
         messages = [Message(role="user", content="Test")]
@@ -198,6 +202,8 @@ class TestDirectModelClient:
     @pytest.mark.asyncio
     async def test_context_manager_connects_and_closes(self):
         """Test that context manager properly connects and closes providers."""
+        from unittest.mock import AsyncMock
+
         config = ClientConfig(
             mode=ClientMode.DIRECT,
             google_api_key="test-key",
@@ -206,7 +212,9 @@ class TestDirectModelClient:
         client = DirectModelClient(config)
 
         with patch("google.genai.Client") as mock_genai:
-            mock_genai.return_value = MagicMock()
+            mock_client = MagicMock()
+            mock_client.aclose = AsyncMock()
+            mock_genai.return_value = mock_client
 
             async with client:
                 # Should have connected
@@ -316,7 +324,10 @@ class TestChatResponse:
         """Test has_tool_calls returns False when no tool calls."""
         response = ChatResponse(content="Hello")
         assert response.has_tool_calls is False
+
+
 # Additional comprehensive tests for model_client.py
+
 
 class TestGatewayModelClientErrorHandling:
     """Tests for error handling in GatewayModelClient."""
@@ -334,6 +345,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import RequestError
+
         mock_client.post.side_effect = RequestError("Connection refused")
 
         messages = [Message(role="user", content="Test")]
@@ -355,15 +367,14 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, HTTPStatusError, Request
+
         server_error_response = Response(
             status_code=503,
             request=Request("POST", "http://test.com/v1/chat/completions"),
         )
 
         mock_client.post.side_effect = HTTPStatusError(
-            "Server error",
-            request=server_error_response.request,
-            response=server_error_response
+            "Server error", request=server_error_response.request, response=server_error_response
         )
 
         messages = [Message(role="user", content="Test")]
@@ -385,6 +396,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, HTTPStatusError, Request
+
         rate_limit_response = Response(
             status_code=429,
             headers={"Retry-After": "5"},
@@ -399,7 +411,9 @@ class TestGatewayModelClientErrorHandling:
         }
 
         mock_client.post.side_effect = [
-            HTTPStatusError("Rate limited", request=rate_limit_response.request, response=rate_limit_response),
+            HTTPStatusError(
+                "Rate limited", request=rate_limit_response.request, response=rate_limit_response
+            ),
             success_response,
         ]
 
@@ -425,6 +439,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, Request
+
         response_obj = Response(
             status_code=200,
             request=Request("POST", "http://test.com/v1/chat/completions"),
@@ -453,6 +468,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, Request
+
         response_obj = Response(
             status_code=200,
             request=Request("POST", "http://test.com/v1/chat/completions"),
@@ -463,11 +479,12 @@ class TestGatewayModelClientErrorHandling:
         mock_client.post.return_value = response_obj
 
         from src.core.model_client import ToolDefinition
+
         tools = [
             ToolDefinition(
                 name="test_tool",
                 description="A test tool",
-                parameters={"type": "object", "properties": {}}
+                parameters={"type": "object", "properties": {}},
             )
         ]
 
@@ -494,6 +511,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, Request
+
         response_obj = Response(
             status_code=200,
             request=Request("POST", "http://test.com/v1/chat/completions"),
@@ -522,6 +540,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, Request
+
         response_obj = Response(
             status_code=200,
             request=Request("POST", "http://test.com/v1/chat/completions"),
@@ -552,6 +571,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, Request
+
         response_obj = Response(
             status_code=200,
             request=Request("POST", "http://test.com/v1/chat/completions"),
@@ -581,6 +601,7 @@ class TestGatewayModelClientErrorHandling:
         client._client = mock_client
 
         from httpx import Response, Request
+
         response_obj = Response(
             status_code=200,
             request=Request("GET", "http://test.com/v1/models"),
@@ -649,14 +670,17 @@ class TestGatewayModelClientErrorHandling:
         class MockResponse:
             async def __aenter__(self):
                 return self
+
             async def __aexit__(self, *args):
                 pass
+
             def raise_for_status(self):
                 pass
+
             async def aiter_lines(self):
                 yield 'data: {"choices": [{"delta": {"content": "Hello"}, "finish_reason": null}]}'
                 yield 'data: {"choices": [{"delta": {"content": " world"}, "finish_reason": null}]}'
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
         mock_client.stream = MagicMock(return_value=MockResponse())
 
@@ -684,14 +708,17 @@ class TestGatewayModelClientErrorHandling:
         class MockResponse:
             async def __aenter__(self):
                 return self
+
             async def __aexit__(self, *args):
                 pass
+
             def raise_for_status(self):
                 pass
+
             async def aiter_lines(self):
-                yield 'data: {invalid json}'
+                yield "data: {invalid json}"
                 yield 'data: {"choices": [{"delta": {"content": "Valid"}, "finish_reason": null}]}'
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
         mock_client.stream = MagicMock(return_value=MockResponse())
 
@@ -719,13 +746,16 @@ class TestGatewayModelClientErrorHandling:
         class MockResponse:
             async def __aenter__(self):
                 return self
+
             async def __aexit__(self, *args):
                 pass
+
             def raise_for_status(self):
                 pass
+
             async def aiter_lines(self):
                 yield 'data: {"choices": [{"delta": {"tool_calls": [{"id": "1", "name": "test"}]}, "finish_reason": "tool_calls"}]}'
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
         mock_client.stream = MagicMock(return_value=MockResponse())
 
@@ -820,11 +850,14 @@ class TestClientConfiguration:
 
     def test_config_from_env_gateway_mode(self):
         """Test loading config from environment in gateway mode."""
-        with patch.dict("os.environ", {
-            "DORAEMON_GATEWAY_URL": "http://gateway.test.com",
-            "DORAEMON_API_KEY": "test-key",
-            "DORAEMON_MODEL": "test-model",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "DORAEMON_GATEWAY_URL": "http://gateway.test.com",
+                "DORAEMON_API_KEY": "test-key",
+                "DORAEMON_MODEL": "test-model",
+            },
+        ):
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.GATEWAY
             assert config.gateway_url == "http://gateway.test.com"
@@ -833,10 +866,14 @@ class TestClientConfiguration:
 
     def test_config_from_env_direct_mode(self):
         """Test loading config from environment in direct mode."""
-        with patch.dict("os.environ", {
-            "GOOGLE_API_KEY": "google-key",
-            "OPENAI_API_KEY": "openai-key",
-        }, clear=True):
+        with patch.dict(
+            "os.environ",
+            {
+                "GOOGLE_API_KEY": "google-key",
+                "OPENAI_API_KEY": "openai-key",
+            },
+            clear=True,
+        ):
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.DIRECT
             assert config.google_api_key == "google-key"
@@ -911,10 +948,11 @@ class TestToolDefinition:
     def test_tool_to_openai_format(self):
         """Test converting tool to OpenAI format."""
         from src.core.model_client import ToolDefinition
+
         tool = ToolDefinition(
             name="test_tool",
             description="A test tool",
-            parameters={"type": "object", "properties": {"arg": {"type": "string"}}}
+            parameters={"type": "object", "properties": {"arg": {"type": "string"}}},
         )
         openai_format = tool.to_openai_format()
         assert openai_format["type"] == "function"
@@ -924,11 +962,10 @@ class TestToolDefinition:
     def test_tool_to_genai_format(self):
         """Test converting tool to Google GenAI format."""
         from src.core.model_client import ToolDefinition
+
         with patch("google.genai.types.FunctionDeclaration") as mock_func_decl:
             tool = ToolDefinition(
-                name="test_tool",
-                description="A test tool",
-                parameters={"type": "object"}
+                name="test_tool", description="A test tool", parameters={"type": "object"}
             )
             tool.to_genai_format()
             mock_func_decl.assert_called_once()
@@ -945,7 +982,7 @@ class TestChatResponseHandling:
                 "prompt_tokens": 10,
                 "completion_tokens": 5,
                 "total_tokens": 15,
-            }
+            },
         )
         assert response.usage["total_tokens"] == 15
 
@@ -971,26 +1008,23 @@ class TestStreamChunk:
     def test_stream_chunk_with_content(self):
         """Test stream chunk with content."""
         from src.core.model_client import StreamChunk
+
         chunk = StreamChunk(content="Hello")
         assert chunk.content == "Hello"
 
     def test_stream_chunk_with_tool_calls(self):
         """Test stream chunk with tool calls."""
         from src.core.model_client import StreamChunk
-        chunk = StreamChunk(
-            tool_calls=[{"id": "1", "name": "tool"}],
-            finish_reason="tool_calls"
-        )
+
+        chunk = StreamChunk(tool_calls=[{"id": "1", "name": "tool"}], finish_reason="tool_calls")
         assert chunk.tool_calls is not None
         assert len(chunk.tool_calls) == 1
 
     def test_stream_chunk_with_usage(self):
         """Test stream chunk with usage information."""
         from src.core.model_client import StreamChunk
-        chunk = StreamChunk(
-            content="Test",
-            usage={"total_tokens": 10}
-        )
+
+        chunk = StreamChunk(content="Test", usage={"total_tokens": 10})
         assert chunk.usage["total_tokens"] == 10
 
 
@@ -1000,11 +1034,8 @@ class TestToolCall:
     def test_tool_call_to_dict(self):
         """Test converting ToolCall to dict."""
         from src.core.model_client import ToolCall
-        tc = ToolCall(
-            id="call_123",
-            name="my_tool",
-            arguments={"arg1": "value1"}
-        )
+
+        tc = ToolCall(id="call_123", name="my_tool", arguments={"arg1": "value1"})
         d = tc.to_dict()
         assert d["id"] == "call_123"
         assert d["name"] == "my_tool"
@@ -1013,11 +1044,8 @@ class TestToolCall:
     def test_tool_call_from_dict(self):
         """Test creating ToolCall from dict."""
         from src.core.model_client import ToolCall
-        data = {
-            "id": "call_456",
-            "name": "another_tool",
-            "arguments": {"key": "value"}
-        }
+
+        data = {"id": "call_456", "name": "another_tool", "arguments": {"key": "value"}}
         tc = ToolCall.from_dict(data)
         assert tc.id == "call_456"
         assert tc.name == "another_tool"
@@ -1026,6 +1054,7 @@ class TestToolCall:
     def test_tool_call_from_dict_with_missing_fields(self):
         """Test ToolCall.from_dict handles missing fields."""
         from src.core.model_client import ToolCall
+
         data = {"id": "call_789"}
         tc = ToolCall.from_dict(data)
         assert tc.id == "call_789"
@@ -1065,4 +1094,3 @@ class TestModelClientFactory:
             with patch.dict("os.environ", {"DORAEMON_GATEWAY_URL": "http://test.com"}):
                 client = await ModelClient.create()
                 assert isinstance(client, GatewayModelClient)
-

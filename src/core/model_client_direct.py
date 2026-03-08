@@ -1075,7 +1075,7 @@ class DirectModelClient(BaseModelClient):
 
     async def close(self) -> None:
         """Close all provider clients."""
-        for provider, client in self._providers.items():
+        for _provider, client in self._providers.items():
             if hasattr(client, "aclose"):
                 await client.aclose()
         self._providers.clear()

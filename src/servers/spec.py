@@ -95,7 +95,7 @@ def spec_progress() -> str:
         f"Phase: {session.phase.value}",
         f"Overall: {_progress_suffix()}",
         "",
-        f"## Tasks",
+        "## Tasks",
     ]
 
     status_icons = {"done": "✅", "in_progress": "🔄", "pending": "⬜", "skipped": "⏭️"}
