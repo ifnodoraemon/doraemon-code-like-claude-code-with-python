@@ -279,11 +279,119 @@ def get_default_registry() -> ToolRegistry:
     return _default_registry
 
 
+@dataclass
+class ToolSpec:
+    """Declarative specification for a tool to register."""
+
+    module: str  # e.g. "src.servers.filesystem_unified"
+    func_name: str  # function name to import
+    name: str | None = None  # registered name (defaults to func_name)
+    sensitive: bool = False
+    timeout: float = 60.0
+    critical: bool = False  # raise error if import fails
+
+
+# fmt: off
+TOOL_SPECS: list[ToolSpec] = [
+    # ── Filesystem (critical) ─────────────────────────────────────────
+    ToolSpec("src.servers.filesystem_unified", "read",          sensitive=False, timeout=60.0,  critical=True),
+    ToolSpec("src.servers.filesystem_unified", "write",         sensitive=True,  timeout=120.0, critical=True),
+    ToolSpec("src.servers.filesystem_unified", "search",        sensitive=False, timeout=120.0, critical=True),
+    ToolSpec("src.servers.filesystem_unified", "notebook_read", sensitive=False, timeout=60.0,  critical=True),
+    ToolSpec("src.servers.filesystem_unified", "notebook_edit", sensitive=True,  timeout=60.0,  critical=True),
+    ToolSpec("src.servers.filesystem_unified", "multi_edit",    sensitive=True,  timeout=120.0, critical=True),
+
+    # ── Run (unified) ────────────────────────────────────────────────
+    ToolSpec("src.servers.run_unified", "run", sensitive=True, timeout=300.0),
+
+    # ── Computer (legacy) ────────────────────────────────────────────
+    ToolSpec("src.servers.computer", "execute_python",  sensitive=True, timeout=300.0),
+    ToolSpec("src.servers.computer", "install_package", sensitive=True, timeout=300.0),
+
+    # ── Memory ───────────────────────────────────────────────────────
+    ToolSpec("src.servers.memory", "note",         sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.memory", "save_note",    sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.memory", "search_notes", sensitive=False, timeout=60.0),
+
+    # ── Web ──────────────────────────────────────────────────────────
+    ToolSpec("src.servers.web", "fetch_page",      name="fetch_url",  sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.web", "search_internet", name="web_search", sensitive=False, timeout=30.0),
+
+    # ── Task ─────────────────────────────────────────────────────────
+    ToolSpec("src.servers.task", "task",               sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.task", "add_task",            name="task_create",        sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.task", "list_tasks",          name="task_list",          sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.task", "update_task_status",  name="task_update_status", sensitive=False, timeout=60.0),
+
+    # ── Shell (critical) ─────────────────────────────────────────────
+    ToolSpec("src.servers.shell", "execute_command",            name="shell_execute",    sensitive=True, timeout=300.0, critical=True),
+    ToolSpec("src.servers.shell", "execute_command_background", name="shell_background", sensitive=True, timeout=60.0,  critical=True),
+
+    # ── Git ──────────────────────────────────────────────────────────
+    ToolSpec("src.servers.git", "git",        sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.git", "git_status", sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.git", "git_diff",   sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.git", "git_log",    sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.git", "git_add",    sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.git", "git_commit", sensitive=True,  timeout=60.0),
+
+    # ── LSP ──────────────────────────────────────────────────────────
+    ToolSpec("src.servers.lsp", "lsp",             sensitive=False, timeout=120.0),
+    ToolSpec("src.servers.lsp", "lsp_diagnostics", sensitive=False, timeout=120.0),
+    ToolSpec("src.servers.lsp", "lsp_completions", sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.lsp", "lsp_hover",       sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.lsp", "lsp_references",  sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.lsp", "lsp_rename",      sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.lsp", "lsp_definition",  sensitive=False, timeout=30.0),
+
+    # ── Lint ─────────────────────────────────────────────────────────
+    ToolSpec("src.servers.lint", "lint",                    sensitive=False, timeout=180.0),
+    ToolSpec("src.servers.lint", "lint_python_ruff",        sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.lint", "format_python_ruff",      sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.lint", "typecheck_python_mypy",   sensitive=False, timeout=120.0),
+    ToolSpec("src.servers.lint", "lint_javascript_eslint",  sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.lint", "lint_all",                sensitive=False, timeout=180.0),
+    ToolSpec("src.servers.lint", "code_complexity",         sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.lint", "check_security",          sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.lint", "get_lint_summary",        sensitive=False, timeout=60.0),
+
+    # ── Semantic Search ──────────────────────────────────────────────
+    ToolSpec("src.servers.semantic_search", "semantic_search", sensitive=False, timeout=120.0),
+    ToolSpec("src.servers.semantic_search", "index_codebase",  sensitive=False, timeout=300.0),
+
+    # ── Misc ─────────────────────────────────────────────────────────
+    ToolSpec("src.servers.ask_user", "ask_user",      sensitive=False, timeout=300.0),
+    ToolSpec("src.servers.system",   "switch_mode",   sensitive=True,  timeout=10.0),
+
+    # ── Spec ─────────────────────────────────────────────────────────
+    ToolSpec("src.servers.spec", "spec_update_task", sensitive=False, timeout=10.0),
+    ToolSpec("src.servers.spec", "spec_check_item",  sensitive=False, timeout=10.0),
+    ToolSpec("src.servers.spec", "spec_progress",    sensitive=False, timeout=10.0),
+
+    # ── Browser ──────────────────────────────────────────────────────
+    ToolSpec("src.servers.browser", "browse_page",     sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.browser", "take_screenshot", sensitive=False, timeout=60.0),
+
+    # ── GitHub ───────────────────────────────────────────────────────
+    ToolSpec("src.servers.github", "github_list_issues",  sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.github", "github_create_issue", sensitive=True,  timeout=60.0),
+
+    # ── Database ─────────────────────────────────────────────────────
+    ToolSpec("src.servers.database", "db_read_query",     sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.database", "db_write_query",    sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.database", "db_list_tables",    sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.database", "db_describe_table", sensitive=False, timeout=30.0),
+]
+# fmt: on
+
+
 def _create_default_registry() -> ToolRegistry:
     """Create and populate the default tool registry."""
+    import importlib
+
     registry = ToolRegistry()
 
-    # Load configuration
+    # Load configuration for custom timeouts
     try:
         config = load_config(validate=False)
         tool_timeouts = config.get("tool_timeouts", {})
@@ -291,350 +399,37 @@ def _create_default_registry() -> ToolRegistry:
         logger.warning(f"Failed to load config for tool timeouts: {e}")
         tool_timeouts = {}
 
-    def _get_timeout(tool_name: str, default: float) -> float:
-        """Get timeout from config or default."""
-        return float(tool_timeouts.get(tool_name, default))
+    failed_critical: list[tuple[str, str]] = []
 
-    # Import tool functions directly from servers
-    # These are the actual implementations, bypassing MCP
-
-    # Collect failed tool imports
-    failed_tools: list[tuple[str, str]] = []
-
-    try:
-        # Unified Filesystem Tools (Recommended)
-        from src.servers.filesystem_unified import (
-            multi_edit,
-            notebook_edit,
-            notebook_read,
-            read,
-            search,
-            write,
-        )
-
-        registry.register(read, sensitive=False, timeout=_get_timeout("read", 60.0))
-        registry.register(write, sensitive=True, timeout=_get_timeout("write", 120.0))
-        registry.register(search, sensitive=False, timeout=_get_timeout("search", 120.0))
-        registry.register(notebook_read, sensitive=False, timeout=_get_timeout("notebook_read", 60.0))
-        registry.register(notebook_edit, sensitive=True, timeout=_get_timeout("notebook_edit", 60.0))
-        registry.register(multi_edit, sensitive=True, timeout=_get_timeout("multi_edit", 120.0))
-
-    except ImportError as e:
-        logger.error(f"Failed to import filesystem tools: {e}")
-        failed_tools.append(("filesystem", str(e)))
-
-    try:
-        # Unified Run Tool (Recommended - replaces shell_execute, execute_python, etc.)
-        from src.servers.run_unified import run
-
-        registry.register(run, sensitive=True, timeout=_get_timeout("run", 300.0))
-    except ImportError as e:
-        logger.warning(f"Failed to import unified run tool: {e}")
-
-    try:
-        # Computer/Execution Tools (Legacy - use run() instead)
-        from src.servers.computer import execute_python, install_package
-
-        registry.register(
-            execute_python, sensitive=True, timeout=_get_timeout("execute_python", 300.0)
-        )  # Allow 5 mins for scripts
-        registry.register(
-            install_package, sensitive=True, timeout=_get_timeout("install_package", 300.0)
-        )  # Installations take time
-    except ImportError as e:
-        logger.warning(f"Failed to import computer tools: {e}")
-
-    try:
-        # Memory Tools (Unified + Legacy aliases)
-        from src.servers.memory import note, save_note, search_notes
-
-        # Unified note tool (recommended)
-        registry.register(note, sensitive=True, timeout=_get_timeout("note", 60.0))
-        # Legacy aliases for backward compatibility
-        registry.register(save_note, sensitive=True, timeout=_get_timeout("save_note", 60.0))
-        registry.register(search_notes, sensitive=False, timeout=_get_timeout("search_notes", 60.0))
-    except ImportError as e:
-        logger.warning(f"Failed to import memory tools: {e}")
-
-    try:
-        # Web Tools
-        from src.servers.web import fetch_page, search_internet
-
-        registry.register(
-            fetch_page, name="fetch_url", sensitive=False, timeout=_get_timeout("fetch_url", 30.0)
-        )  # Web should be fast
-        registry.register(
-            search_internet,
-            name="web_search",
-            sensitive=False,
-            timeout=_get_timeout("web_search", 30.0),
-        )
-    except ImportError as e:
-        logger.warning(f"Failed to import web tools: {e}")
-
-    try:
-        # Task Tools (Unified + Legacy aliases)
-        from src.servers.task import add_task, list_tasks, task, update_task_status
-
-        # Unified task tool (recommended)
-        registry.register(task, sensitive=False, timeout=_get_timeout("task", 60.0))
-        # Legacy aliases for backward compatibility
-        registry.register(
-            add_task, name="task_create", sensitive=False, timeout=_get_timeout("task_create", 60.0)
-        )
-        registry.register(
-            list_tasks, name="task_list", sensitive=False, timeout=_get_timeout("task_list", 60.0)
-        )
-        registry.register(
-            update_task_status,
-            name="task_update_status",
-            sensitive=False,
-            timeout=_get_timeout("task_update_status", 60.0),
-        )
-    except ImportError as e:
-        logger.warning(f"Failed to import task tools: {e}")
-
-    try:
-        # Shell Tools
-        from src.servers.shell import execute_command, execute_command_background
-
-        registry.register(
-            execute_command,
-            name="shell_execute",
-            sensitive=True,
-            timeout=_get_timeout("shell_execute", 300.0),
-        )  # Allow 5 mins
-        registry.register(
-            execute_command_background,
-            name="shell_background",
-            sensitive=True,
-            timeout=_get_timeout("shell_background", 60.0),
-        )
-    except ImportError as e:
-        logger.error(f"Failed to import shell tools: {e}")
-        failed_tools.append(("shell", str(e)))
-
-    try:
-        # Git Tools - Unified tool + legacy aliases
-        from src.servers.git import git, git_add, git_commit, git_diff, git_log, git_status
-
-        # Register unified git tool (recommended)
-        registry.register(git, sensitive=True, timeout=_get_timeout("git", 60.0))
-
-        # Register legacy tools as aliases (for backward compatibility)
-        registry.register(git_status, sensitive=False, timeout=_get_timeout("git_status", 60.0))
-        registry.register(git_diff, sensitive=False, timeout=_get_timeout("git_diff", 60.0))
-        registry.register(git_log, sensitive=False, timeout=_get_timeout("git_log", 60.0))
-        registry.register(git_add, sensitive=False, timeout=_get_timeout("git_add", 60.0))
-        registry.register(git_commit, sensitive=True, timeout=_get_timeout("git_commit", 60.0))
-    except ImportError as e:
-        logger.warning(f"Failed to import git tools: {e}")
-
-    try:
-        # LSP Tools - Unified tool + legacy aliases
-        from src.servers.lsp import (
-            lsp,
-            lsp_completions,
-            lsp_definition,
-            lsp_diagnostics,
-            lsp_hover,
-            lsp_references,
-            lsp_rename,
-        )
-
-        # Register unified LSP tool (recommended)
-        registry.register(
-            lsp, sensitive=False, timeout=_get_timeout("lsp", 120.0)
-        )
-
-        # Register legacy tools as aliases (for backward compatibility)
-        registry.register(
-            lsp_diagnostics, sensitive=False, timeout=_get_timeout("lsp_diagnostics", 120.0)
-        )
-        registry.register(
-            lsp_completions, sensitive=False, timeout=_get_timeout("lsp_completions", 30.0)
-        )
-        registry.register(lsp_hover, sensitive=False, timeout=_get_timeout("lsp_hover", 30.0))
-        registry.register(
-            lsp_references, sensitive=False, timeout=_get_timeout("lsp_references", 60.0)
-        )
-        registry.register(lsp_rename, sensitive=True, timeout=_get_timeout("lsp_rename", 60.0))
-        registry.register(
-            lsp_definition, sensitive=False, timeout=_get_timeout("lsp_definition", 30.0)
-        )
-    except ImportError as e:
-        logger.warning(f"Failed to import LSP tools: {e}")
-
-    try:
-        # Unified Linting Tool (Recommended)
-        from src.servers.lint import lint
-
-        registry.register(lint, sensitive=False, timeout=_get_timeout("lint", 180.0))
-
-        # Legacy Linting Tools (Backward Compatibility - Deprecated)
-        from src.servers.lint import (
-            check_security,
-            code_complexity,
-            format_python_ruff,
-            get_lint_summary,
-            lint_all,
-            lint_javascript_eslint,
-            lint_python_ruff,
-            typecheck_python_mypy,
-        )
-
-        registry.register(
-            lint_python_ruff, sensitive=False, timeout=_get_timeout("lint_python_ruff", 60.0)
-        )
-        registry.register(
-            format_python_ruff, sensitive=True, timeout=_get_timeout("format_python_ruff", 60.0)
-        )
-        registry.register(
-            typecheck_python_mypy,
-            sensitive=False,
-            timeout=_get_timeout("typecheck_python_mypy", 120.0),
-        )
-        registry.register(
-            lint_javascript_eslint,
-            sensitive=False,
-            timeout=_get_timeout("lint_javascript_eslint", 60.0),
-        )
-        registry.register(lint_all, sensitive=False, timeout=_get_timeout("lint_all", 180.0))
-        registry.register(
-            code_complexity, sensitive=False, timeout=_get_timeout("code_complexity", 60.0)
-        )
-        registry.register(
-            check_security, sensitive=False, timeout=_get_timeout("check_security", 60.0)
-        )
-        registry.register(
-            get_lint_summary, sensitive=False, timeout=_get_timeout("get_lint_summary", 60.0)
-        )
-    except ImportError as e:
-        logger.warning(f"Failed to import lint tools: {e}")
-
-    try:
-        # Semantic Search Tools
-        from src.servers.semantic_search import index_codebase, semantic_search
-
-        registry.register(
-            semantic_search, sensitive=False, timeout=_get_timeout("semantic_search", 120.0)
-        )
-        registry.register(
-            index_codebase, sensitive=False, timeout=_get_timeout("index_codebase", 300.0)
-        )
-    except ImportError as e:
-        logger.warning(f"Failed to import semantic search tools: {e}")
-
-    try:
-        # AskUser Tool
-        from src.servers.ask_user import ask_user
-
-        registry.register(ask_user, sensitive=False, timeout=_get_timeout("ask_user", 300.0))
-    except ImportError as e:
-        logger.warning(f"Failed to import ask_user tool: {e}")
-
-    try:
-        # System Tools
-        from src.servers.system import switch_mode
-
-        registry.register(switch_mode, sensitive=True, timeout=_get_timeout("switch_mode", 10.0))
-    except ImportError as e:
-        logger.warning(f"Failed to import system tools: {e}")
-
-    try:
-        # Spec Tools (for spec-driven development workflow)
-        from src.servers.spec import spec_check_item, spec_progress, spec_update_task
-
-        registry.register(spec_update_task, sensitive=False, timeout=_get_timeout("spec_update_task", 10.0))
-        registry.register(spec_check_item, sensitive=False, timeout=_get_timeout("spec_check_item", 10.0))
-        registry.register(spec_progress, sensitive=False, timeout=_get_timeout("spec_progress", 10.0))
-    except ImportError as e:
-        logger.warning(f"Failed to import spec tools: {e}")
+    for spec in TOOL_SPECS:
+        tool_name = spec.name or spec.func_name
+        timeout = float(tool_timeouts.get(tool_name, spec.timeout))
+        try:
+            module = importlib.import_module(spec.module)
+            func = getattr(module, spec.func_name)
+            registry.register(
+                func,
+                name=spec.name,
+                sensitive=spec.sensitive,
+                timeout=timeout,
+            )
+        except (ImportError, AttributeError) as e:
+            if spec.critical:
+                logger.error(f"Failed to import critical tool {tool_name}: {e}")
+                failed_critical.append((spec.module, str(e)))
+            else:
+                logger.warning(f"Failed to import tool {tool_name}: {e}")
 
     logger.info(f"Tool registry initialized with {len(registry.get_tool_names())} tools")
 
-    try:
-        # Browser Tools
-        from src.servers.browser import browse_page, take_screenshot
+    # Critical tools must be available
+    if failed_critical:
+        error_msg = "Failed to load critical tools:\n" + "\n".join(
+            f"  - {mod}: {err}" for mod, err in failed_critical
+        )
+        from src.core.errors import ConfigurationError
 
-        registry.register(
-            browse_page,
-            name="browse_page",
-            sensitive=False,
-            timeout=_get_timeout("browse_page", 60.0),
-        )
-        registry.register(
-            take_screenshot,
-            name="take_screenshot",
-            sensitive=False,
-            timeout=_get_timeout("take_screenshot", 60.0),
-        )
-
-        # GitHub Tools
-        from src.servers.github import github_create_issue, github_list_issues
-
-        registry.register(
-            github_list_issues,
-            name="github_list_issues",
-            sensitive=False,
-            timeout=_get_timeout("github_list_issues", 30.0),
-        )
-        registry.register(
-            github_create_issue,
-            name="github_create_issue",
-            sensitive=True,
-            timeout=_get_timeout("github_create_issue", 60.0),
-        )
-
-        # Database Tools
-        from src.servers.database import (
-            db_describe_table,
-            db_list_tables,
-            db_read_query,
-            db_write_query,
-        )
-
-        registry.register(
-            db_read_query,
-            name="db_read_query",
-            sensitive=False,
-            timeout=_get_timeout("db_read_query", 60.0),
-        )
-        registry.register(
-            db_write_query,
-            name="db_write_query",
-            sensitive=True,
-            timeout=_get_timeout("db_write_query", 60.0),
-        )
-        registry.register(
-            db_list_tables,
-            name="db_list_tables",
-            sensitive=False,
-            timeout=_get_timeout("db_list_tables", 30.0),
-        )
-        registry.register(
-            db_describe_table,
-            name="db_describe_table",
-            sensitive=False,
-            timeout=_get_timeout("db_describe_table", 30.0),
-        )
-
-    except ImportError as e:
-        logger.warning(f"Failed to import browser/github/database tools: {e}")
-
-    # Report failed tool imports
-    if failed_tools:
-        error_msg = "Failed to load tools:\n" + "\n".join(
-            f"  - {name}: {error}" for name, error in failed_tools
-        )
-        # Critical tools: filesystem and shell are essential
-        critical_tools = {"filesystem", "shell"}
-        if any(name in critical_tools for name, _ in failed_tools):
-            from src.core.errors import ConfigurationError
-
-            raise ConfigurationError(error_msg)
-        else:
-            logger.warning(error_msg)
+        raise ConfigurationError(error_msg)
 
     return registry
 

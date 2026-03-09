@@ -11,6 +11,7 @@ from typing import Any
 
 from rich.console import Console
 
+from src.host.cli.command_context import CommandContext
 from src.host.cli.commands_config import ConfigCommandHandler
 from src.host.cli.commands_core import MODE_COLORS, CoreCommandHandler
 from src.host.cli.commands_session import SessionCommandHandler
@@ -41,64 +42,33 @@ class CommandHandler:
         permission_mgr=None,
         spec_mgr=None,
     ):
-        self.ctx = ctx
-        self.tool_selector = tool_selector
-        self.registry = registry
-        self.skill_mgr = skill_mgr
-        self.checkpoint_mgr = checkpoint_mgr
-        self.task_mgr = task_mgr
-        self.cost_tracker = cost_tracker
-        self.cmd_history = cmd_history
-        self.session_mgr = session_mgr
-        self.hook_mgr = hook_mgr
-        self.model_name = model_name
-        self.project = project
-
-        # Initialize specialized handlers
-        self.core_handler = CoreCommandHandler(
-            ctx,
-            tool_selector,
-            registry,
-            skill_mgr,
-            checkpoint_mgr,
-            task_mgr,
-            cost_tracker,
-            cmd_history,
-            session_mgr,
-            hook_mgr,
-            model_name,
-            project,
+        # Build shared context once
+        self.cc = CommandContext(
+            ctx=ctx,
+            tool_selector=tool_selector,
+            registry=registry,
+            skill_mgr=skill_mgr,
+            checkpoint_mgr=checkpoint_mgr,
+            task_mgr=task_mgr,
+            cost_tracker=cost_tracker,
+            cmd_history=cmd_history,
+            session_mgr=session_mgr,
+            hook_mgr=hook_mgr,
+            model_name=model_name,
+            project=project,
             permission_mgr=permission_mgr,
             spec_mgr=spec_mgr,
         )
-        self.session_handler = SessionCommandHandler(
-            ctx,
-            tool_selector,
-            registry,
-            skill_mgr,
-            checkpoint_mgr,
-            task_mgr,
-            cost_tracker,
-            cmd_history,
-            session_mgr,
-            hook_mgr,
-            model_name,
-            project,
-        )
-        self.config_handler = ConfigCommandHandler(
-            ctx,
-            tool_selector,
-            registry,
-            skill_mgr,
-            checkpoint_mgr,
-            task_mgr,
-            cost_tracker,
-            cmd_history,
-            session_mgr,
-            hook_mgr,
-            model_name,
-            project,
-        )
+
+        # Expose commonly accessed attributes for backward compatibility
+        self.ctx = ctx
+        self.model_name = model_name
+        self.project = project
+
+        # Initialize specialized handlers with shared context
+        self.core_handler = CoreCommandHandler(self.cc)
+        self.session_handler = SessionCommandHandler(self.cc)
+        self.config_handler = ConfigCommandHandler(self.cc)
 
     async def handle(
         self,

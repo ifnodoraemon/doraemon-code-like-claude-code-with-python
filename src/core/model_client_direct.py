@@ -13,6 +13,8 @@ import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
+from src.core.provider_adapters import AnthropicAdapter, GoogleAdapter, OpenAIAdapter
+
 from src.core.model_client_base import BaseModelClient
 from src.core.model_utils import (
     ChatResponse,
@@ -265,91 +267,15 @@ class DirectModelClient(BaseModelClient):
 
         client = self._providers[Provider.GOOGLE]
         model = kwargs.get("model", self.config.model)
+        temperature = kwargs.get("temperature", self.config.temperature)
 
-        # Convert messages to Gemini format
-        contents = []
-        system_instruction = self.config.system_prompt
-
-        for m in messages:
-            msg = m if isinstance(m, dict) else m.to_dict()
-            role = msg.get("role", "user")
-
-            if role == "system":
-                system_instruction = get_content_text(msg.get("content", ""))
-                continue
-
-            gemini_role = "user" if role == "user" else "model"
-            parts = []
-
-            if msg.get("content"):
-                parts.extend(_build_google_content_parts(msg["content"], types))
-
-            if msg.get("thought"):
-                parts.append(types.Part(thought=msg["thought"]))
-
-            if msg.get("tool_calls"):
-                for tc in msg["tool_calls"]:
-                    func = tc.get("function", {})
-                    args_str = func.get("arguments", "{}")
-                    try:
-                        args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                    except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse tool arguments: {args_str}")
-                        args = {}
-
-                    fc_obj = types.FunctionCall(
-                        name=func.get("name"),
-                        args=args,
-                    )
-
-                    thought_sig = tc.get("thought_signature") or func.get("thought_signature")
-
-                    parts.append(types.Part(function_call=fc_obj, thought_signature=thought_sig))
-
-            if role == "tool" and msg.get("tool_call_id"):
-                parts.append(
-                    types.Part(
-                        function_response=types.FunctionResponse(
-                            name=msg.get("name", "function"),
-                            response={"result": msg.get("content", "")},
-                        )
-                    )
-                )
-
-            if parts:
-                contents.append(types.Content(role=gemini_role, parts=parts))
-
-        # Build config
-        gen_config_dict = {
-            "temperature": kwargs.get("temperature", self.config.temperature),
-        }
-
-        if self.config.max_tokens:
-            gen_config_dict["max_output_tokens"] = self.config.max_tokens
-
-        if tools:
-            function_declarations = []
-            for t in tools:
-                if isinstance(t, ToolDefinition):
-                    function_declarations.append(t.to_genai_format())
-                else:
-                    func = t.get("function", t)
-                    function_declarations.append(
-                        types.FunctionDeclaration(
-                            name=func.get("name"),
-                            description=func.get("description", ""),
-                            parameters=func.get("parameters", {}),
-                        )
-                    )
-            gen_config_dict["tools"] = [types.Tool(function_declarations=function_declarations)]
-            gen_config_dict["automatic_function_calling"] = types.AutomaticFunctionCallingConfig(
-                disable=True
-            )
-
-        if system_instruction:
-            gen_config_dict["system_instruction"] = system_instruction
-
-        gen_config = types.GenerateContentConfig(**gen_config_dict)
+        # Convert messages and build config via adapter
+        system_instruction, contents = GoogleAdapter.convert_messages(
+            messages, self.config.system_prompt, types
+        )
+        gen_config = GoogleAdapter.build_config(
+            tools, system_instruction, temperature, self.config.max_tokens, types
+        )
 
         response = await client.aio.models.generate_content(
             model=model,
@@ -357,72 +283,17 @@ class DirectModelClient(BaseModelClient):
             config=gen_config,
         )
 
-        # Extract response
-        content = None
-        tool_calls = None
-        finish_reason = "stop"
-
+        # Parse response via adapter
         if not response.candidates:
             logger.warning("No candidates in Gemini response")
             return ChatResponse(
-                content=None,
-                tool_calls=None,
-                finish_reason="error",
-                usage=None,
-                raw=response,
+                content=None, tool_calls=None, finish_reason="error", usage=None, raw=response,
             )
 
         candidate = response.candidates[0]
-        texts = []
-        thoughts = []
-        for part in candidate.content.parts:
-            if hasattr(part, "text") and part.text:
-                texts.append(part.text)
-            elif hasattr(part, "thought") and part.thought:
-                thoughts.append(part.thought)
-            elif hasattr(part, "function_call") and part.function_call:
-                if tool_calls is None:
-                    tool_calls = []
-                fc = part.function_call
-                try:
-                    args = dict(fc.args) if fc.args else {}
-                except (TypeError, ValueError) as e:
-                    from src.core.errors import DoraemonException, ErrorCategory
-
-                    raise DoraemonException(
-                        f"Invalid tool arguments: {fc.args}",
-                        category=ErrorCategory.PERMANENT,
-                        context={"tool": fc.name, "args": str(fc.args)},
-                    ) from e
-                tc_dict = {
-                    "id": f"call_{uuid.uuid4().hex[:8]}",
-                    "type": "function",
-                    "function": {
-                        "name": fc.name,
-                        "arguments": json.dumps(args),
-                    },
-                }
-                if hasattr(part, "thought_signature") and part.thought_signature:
-                    tc_dict["thought_signature"] = part.thought_signature
-                elif isinstance(part, dict) and part.get("thought_signature"):
-                    tc_dict["thought_signature"] = part.get("thought_signature")
-
-                tool_calls.append(tc_dict)
-        if texts:
-            content = "".join(texts)
-
-        thought = "".join(thoughts) if thoughts else None
-
-        if tool_calls:
-            finish_reason = "tool_calls"
-
-        usage = None
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            usage = {
-                "prompt_tokens": response.usage_metadata.prompt_token_count or 0,
-                "completion_tokens": response.usage_metadata.candidates_token_count or 0,
-                "total_tokens": response.usage_metadata.total_token_count or 0,
-            }
+        content, thought, tool_calls = GoogleAdapter.parse_candidate(candidate)
+        finish_reason = "tool_calls" if tool_calls else "stop"
+        usage = GoogleAdapter.parse_usage(response)
 
         return ChatResponse(
             content=content,
@@ -442,39 +313,19 @@ class DirectModelClient(BaseModelClient):
         """Chat with OpenAI."""
         client = self._providers[Provider.OPENAI]
         model = kwargs.get("model", self.config.model)
+        temperature = kwargs.get("temperature", self.config.temperature)
 
-        msg_list = []
-        for m in messages:
-            msg = m if isinstance(m, dict) else m.to_dict()
-            # Convert multimodal content to OpenAI format
-            if isinstance(msg.get("content"), list):
-                msg = {**msg, "content": _build_openai_content_parts(msg["content"])}
-            msg_list.append(msg)
-
-        params = {
-            "model": model,
-            "messages": msg_list,
-            "temperature": kwargs.get("temperature", self.config.temperature),
-        }
-
-        if tools:
-            params["tools"] = [
-                t.to_openai_format() if isinstance(t, ToolDefinition) else t for t in tools
-            ]
-
-        if self.config.max_tokens:
-            params["max_tokens"] = self.config.max_tokens
+        msg_list = OpenAIAdapter.convert_messages(messages)
+        params = OpenAIAdapter.build_params(
+            model, msg_list, tools, temperature, self.config.max_tokens
+        )
 
         response = await client.chat.completions.create(**params)
 
         if not response.choices:
             logger.warning("No choices in OpenAI response")
             return ChatResponse(
-                content=None,
-                tool_calls=None,
-                finish_reason="error",
-                usage=None,
-                raw=response,
+                content=None, tool_calls=None, finish_reason="error", usage=None, raw=response,
             )
         choice = response.choices[0]
 
@@ -516,80 +367,10 @@ class DirectModelClient(BaseModelClient):
         client = self._providers[Provider.ANTHROPIC]
         model = kwargs.get("model", self.config.model)
 
-        system = self.config.system_prompt
-        msg_list = []
-
-        for m in messages:
-            msg = m if isinstance(m, dict) else m.to_dict()
-            role = msg.get("role", "user")
-
-            if role == "system":
-                system = get_content_text(msg.get("content", ""))
-                continue
-
-            if role == "tool":
-                msg_list.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": msg.get("tool_call_id"),
-                                "content": get_content_text(msg.get("content", "")),
-                            }
-                        ],
-                    }
-                )
-            else:
-                content = []
-                if msg.get("content"):
-                    content.extend(_build_anthropic_content_parts(msg["content"]))
-                if msg.get("tool_calls"):
-                    for tc in msg["tool_calls"]:
-                        func = tc.get("function", {})
-                        args_str = func.get("arguments", "{}")
-                        try:
-                            args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                        except json.JSONDecodeError:
-                            logger.warning(f"Failed to parse tool arguments: {args_str}")
-                            args = {}
-                        content.append(
-                            {
-                                "type": "tool_use",
-                                "id": tc.get("id"),
-                                "name": func.get("name"),
-                                "input": args,
-                            }
-                        )
-                msg_list.append(
-                    {
-                        "role": "assistant" if role == "assistant" else "user",
-                        "content": content or msg.get("content"),
-                    }
-                )
-
-        params = {
-            "model": model,
-            "messages": msg_list,
-            "max_tokens": self.config.max_tokens or 4096,
-        }
-
-        if system:
-            params["system"] = system
-
-        if tools:
-            params["tools"] = [
-                {
-                    "name": t.name if isinstance(t, ToolDefinition) else t["function"]["name"],
-                    "description": t.description
-                    if isinstance(t, ToolDefinition)
-                    else t["function"].get("description", ""),
-                    "input_schema": t.parameters
-                    if isinstance(t, ToolDefinition)
-                    else t["function"].get("parameters", {}),
-                }
-                for t in tools
-            ]
+        system, msg_list = AnthropicAdapter.convert_messages(messages, self.config.system_prompt)
+        params = AnthropicAdapter.build_params(
+            model, msg_list, tools, system, self.config.max_tokens
+        )
 
         response = await client.messages.create(**params)
 
@@ -715,76 +496,15 @@ class DirectModelClient(BaseModelClient):
 
         client = self._providers[Provider.GOOGLE]
         model = kwargs.get("model", self.config.model)
+        temperature = kwargs.get("temperature", self.config.temperature)
 
-        # Build contents and config (reuse same logic as _chat_google)
-        contents = []
-        system_instruction = self.config.system_prompt
-
-        for m in messages:
-            msg = m if isinstance(m, dict) else m.to_dict()
-            role = msg.get("role", "user")
-
-            if role == "system":
-                system_instruction = get_content_text(msg.get("content", ""))
-                continue
-
-            gemini_role = "user" if role == "user" else "model"
-            parts = []
-
-            if msg.get("content"):
-                parts.extend(_build_google_content_parts(msg["content"], types))
-            if msg.get("thought"):
-                parts.append(types.Part(thought=msg["thought"]))
-            if msg.get("tool_calls"):
-                for tc in msg["tool_calls"]:
-                    func = tc.get("function", {})
-                    args_str = func.get("arguments", "{}")
-                    try:
-                        args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                    except json.JSONDecodeError:
-                        args = {}
-                    fc_obj = types.FunctionCall(name=func.get("name"), args=args)
-                    thought_sig = tc.get("thought_signature") or func.get("thought_signature")
-                    parts.append(types.Part(function_call=fc_obj, thought_signature=thought_sig))
-            if role == "tool" and msg.get("tool_call_id"):
-                parts.append(
-                    types.Part(
-                        function_response=types.FunctionResponse(
-                            name=msg.get("name", "function"),
-                            response={"result": msg.get("content", "")},
-                        )
-                    )
-                )
-            if parts:
-                contents.append(types.Content(role=gemini_role, parts=parts))
-
-        gen_config_dict = {
-            "temperature": kwargs.get("temperature", self.config.temperature),
-        }
-        if self.config.max_tokens:
-            gen_config_dict["max_output_tokens"] = self.config.max_tokens
-        if tools:
-            function_declarations = []
-            for t in tools:
-                if isinstance(t, ToolDefinition):
-                    function_declarations.append(t.to_genai_format())
-                else:
-                    func = t.get("function", t)
-                    function_declarations.append(
-                        types.FunctionDeclaration(
-                            name=func.get("name"),
-                            description=func.get("description", ""),
-                            parameters=func.get("parameters", {}),
-                        )
-                    )
-            gen_config_dict["tools"] = [types.Tool(function_declarations=function_declarations)]
-            gen_config_dict["automatic_function_calling"] = types.AutomaticFunctionCallingConfig(
-                disable=True
-            )
-        if system_instruction:
-            gen_config_dict["system_instruction"] = system_instruction
-
-        gen_config = types.GenerateContentConfig(**gen_config_dict)
+        # Reuse adapter for message conversion and config building
+        system_instruction, contents = GoogleAdapter.convert_messages(
+            messages, self.config.system_prompt, types
+        )
+        gen_config = GoogleAdapter.build_config(
+            tools, system_instruction, temperature, self.config.max_tokens, types
+        )
 
         async for response in client.aio.models.generate_content_stream(
             model=model,
@@ -795,42 +515,8 @@ class DirectModelClient(BaseModelClient):
                 continue
 
             candidate = response.candidates[0]
-            text = None
-            thought = None
-            tool_calls = None
-
-            for part in candidate.content.parts:
-                if hasattr(part, "text") and part.text:
-                    text = (text or "") + part.text
-                elif hasattr(part, "thought") and part.thought:
-                    thought = (thought or "") + part.thought
-                elif hasattr(part, "function_call") and part.function_call:
-                    if tool_calls is None:
-                        tool_calls = []
-                    fc = part.function_call
-                    try:
-                        args = dict(fc.args) if fc.args else {}
-                    except (TypeError, ValueError):
-                        args = {}
-                    tc_dict = {
-                        "id": f"call_{uuid.uuid4().hex[:8]}",
-                        "type": "function",
-                        "function": {
-                            "name": fc.name,
-                            "arguments": json.dumps(args),
-                        },
-                    }
-                    if hasattr(part, "thought_signature") and part.thought_signature:
-                        tc_dict["thought_signature"] = part.thought_signature
-                    tool_calls.append(tc_dict)
-
-            usage = None
-            if hasattr(response, "usage_metadata") and response.usage_metadata:
-                usage = {
-                    "prompt_tokens": response.usage_metadata.prompt_token_count or 0,
-                    "completion_tokens": response.usage_metadata.candidates_token_count or 0,
-                    "total_tokens": response.usage_metadata.total_token_count or 0,
-                }
+            text, thought, tool_calls = GoogleAdapter.parse_candidate(candidate)
+            usage = GoogleAdapter.parse_usage(response)
 
             finish_reason = None
             if hasattr(candidate, "finish_reason") and candidate.finish_reason:
@@ -853,27 +539,12 @@ class DirectModelClient(BaseModelClient):
         """Stream with OpenAI API."""
         client = self._providers[Provider.OPENAI]
         model = kwargs.get("model", self.config.model)
+        temperature = kwargs.get("temperature", self.config.temperature)
 
-        msg_list = []
-        for m in messages:
-            msg = m if isinstance(m, dict) else m.to_dict()
-            # Convert multimodal content to OpenAI format
-            if isinstance(msg.get("content"), list):
-                msg = {**msg, "content": _build_openai_content_parts(msg["content"])}
-            msg_list.append(msg)
-
-        params = {
-            "model": model,
-            "messages": msg_list,
-            "temperature": kwargs.get("temperature", self.config.temperature),
-            "stream": True,
-        }
-        if tools:
-            params["tools"] = [
-                t.to_openai_format() if isinstance(t, ToolDefinition) else t for t in tools
-            ]
-        if self.config.max_tokens:
-            params["max_tokens"] = self.config.max_tokens
+        msg_list = OpenAIAdapter.convert_messages(messages)
+        params = OpenAIAdapter.build_params(
+            model, msg_list, tools, temperature, self.config.max_tokens, stream=True
+        )
 
         stream = await client.chat.completions.create(**params)
 
@@ -926,75 +597,10 @@ class DirectModelClient(BaseModelClient):
         client = self._providers[Provider.ANTHROPIC]
         model = kwargs.get("model", self.config.model)
 
-        system = self.config.system_prompt
-        msg_list = []
-
-        for m in messages:
-            msg = m if isinstance(m, dict) else m.to_dict()
-            role = msg.get("role", "user")
-            if role == "system":
-                system = msg.get("content", "")
-                continue
-            if role == "tool":
-                msg_list.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": msg.get("tool_call_id"),
-                                "content": msg.get("content", ""),
-                            }
-                        ],
-                    }
-                )
-            else:
-                content = []
-                if msg.get("content"):
-                    content.append({"type": "text", "text": msg["content"]})
-                if msg.get("tool_calls"):
-                    for tc in msg["tool_calls"]:
-                        func = tc.get("function", {})
-                        args_str = func.get("arguments", "{}")
-                        try:
-                            args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                        except json.JSONDecodeError:
-                            args = {}
-                        content.append(
-                            {
-                                "type": "tool_use",
-                                "id": tc.get("id"),
-                                "name": func.get("name"),
-                                "input": args,
-                            }
-                        )
-                msg_list.append(
-                    {
-                        "role": "assistant" if role == "assistant" else "user",
-                        "content": content or msg.get("content"),
-                    }
-                )
-
-        params = {
-            "model": model,
-            "messages": msg_list,
-            "max_tokens": self.config.max_tokens or 4096,
-        }
-        if system:
-            params["system"] = system
-        if tools:
-            params["tools"] = [
-                {
-                    "name": t.name if isinstance(t, ToolDefinition) else t["function"]["name"],
-                    "description": t.description
-                    if isinstance(t, ToolDefinition)
-                    else t["function"].get("description", ""),
-                    "input_schema": t.parameters
-                    if isinstance(t, ToolDefinition)
-                    else t["function"].get("parameters", {}),
-                }
-                for t in tools
-            ]
+        system, msg_list = AnthropicAdapter.convert_messages(messages, self.config.system_prompt)
+        params = AnthropicAdapter.build_params(
+            model, msg_list, tools, system, self.config.max_tokens
+        )
 
         async with client.messages.stream(**params) as stream:
             async for event in stream:
@@ -1002,7 +608,6 @@ class DirectModelClient(BaseModelClient):
                     if hasattr(event.delta, "text"):
                         yield StreamChunk(content=event.delta.text)
                     elif hasattr(event.delta, "partial_json"):
-                        # Tool input streaming - emit as tool_call delta
                         yield StreamChunk(
                             tool_calls=[
                                 {

@@ -11,6 +11,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from src.host.cli.command_context import CommandContext
+
 console = Console()
 
 # Mode colors
@@ -24,37 +26,23 @@ MODE_COLORS = {
 class CoreCommandHandler:
     """Handle core slash commands in the CLI."""
 
-    def __init__(
-        self,
-        ctx,
-        tool_selector,
-        registry,
-        skill_mgr,
-        checkpoint_mgr,
-        task_mgr,
-        cost_tracker,
-        cmd_history,
-        session_mgr,
-        hook_mgr,
-        model_name: str,
-        project: str,
-        permission_mgr=None,
-        spec_mgr=None,
-    ):
-        self.ctx = ctx
-        self.tool_selector = tool_selector
-        self.registry = registry
-        self.skill_mgr = skill_mgr
-        self.checkpoint_mgr = checkpoint_mgr
-        self.task_mgr = task_mgr
-        self.cost_tracker = cost_tracker
-        self.cmd_history = cmd_history
-        self.session_mgr = session_mgr
-        self.hook_mgr = hook_mgr
-        self.model_name = model_name
-        self.project = project
-        self.permission_mgr = permission_mgr
-        self.spec_mgr = spec_mgr
+    def __init__(self, cc: CommandContext):
+        self.cc = cc
+        # Shortcut aliases for backward compatibility
+        self.ctx = cc.ctx
+        self.tool_selector = cc.tool_selector
+        self.registry = cc.registry
+        self.skill_mgr = cc.skill_mgr
+        self.checkpoint_mgr = cc.checkpoint_mgr
+        self.task_mgr = cc.task_mgr
+        self.cost_tracker = cc.cost_tracker
+        self.cmd_history = cc.cmd_history
+        self.session_mgr = cc.session_mgr
+        self.hook_mgr = cc.hook_mgr
+        self.model_name = cc.model_name
+        self.project = cc.project
+        self.permission_mgr = cc.permission_mgr
+        self.spec_mgr = cc.spec_mgr
 
     async def handle_core_command(
         self,

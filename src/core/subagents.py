@@ -274,10 +274,8 @@ def _create_agent_id() -> str:
 
 
 def _get_model_name(model: SubagentModel, parent_model: str) -> str:
-    """Get model name from SubagentModel enum. Inherits parent model by default."""
-    if model == SubagentModel.INHERIT or model == SubagentModel.PRO:
-        return parent_model
-    # FLASH: use parent model (provider handles routing)
+    """Get model name. Currently inherits parent model for all types."""
+    # TODO: Implement actual model selection when multi-model routing is ready
     return parent_model
 
 

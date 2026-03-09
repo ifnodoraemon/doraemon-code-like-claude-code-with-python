@@ -411,7 +411,9 @@ class ContextManager:
         # If the message at split_idx looks like a tool result (role="tool" or
         # metadata hints), move split_idx backward to include the preceding
         # assistant message that triggered the tool call.
-        while split_idx > 0:
+        max_backward_steps = 20  # Safety limit to prevent infinite loops
+        steps = 0
+        while split_idx > 0 and steps < max_backward_steps:
             msg = self.messages[split_idx]
             # Check if this is a tool result message
             is_tool_result = (
@@ -421,6 +423,7 @@ class ContextManager:
             )
             if is_tool_result:
                 split_idx -= 1
+                steps += 1
             else:
                 break
 
