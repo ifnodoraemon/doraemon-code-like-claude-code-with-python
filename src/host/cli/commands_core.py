@@ -1006,7 +1006,7 @@ Project specific rules for Doraemon Code.
         if extra_prompt:
             prompt += f"\n\n{extra_prompt}"
         return {
-            "mode": "spec",
+            "mode": mode,
             "tool_names": tool_names,
             "tool_definitions": convert_tools_to_definitions(genai_tools),
             "system_prompt": prompt,
@@ -1059,13 +1059,10 @@ Project specific rules for Doraemon Code.
                           active_skills_content: str,
                           build_system_prompt, convert_tools_to_definitions) -> dict:
         """Build state dict for DRAFT phase (no session creation)."""
-        from src.core.prompts import PROMPTS
-
         plan_tools = self.tool_selector.get_tools_for_mode("plan")
         draft_tools = list(set(plan_tools + ["write"]))
 
         extra = (
-            f"{PROMPTS['spec_draft']}\n\n"
             f"<user_requirement>\n{description}\n</user_requirement>"
         )
 
@@ -1086,16 +1083,14 @@ Project specific rules for Doraemon Code.
     def _spec_execute_state(self, active_skills_content: str,
                             build_system_prompt, convert_tools_to_definitions) -> dict:
         """Build state dict for EXECUTE phase (no phase transition)."""
-        from src.core.prompts import PROMPTS
-
         build_tools = self.tool_selector.get_tools_for_mode("build")
         spec_tools = self.tool_selector.get_spec_tools()
         exec_tools = list(set(build_tools + spec_tools))
 
-        extra = PROMPTS["spec_execute"]
+        extra = ""
         spec_content = self.spec_mgr.get_all_spec_content()
         if spec_content:
-            extra += f"\n\n<spec_documents>\n{spec_content}\n</spec_documents>"
+            extra = f"<spec_documents>\n{spec_content}\n</spec_documents>"
 
         p = self.spec_mgr.get_progress()
         console.print(Panel(
@@ -1233,7 +1228,7 @@ Project specific rules for Doraemon Code.
             "build", build_tools, active_skills_content,
             build_system_prompt, convert_tools_to_definitions,
         )
-        state["mode"] = "build"  # override "spec" default from _make_tool_state
+        state["mode"] = "build"
 
         console.print(f"[yellow]Spec '{name}' aborted. Returned to build mode.[/yellow]")
         return state

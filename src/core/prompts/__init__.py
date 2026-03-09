@@ -5,15 +5,13 @@ Modular, composable prompt system for different agent modes.
 
 Architecture:
     _common.py  → Reusable XML prompt segments (personality, retry, etc.)
-    plan.py     → Plan mode prompt (read-only analysis)
-    build.py    → Build mode prompt (implementation)
-    spec.py     → Spec workflow prompts (draft + execute)
-    __init__.py → Public API + PROMPTS dict for backward compat
+    plan.py     → Plan mode prompt (read-only analysis + structured planning)
+    build.py    → Build mode prompt (task-driven implementation)
+    __init__.py → Public API + PROMPTS dict
 """
 
 from .build import BUILD_PROMPT
 from .plan import PLAN_PROMPT
-from .spec import SPEC_DRAFT_PROMPT, SPEC_EXECUTE_PROMPT
 
 __all__ = [
     "PROMPTS",
@@ -21,8 +19,6 @@ __all__ = [
     "get_system_prompt",
     "BUILD_PROMPT",
     "PLAN_PROMPT",
-    "SPEC_DRAFT_PROMPT",
-    "SPEC_EXECUTE_PROMPT",
 ]
 
 # ─── Registry ────────────────────────────────────────────────────────
@@ -30,8 +26,6 @@ __all__ = [
 PROMPTS: dict[str, str] = {
     "plan": PLAN_PROMPT,
     "build": BUILD_PROMPT,
-    "spec_draft": SPEC_DRAFT_PROMPT,
-    "spec_execute": SPEC_EXECUTE_PROMPT,
 }
 
 DEFAULT_MODE = "build"
@@ -39,12 +33,14 @@ DEFAULT_MODE = "build"
 
 # ─── Public API ──────────────────────────────────────────────────────
 
-def get_system_prompt(mode: str = DEFAULT_MODE, persona_config: dict | None = None) -> str:
+def get_system_prompt(
+    mode: str = DEFAULT_MODE,
+    persona_config: dict | None = None,
+) -> str:
     """Get the system prompt for a specific mode.
 
     Args:
-        mode: One of 'plan', 'build', 'spec_draft', 'spec_execute'.
-              Falls back to 'build' for unknown modes.
+        mode: One of 'plan', 'build'. Falls back to 'build' for unknown modes.
         persona_config: Optional dict with 'name' key to replace 'Doraemon'.
 
     Returns:

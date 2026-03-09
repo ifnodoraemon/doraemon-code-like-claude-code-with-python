@@ -11,6 +11,7 @@ from ._common import (
     PROGRESSIVE_FEEDBACK_BUILD,
     REJECTION_HANDLING,
     RETRY_POLICY,
+    TASK_TRACKING,
     VALIDATION,
 )
 
@@ -38,9 +39,13 @@ You have full access to modify files and execute code.
     </primary_goal>
 
     <workflow>
-    1.  **Context**: Review `task.md` and `implementation_plan.md` (if available).
-    2.  **Action**: Use `write_file`, `edit_file`, or `execute_python` to implement changes.
-    3.  **Verification**: After making changes, ALWAYS verify them (run tests, check file contents).
+    1.  **Context**: Review `task.md`, `implementation_plan.md`, or task breakdown (if available).
+    2.  **Execute**: Follow the task list in order. For each task:
+        a. Announce which task you are starting.
+        b. Implement changes using `write_file`, `edit_file`, or `execute_python`.
+        c. Verify the change (run tests, check file contents).
+        d. Mark the task as done and report the result.
+    3.  **Verify**: After all tasks, walk through the verification checklist item by item.
     4.  **Iteration**: If verification fails, analyze the error and fix it (see retry_policy).
     5.  **Completion**: Update `task.md` as you make progress.
     </workflow>
@@ -55,6 +60,7 @@ You have full access to modify files and execute code.
     </constraints>
 
     {PROGRESSIVE_FEEDBACK_BUILD}
+    {TASK_TRACKING}
     {VALIDATION}
     {FINAL_MESSAGE}
     {REJECTION_HANDLING}

@@ -129,27 +129,52 @@ Be THOROUGH when gathering information:
 </maximize_context>
 """
 
-# ─── Plan Quality ────────────────────────────────────────────────────
+# ─── Structured Planning ─────────────────────────────────────────────
 
-PLAN_QUALITY = """
-<plan_quality>
-Write high-quality implementation plans. Each task should be:
-- Specific and actionable (not vague)
-- Logically ordered by dependency
-- Independently verifiable
+STRUCTURED_PLANNING = """
+<structured_planning>
+Produce a high-quality, structured implementation plan with three parts:
 
-Good plan example:
-1. Add CLI entry point with file argument parsing
-2. Implement Markdown parser using CommonMark library
-3. Apply semantic HTML template with proper heading hierarchy
-4. Handle code blocks, images, and links
-5. Add error handling for invalid/missing files
+1. **Design document** (spec / implementation_plan):
+   - Goals and background
+   - Architecture decisions and trade-offs
+   - Data flow and key constraints
+   - Affected files and dependencies
 
-Bad plan example:
-1. Create CLI tool
-2. Add Markdown parser
-3. Convert to HTML
-</plan_quality>
+2. **Task breakdown** (tasks):
+   - Format: `- [ ] T1: Short imperative title`
+   - Ordered by dependency (do T1 before T2 if T2 depends on T1)
+   - Each task is atomic and independently verifiable
+   - Typically 5-15 tasks
+
+3. **Verification checklist** (checklist):
+   - Format: `- [ ] C1: Verification description`
+   - Cover: unit tests pass, integration works, no regressions, edge cases
+   - Include both automated and manual checks
+
+Good task example:
+- [ ] T1: Add CLI entry point with file argument parsing
+- [ ] T2: Implement Markdown parser using CommonMark library
+- [ ] T3: Apply semantic HTML template with proper heading hierarchy
+
+Bad task example:
+- [ ] T1: Create CLI tool
+- [ ] T2: Add parser
+- [ ] T3: Make it work
+</structured_planning>
+"""
+
+# ─── Task Tracking ───────────────────────────────────────────────────
+
+TASK_TRACKING = """
+<task_tracking>
+When implementing changes, follow the task list systematically:
+1. Announce which task you are starting (e.g. "Starting T1: ...").
+2. After completing a task, mark it done and briefly report the result.
+3. Every 2-3 tasks, give the user a progress summary.
+4. After all tasks, walk through the verification checklist item by item.
+5. If a task is blocked, explain why and skip it.
+</task_tracking>
 """
 
 # ─── Progressive Feedback ────────────────────────────────────────────

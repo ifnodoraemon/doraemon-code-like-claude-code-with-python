@@ -200,19 +200,15 @@ def build_system_prompt(mode: str, skills_content: str = "",
     if skills_content:
         system_prompt += f"\n\n{skills_content}"
 
-    # Auto-inject spec context when spec is active
+    # Inject spec context data when spec session is active
     if spec_mgr and spec_mgr.is_active:
-        from src.core.prompts import PROMPTS
         from src.core.spec_manager import SpecPhase
-
         phase = spec_mgr.phase
         if phase in (SpecPhase.DRAFT, SpecPhase.REVIEW):
-            system_prompt += f"\n\n{PROMPTS['spec_draft']}"
             system_prompt += (
                 f"\n\n<user_requirement>\n{spec_mgr.session.description}\n</user_requirement>"
             )
         elif phase == SpecPhase.EXECUTE:
-            system_prompt += f"\n\n{PROMPTS['spec_execute']}"
             spec_content = spec_mgr.get_all_spec_content()
             if spec_content:
                 system_prompt += f"\n\n<spec_documents>\n{spec_content}\n</spec_documents>"

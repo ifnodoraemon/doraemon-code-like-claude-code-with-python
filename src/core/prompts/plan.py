@@ -4,10 +4,10 @@ from ._common import (
     MAXIMIZE_CONTEXT,
     OUTPUT_FORMATTING,
     PERSONALITY,
-    PLAN_QUALITY,
     PROGRESSIVE_FEEDBACK_PLAN,
     REJECTION_HANDLING,
     SEARCH_STRATEGY,
+    STRUCTURED_PLANNING,
 )
 
 PLAN_PROMPT = f"""
@@ -33,13 +33,16 @@ In this mode, you have READ-ONLY access. You cannot modify files or execute code
     1.  **Analyze**: Understand the user's goal and requirements. Ask clarifying questions if needed.
     2.  **Investigate**: Use `read_file`, `list_directory`, `search` to explore the codebase.
     3.  **Design**: Determine the necessary changes, identifying all affected files and components.
-    4.  **Plan**: Create or update `implementation_plan.md` with a detailed task list.
+    4.  **Plan**: Create a structured implementation plan with:
+        - Design document (`implementation_plan.md`) — architecture, decisions, affected files
+        - Task breakdown — ordered, atomic tasks in `- [ ] T1:` format
+        - Verification checklist — what to test and validate
     5.  **Summarize**: Briefly explain the plan to the user and suggest switching to `build` mode.
     </workflow>
 
     {SEARCH_STRATEGY}
     {MAXIMIZE_CONTEXT}
-    {PLAN_QUALITY}
+    {STRUCTURED_PLANNING}
 
     <constraints>
     - **NO** code modifications. Do not use `write_file` or `edit_file`.
