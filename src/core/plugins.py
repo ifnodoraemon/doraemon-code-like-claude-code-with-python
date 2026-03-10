@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 class PluginScope(Enum):
     """Plugin installation scope."""
 
-    USER = "user"  # ~/.doraemon/plugins
-    PROJECT = "project"  # .doraemon/plugins
-    LOCAL = "local"  # .doraemon/plugins.local (not committed)
+    USER = "user"  # Legacy alias for project plugins
+    PROJECT = "project"  # .agent/plugins
+    LOCAL = "local"  # .agent/plugins.local (not committed)
 
 
 @dataclass
@@ -160,9 +160,9 @@ class PluginManager:
         self.project_dir = project_dir or Path.cwd()
 
         # Plugin directories
-        self._user_dir = Path.home() / ".doraemon" / "plugins"
-        self._project_dir = self.project_dir / ".doraemon" / "plugins"
-        self._local_dir = self.project_dir / ".doraemon" / "plugins.local"
+        self._user_dir = self.project_dir / ".agent" / "plugins"
+        self._project_dir = self.project_dir / ".agent" / "plugins"
+        self._local_dir = self.project_dir / ".agent" / "plugins.local"
 
         # Ensure directories exist
         self._user_dir.mkdir(parents=True, exist_ok=True)
@@ -176,18 +176,17 @@ class PluginManager:
 
     def _get_plugin_dirs(self) -> list[tuple[Path, PluginScope]]:
         """Get plugin directories in order of precedence."""
-        dirs = []
+        dirs: list[tuple[Path, PluginScope]] = []
+        seen: set[Path] = set()
 
         # Local (highest precedence)
         if self._local_dir.exists():
             dirs.append((self._local_dir, PluginScope.LOCAL))
+            seen.add(self._local_dir.resolve())
 
         # Project
-        if self._project_dir.exists():
+        if self._project_dir.exists() and self._project_dir.resolve() not in seen:
             dirs.append((self._project_dir, PluginScope.PROJECT))
-
-        # User (lowest precedence)
-        dirs.append((self._user_dir, PluginScope.USER))
 
         return dirs
 
@@ -274,7 +273,7 @@ class PluginManager:
     def install(
         self,
         source: str,
-        scope: PluginScope = PluginScope.USER,
+        scope: PluginScope = PluginScope.PROJECT,
         force: bool = False,
     ) -> InstalledPlugin | None:
         """
@@ -292,9 +291,7 @@ class PluginManager:
             Installed plugin or None if failed
         """
         # Determine target directory
-        if scope == PluginScope.USER:
-            target_base = self._user_dir
-        elif scope == PluginScope.PROJECT:
+        if scope in (PluginScope.USER, PluginScope.PROJECT):
             target_base = self._project_dir
         else:
             target_base = self._local_dir
@@ -428,9 +425,7 @@ class PluginManager:
         """Get scope for a plugin path."""
         if path == self._local_dir:
             return PluginScope.LOCAL
-        elif path == self._project_dir:
-            return PluginScope.PROJECT
-        return PluginScope.USER
+        return PluginScope.PROJECT
 
     def uninstall(self, name: str) -> bool:
         """Uninstall a plugin."""

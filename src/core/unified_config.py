@@ -13,6 +13,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
+from .paths import config_path as default_config_path
+
 
 class UnifiedConfig(BaseModel):
     """Unified configuration for all Doraemon Code components."""
@@ -148,7 +150,7 @@ class UnifiedConfig(BaseModel):
         Precedence: Environment Variables > Config File > Defaults
 
         Args:
-            config_path: Path to config file (default: .doraemon/config.json)
+            config_path: Path to config file (default: .agent/config.json)
             validate: Whether to validate the configuration
 
         Returns:
@@ -160,7 +162,7 @@ class UnifiedConfig(BaseModel):
         """
         # Default config path
         if config_path is None:
-            config_path = Path.cwd() / ".doraemon" / "config.json"
+            config_path = default_config_path()
         else:
             config_path = Path(config_path)
 

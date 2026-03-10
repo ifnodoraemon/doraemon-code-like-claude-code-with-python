@@ -536,7 +536,7 @@ Review the provided code and provide:
 5. Test coverage recommendations
 
 Be specific and actionable. Reference line numbers when applicable.""",
-        tools=["read_file", "read_file_outline", "list_directory", "glob_files", "grep_search"],
+        tools=["read", "search"],
         model=SubagentModel.FLASH,
         max_turns=5,
     ),
@@ -552,13 +552,7 @@ Be specific and actionable. Reference line numbers when applicable.""",
 
 Focus on finding the actual cause, not just symptoms.
 Test your hypotheses by examining relevant code.""",
-        tools=[
-            "read_file",
-            "grep_search",
-            "glob_files",
-            "execute_python",
-            "shell_execute",
-        ],
+        tools=["read", "search", "run"],
         model=SubagentModel.FLASH,
         max_turns=10,
     ),
@@ -574,7 +568,7 @@ Test your hypotheses by examining relevant code.""",
 5. Are maintainable and well-documented
 
 Focus on meaningful test coverage, not just line coverage.""",
-        tools=["read_file", "write_file", "edit_file", "grep_search", "execute_python"],
+        tools=["read", "write", "search", "run"],
         model=SubagentModel.FLASH,
         max_turns=10,
     ),
@@ -590,7 +584,7 @@ Focus on meaningful test coverage, not just line coverage.""",
 5. README updates
 
 Write for the target audience. Include practical examples.""",
-        tools=["read_file", "write_file", "edit_file", "list_directory"],
+        tools=["read", "write"],
         model=SubagentModel.FLASH,
         max_turns=8,
     ),
@@ -607,7 +601,7 @@ Write for the target audience. Include practical examples.""",
 
 Provide severity ratings and specific remediation steps.
 Reference OWASP guidelines when applicable.""",
-        tools=["read_file", "grep_search", "glob_files", "shell_execute"],
+        tools=["read", "search", "run"],
         model=SubagentModel.FLASH,
         max_turns=8,
     ),
@@ -623,7 +617,7 @@ Reference OWASP guidelines when applicable.""",
 5. Improving testability
 
 Make incremental, safe changes. Preserve behavior.""",
-        tools=["read_file", "write_file", "edit_file", "grep_search"],
+        tools=["read", "write", "search"],
         model=SubagentModel.FLASH,
         max_turns=10,
     ),
@@ -639,14 +633,7 @@ Make incremental, safe changes. Preserve behavior.""",
 5. Answer questions about how the code works
 
 Be thorough but focused. Summarize your findings clearly.""",
-        tools=[
-            "read_file",
-            "read_file_outline",
-            "list_directory",
-            "glob_files",
-            "grep_search",
-            "find_symbol",
-        ],
+        tools=["read", "search"],
         model=SubagentModel.FLASH,
         max_turns=10,
     ),

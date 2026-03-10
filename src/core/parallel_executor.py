@@ -98,9 +98,7 @@ class DependencyAnalyzer:
     # Tools that write/modify state
     WRITE_TOOLS = {
         "write",
-        "write_file",
-        "edit_file",
-        "shell_execute",
+        "run",
         "git_commit",
         "git_push",
     }
@@ -108,11 +106,7 @@ class DependencyAnalyzer:
     # Tools that read state
     READ_TOOLS = {
         "read",
-        "read_file",
         "search",
-        "list_directory",
-        "glob_files",
-        "grep_search",
         "git_status",
         "git_log",
         "git_diff",

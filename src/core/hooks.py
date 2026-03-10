@@ -152,7 +152,7 @@ class HookManager:
         result = await mgr.trigger(HookEvent.PRE_TOOL_USE, context)
 
         # Load hooks from config file
-        mgr.load_from_file(".doraemon/hooks.json")
+        mgr.load_from_file(".agent/hooks.json")
     """
 
     def __init__(

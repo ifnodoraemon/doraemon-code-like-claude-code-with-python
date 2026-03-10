@@ -8,6 +8,7 @@ Extracted from main.py for better maintainability.
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -23,9 +24,112 @@ from src.core.permissions import (
     PermissionManager,
     PermissionRequest,
 )
+from src.core.security import validate_path
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+VALIDATION_TOOLS = {
+    "lint",
+    "lint_python_ruff",
+    "typecheck_python_mypy",
+    "lint_javascript_eslint",
+    "lint_all",
+    "get_lint_summary",
+    "lsp_diagnostics",
+    "check_security",
+    "code_complexity",
+}
+
+
+def get_modified_paths(tool_name: str, args: dict[str, Any]) -> list[str]:
+    """Return paths likely modified by a tool call."""
+    if tool_name in {"multi_edit", "notebook_edit", "lsp_rename", "format_python_ruff"}:
+        path = args.get("path")
+        return [path] if isinstance(path, str) and path else []
+
+    if tool_name != "write":
+        return []
+
+    operation = args.get("operation", "create")
+    path = args.get("path")
+    destination = args.get("destination")
+    modified: list[str] = []
+
+    if isinstance(path, str) and path:
+        modified.append(path)
+    if operation in {"move", "copy"} and isinstance(destination, str) and destination:
+        modified.append(destination)
+
+    return modified
+
+
+def is_validation_tool_call(tool_name: str, args: dict[str, Any]) -> bool:
+    """Detect whether a tool call is performing verification work."""
+    if tool_name in VALIDATION_TOOLS:
+        return True
+
+    if tool_name != "run":
+        return False
+
+    command = str(args.get("command") or "").lower()
+    verification_markers = [
+        "pytest",
+        "ruff",
+        "mypy",
+        "eslint",
+        "vitest",
+        "jest",
+        "npm test",
+        "npm run test",
+        "npm run build",
+        "pnpm test",
+        "pnpm lint",
+        "pnpm build",
+        "yarn test",
+        "yarn lint",
+        "cargo test",
+        "go test",
+        "tox",
+    ]
+    return any(marker in command for marker in verification_markers)
+
+
+def _build_write_diff_preview(args: dict[str, Any]) -> tuple[str, str] | None:
+    """Build a synthetic post-edit file body for diff preview when possible."""
+    operation = args.get("operation", "create")
+    path = args.get("path")
+    if not isinstance(path, str) or not path:
+        return None
+
+    if operation == "create" and isinstance(args.get("content"), str):
+        return path, args["content"]
+
+    if operation != "edit":
+        return None
+
+    old_string = args.get("old_string")
+    new_string = args.get("new_string")
+    if not isinstance(old_string, str) or not isinstance(new_string, str):
+        return None
+
+    try:
+        file_path = Path(validate_path(path))
+        content = file_path.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+    if old_string not in content:
+        return None
+
+    count = args.get("count", -1)
+    replacements = count if isinstance(count, int) else -1
+    new_content = (
+        content.replace(old_string, new_string)
+        if replacements == -1
+        else content.replace(old_string, new_string, replacements)
+    )
+    return path, new_content
 
 
 async def execute_tool(
@@ -115,20 +219,20 @@ async def execute_tool(
     if tool_name in ["save_note", "search_notes"]:
         args["collection_name"] = args.get("collection_name", "default")
 
-    # Snapshot file before modification
-    if tool_name in ["write_file", "edit_file"] and "path" in args:
-        checkpoint_mgr.snapshot_file(args["path"])
+    for path in get_modified_paths(tool_name, args):
+        checkpoint_mgr.snapshot_file(path)
 
-    # Show diff for write operations
-    if tool_name == "write_file" and "content" in args and "path" in args:
-        console.print(f"\n[bold yellow]📝 Proposing changes:[/bold yellow] {args['path']}")
-        print_diff(args["path"], args["content"])
+    diff_preview = _build_write_diff_preview(args) if tool_name == "write" else None
+    if diff_preview:
+        diff_path, diff_content = diff_preview
+        console.print(f"\n[bold yellow]📝 Proposing changes:[/bold yellow] {diff_path}")
+        print_diff(diff_path, diff_content)
 
     # HITL approval for sensitive tools
     tool_result = None
     if tool_name in sensitive_tools:
         console.print(f"\n[bold red]⚠️ Sensitive:[/bold red] {tool_name}")
-        if tool_name != "write_file":
+        if tool_name != "write" or not diff_preview:
             # Pretty print content/code if present
             display_args = args.copy()
             rendered_field = None
@@ -136,9 +240,13 @@ async def execute_tool(
             # Check for content field (save_note, etc.)
             if "content" in display_args and isinstance(display_args["content"], str):
                 rendered_field = ("Content Preview", display_args.pop("content"), "markdown")
-            # Check for code field (execute_python)
-            elif "code" in display_args and isinstance(display_args["code"], str):
-                rendered_field = ("Code Preview", display_args.pop("code"), "python")
+            # Check for Python code execution preview
+            elif (
+                tool_name == "run"
+                and display_args.get("mode") == "python"
+                and isinstance(display_args.get("command"), str)
+            ):
+                rendered_field = ("Code Preview", display_args.pop("command"), "python")
 
             if rendered_field:
                 title, field_content, lang = rendered_field

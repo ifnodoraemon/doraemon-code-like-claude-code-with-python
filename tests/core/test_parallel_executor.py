@@ -210,8 +210,16 @@ class TestDependencyAnalyzer:
         """Test sequential writes to same file."""
         analyzer = DependencyAnalyzer()
         calls = [
-            ToolCall(id="call_1", name="write_file", arguments={"path": "/file.txt", "content": "data1"}),
-            ToolCall(id="call_2", name="write_file", arguments={"path": "/file.txt", "content": "data2"}),
+            ToolCall(
+                id="call_1",
+                name="write",
+                arguments={"path": "/file.txt", "operation": "create", "content": "data1"},
+            ),
+            ToolCall(
+                id="call_2",
+                name="write",
+                arguments={"path": "/file.txt", "operation": "create", "content": "data2"},
+            ),
         ]
         stages = analyzer.analyze(calls)
         # Should be in separate stages
@@ -221,8 +229,16 @@ class TestDependencyAnalyzer:
         """Test parallel writes to different files."""
         analyzer = DependencyAnalyzer()
         calls = [
-            ToolCall(id="call_1", name="write_file", arguments={"path": "/file1.txt", "content": "data1"}),
-            ToolCall(id="call_2", name="write_file", arguments={"path": "/file2.txt", "content": "data2"}),
+            ToolCall(
+                id="call_1",
+                name="write",
+                arguments={"path": "/file1.txt", "operation": "create", "content": "data1"},
+            ),
+            ToolCall(
+                id="call_2",
+                name="write",
+                arguments={"path": "/file2.txt", "operation": "create", "content": "data2"},
+            ),
         ]
         stages = analyzer.analyze(calls)
         # Should be in same stage (parallel)
@@ -257,8 +273,16 @@ class TestDependencyAnalyzer:
         """Test building dependency graph."""
         analyzer = DependencyAnalyzer()
         calls = [
-            ToolCall(id="call_1", name="write_file", arguments={"path": "/file.txt", "content": "data1"}),
-            ToolCall(id="call_2", name="write_file", arguments={"path": "/file.txt", "content": "data2"}),
+            ToolCall(
+                id="call_1",
+                name="write",
+                arguments={"path": "/file.txt", "operation": "create", "content": "data1"},
+            ),
+            ToolCall(
+                id="call_2",
+                name="write",
+                arguments={"path": "/file.txt", "operation": "create", "content": "data2"},
+            ),
         ]
         graph = analyzer._build_dependency_graph(calls)
         assert "call_1" in graph
@@ -793,9 +817,8 @@ class TestParallelExecutor:
         """Test that WRITE_TOOLS set contains expected tools."""
         analyzer = DependencyAnalyzer()
         assert "write" in analyzer.WRITE_TOOLS
-        assert "write_file" in analyzer.WRITE_TOOLS
+        assert "run" in analyzer.WRITE_TOOLS
         assert "git_commit" in analyzer.WRITE_TOOLS
-        assert "shell_execute" in analyzer.WRITE_TOOLS
 
     def test_analyzer_read_tools_set(self):
         """Test that READ_TOOLS set contains expected tools."""

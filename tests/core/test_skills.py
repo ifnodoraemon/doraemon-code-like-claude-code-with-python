@@ -140,27 +140,24 @@ class TestSkillLoader:
         """Test SkillLoader initialization."""
         loader = SkillLoader()
         assert loader.project_dir == Path.cwd()
-        assert loader.global_dir == Path.home() / ".doraemon"
         assert loader._skills == {}
         assert loader._loaded is False
 
-    def test_initialization_with_custom_dirs(self, tmp_path):
-        """Test initialization with custom directories."""
+    def test_initialization_with_custom_project_dir(self, tmp_path):
+        """Test initialization with custom project directory."""
         project_dir = tmp_path / "project"
-        global_dir = tmp_path / "global"
-        loader = SkillLoader(project_dir=project_dir, global_dir=global_dir)
+        loader = SkillLoader(project_dir=project_dir)
         assert loader.project_dir == project_dir
-        assert loader.global_dir == global_dir
 
     def test_discover_skills_empty(self, tmp_path):
         """Test discovering skills with no skills directory."""
-        loader = SkillLoader(project_dir=tmp_path, global_dir=tmp_path)
+        loader = SkillLoader(project_dir=tmp_path)
         skills = loader.discover_skills()
         assert skills == []
 
     def test_discover_skills_with_valid_skill(self, tmp_path):
         """Test discovering a valid skill."""
-        skills_dir = tmp_path / ".doraemon" / "skills" / "test-skill"
+        skills_dir = tmp_path / ".agent" / "skills" / "test-skill"
         skills_dir.mkdir(parents=True)
         skill_file = skills_dir / "SKILL.md"
         skill_file.write_text(
@@ -176,7 +173,7 @@ priority: 5
 """
         )
 
-        loader = SkillLoader(project_dir=tmp_path, global_dir=tmp_path / "global")
+        loader = SkillLoader(project_dir=tmp_path)
         skills = loader.discover_skills()
         assert len(skills) == 1
         assert skills[0].name == "Test Skill"
@@ -263,13 +260,13 @@ Body content
 
     def test_get_relevant_skills_empty(self, tmp_path):
         """Test getting relevant skills with no skills."""
-        loader = SkillLoader(project_dir=tmp_path, global_dir=tmp_path)
+        loader = SkillLoader(project_dir=tmp_path)
         skills = loader.get_relevant_skills("python code")
         assert skills == []
 
     def test_get_relevant_skills_with_threshold(self, tmp_path):
         """Test relevance threshold filtering."""
-        skills_dir = tmp_path / ".doraemon" / "skills" / "python-skill"
+        skills_dir = tmp_path / ".agent" / "skills" / "python-skill"
         skills_dir.mkdir(parents=True)
         (skills_dir / "SKILL.md").write_text(
             """---
@@ -282,7 +279,7 @@ Content
 """
         )
 
-        loader = SkillLoader(project_dir=tmp_path, global_dir=tmp_path / "global")
+        loader = SkillLoader(project_dir=tmp_path)
         # High threshold - should match
         skills = loader.get_relevant_skills("python code", threshold=0.1)
         assert len(skills) >= 0  # May or may not match depending on scoring

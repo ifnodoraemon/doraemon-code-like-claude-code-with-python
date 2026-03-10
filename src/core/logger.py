@@ -6,6 +6,8 @@ from typing import Any
 
 from rich.logging import RichHandler
 
+from .paths import logs_dir
+
 # ================================
 # Standard Logging Setup
 # ================================
@@ -54,14 +56,14 @@ def setup_logger(name: str, level: str = "INFO", log_file: str | None = None) ->
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get or create a logger with default Doraemon configuration."""
+    """Get or create a logger with project-local default configuration."""
     # Check if already configured
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
 
     # Auto-configure
-    log_dir = Path.home() / ".doraemon" / "logs"
+    log_dir = logs_dir()
     log_file = log_dir / f"{name.split('.')[-1]}.log"
 
     return setup_logger(name, level="INFO", log_file=str(log_file))

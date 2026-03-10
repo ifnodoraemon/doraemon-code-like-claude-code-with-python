@@ -274,7 +274,7 @@ class TestCheckpointConfig:
         config = CheckpointConfig()
         
         assert config.enabled is True
-        assert config.save_directory == ".doraemon/checkpoints"
+        assert config.save_directory == ".agent/checkpoints"
         assert config.max_file_size == 1024 * 1024
         assert config.retention_days == 30
         assert config.compress is True
@@ -303,7 +303,7 @@ class TestCheckpointConfig:
         )
         
         assert config.enabled is True  # Default
-        assert config.save_directory == ".doraemon/checkpoints"  # Default
+        assert config.save_directory == ".agent/checkpoints"  # Default
         assert config.max_file_size == 1024 * 1024  # Default
         assert config.retention_days == 60  # Custom
         assert config.compress is False  # Custom

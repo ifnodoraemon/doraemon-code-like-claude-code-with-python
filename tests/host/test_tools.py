@@ -1,5 +1,7 @@
 """Tests for simplified tool registry."""
 
+from typing import Literal
+
 import pytest
 
 from src.host.tools import ToolRegistry, get_default_registry
@@ -112,6 +114,27 @@ class TestTypeExtraction:
         required = tools[0].parameters.required
         assert "required" in required
         assert "optional" not in required
+
+    def test_literal_enum_extraction(self):
+        """Test extraction of Literal enum values and docstring descriptions."""
+        registry = ToolRegistry()
+
+        def literal_func(mode: Literal["read", "write"], path: str) -> str:
+            """Tool with enum mode.
+
+            Args:
+                mode: Execution mode.
+                path: Target path.
+            """
+            return ""
+
+        registry.register(literal_func)
+        tools = registry.get_genai_tools()
+
+        props = tools[0].parameters.properties
+        assert props["mode"].type.name == "STRING"
+        assert list(props["mode"].enum) == ["read", "write"]
+        assert "Execution mode." in props["mode"].description
 
 
 class TestToolCalling:

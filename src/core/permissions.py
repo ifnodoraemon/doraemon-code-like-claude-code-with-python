@@ -218,7 +218,7 @@ DEFAULT_RULES: list[PermissionRule] = [
         name="ask_network",
         description="Require approval for network operations",
         level=PermissionLevel.ASK,
-        tools=["shell_exec"],
+        tools=["run"],
         operations=[OperationType.NETWORK],
         priority=70,
     ),
@@ -264,22 +264,14 @@ class PermissionManager:
     # Tool to operation mapping
     TOOL_OPERATIONS = {
         "read": OperationType.READ,
-        "read_file": OperationType.READ,
-        "list_directory": OperationType.READ,
-        "glob_files": OperationType.READ,
-        "grep_search": OperationType.READ,
         "search": OperationType.READ,
         "semantic_search": OperationType.READ,
         "write": OperationType.WRITE,
-        "write_file": OperationType.WRITE,
-        "edit_file": OperationType.WRITE,
-        "delete_file": OperationType.DELETE,
-        "shell_execute": OperationType.EXECUTE,
-        "execute_python": OperationType.EXECUTE,
+        "run": OperationType.EXECUTE,
         "git_commit": OperationType.WRITE,
         "git_push": OperationType.NETWORK,
         "web_search": OperationType.NETWORK,
-        "web_fetch": OperationType.NETWORK,
+        "fetch_url": OperationType.NETWORK,
     }
 
     def __init__(

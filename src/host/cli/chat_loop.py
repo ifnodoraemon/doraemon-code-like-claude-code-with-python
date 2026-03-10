@@ -28,7 +28,6 @@ from src.core.rules import (
     format_instructions_for_prompt,
     format_memory_for_prompt,
     load_all_instructions,
-    load_global_memory,
     load_project_memory,
 )
 from src.host.cli.commands import MODE_COLORS, CommandHandler
@@ -36,6 +35,8 @@ from src.host.cli.initialization import initialize_all_managers
 from src.host.cli.tool_execution import (
     detect_tool_loop,
     execute_tool,
+    get_modified_paths,
+    is_validation_tool_call,
     parse_tool_arguments,
 )
 
@@ -79,8 +80,8 @@ def expand_file_references(text: str) -> str:
     import re
     from pathlib import Path
 
-    # Pattern: @ followed by path (not starting with space)
-    pattern = r'@(\.?/?[\w\-./]+)'
+    # Pattern: @ followed by path starting with ./ or / (avoids matching emails/mentions)
+    pattern = r'@(\./[\w\-./]+|/[\w\-./]+)'
 
     def replace_reference(match):
         ref_path = match.group(1)
@@ -177,23 +178,15 @@ def build_system_prompt(mode: str, skills_content: str = "") -> str:
     # Build system prompt
     system_prompt = get_system_prompt(mode, persona)
 
-    # Add project rules (DORAEMON.md)
+    # Add project instructions (AGENTS.md)
     instructions = load_all_instructions(config)
     if instructions:
         system_prompt += format_instructions_for_prompt(instructions)
 
-    # Add project memory (.doraemon/MEMORY.md and ~/.doraemon/MEMORY.md)
+    # Add project memory (.agent/MEMORY.md)
     project_memory = load_project_memory()
-    global_memory = load_global_memory()
-    combined_memory = ""
     if project_memory:
-        combined_memory += project_memory
-    if global_memory:
-        if combined_memory:
-            combined_memory += "\n\n"
-        combined_memory += global_memory
-    if combined_memory:
-        system_prompt += format_memory_for_prompt(combined_memory)
+        system_prompt += format_memory_for_prompt(project_memory)
 
     # Add active skills (loaded on-demand based on context)
     if skills_content:
@@ -458,6 +451,8 @@ async def process_tool_calls(
     previous_tool_calls = []
     tool_results_messages = []
     last_usage = response.usage
+    verification_performed = False
+    verification_nudged = False
 
     while True:
         if tool_steps >= MAX_TOOL_STEPS:
@@ -550,10 +545,10 @@ async def process_tool_calls(
                 for stage in stages:
                     if len(stage) == 1:
                         pc = stage[0]
-                        a = next(a for tn, a, tc_id in pending_calls if tc_id == pc.id)
+                        matched_args = next(args for tn, args, tc_id in pending_calls if tc_id == pc.id)
                         r = await execute_tool(
                             tool_name=pc.name,
-                            args=a,
+                            args=matched_args,
                             tool_call_id=pc.id,
                             registry=registry,
                             sensitive_tools=sensitive_tools,
@@ -580,8 +575,8 @@ async def process_tool_calls(
 
                         tasks = []
                         for pc in stage:
-                            a = next(a for tn, a, tc_id in pending_calls if tc_id == pc.id)
-                            tasks.append(_run_tool(pc, a))
+                            matched_args = next(args for tn, args, tc_id in pending_calls if tc_id == pc.id)
+                            tasks.append(_run_tool(pc, matched_args))
                         stage_results = await asyncio.gather(*tasks)
                         tool_results.extend(stage_results)
             else:
@@ -602,11 +597,42 @@ async def process_tool_calls(
 
             # Post-process: track modifications
             for tool_name, args, _tool_call_id in pending_calls:
-                if tool_name in ["write_file", "edit_file"] and "path" in args:
-                    files_modified.append(args["path"])
+                files_modified.extend(get_modified_paths(tool_name, args))
+                verification_performed = verification_performed or is_validation_tool_call(
+                    tool_name, args
+                )
 
         # No more tool calls - done with this turn
         if not has_tool_call:
+            if (
+                files_modified
+                and not verification_performed
+                and not verification_nudged
+                and model_client is not None
+                and conversation_history is not None
+                and tool_definitions is not None
+            ):
+                verification_nudged = True
+                reminder = (
+                    "[Verification Reminder]\n"
+                    "You modified files but have not verified the changes yet. "
+                    "Before finalizing, run the most relevant checks "
+                    "(for example lint, typecheck, tests, or build) and then report the results."
+                )
+                conversation_history.append(Message(role="user", content=reminder))
+                messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
+                try:
+                    response = await stream_model_response(
+                        model_client,
+                        messages_for_api,
+                        tool_definitions,
+                        model_name,
+                    )
+                    last_usage = response.usage
+                    continue
+                except Exception as e:
+                    console.print(f"[red]API Error during verification reminder: {e}[/red]")
+
             logger.info(
                 f"Turn complete: accumulated_text={len(accumulated_text)} chars, content={bool(response.content)}"
             )
@@ -733,22 +759,9 @@ async def chat_loop(
         console.print("[dim cyan]Running in headless mode[/dim cyan]")
 
     # Initialize model client
-    try:
-        model_client = await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: asyncio.run(
-                (
-                    lambda: __import__(
-                        "src.host.cli.initialization", fromlist=["initialize_model_client"]
-                    ).initialize_model_client()
-                )()
-            ),
-        )
-    except Exception:
-        # Fallback: initialize directly
-        from src.host.cli.initialization import initialize_model_client
+    from src.host.cli.initialization import initialize_model_client
 
-        model_client = await initialize_model_client()
+    model_client = await initialize_model_client()
 
     if not validate_client_mode(model_client):
         return

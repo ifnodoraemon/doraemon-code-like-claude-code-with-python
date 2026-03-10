@@ -20,16 +20,18 @@ Usage:
     genai_tools = registry.get_genai_tools()
 
     # Call a tool
-    result = await registry.call_tool("read_file", {"path": "main.py"})
+    result = await registry.call_tool("read", {"path": "main.py", "mode": "file"})
 """
 
 import asyncio
 import inspect
 import logging
 import threading
+import types as py_types
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from typing import get_args, get_origin
 
 from google.genai import types
 
@@ -56,10 +58,10 @@ class ToolRegistry:
 
     Example:
         registry = ToolRegistry()
-        registry.register(read_file, sensitive=False)
-        registry.register(write_file, sensitive=True)
+        registry.register(read, sensitive=False)
+        registry.register(write, sensitive=True)
 
-        result = await registry.call_tool("read_file", {"path": "main.py"})
+        result = await registry.call_tool("read", {"path": "main.py", "mode": "file"})
     """
 
     MAX_RESULT_LENGTH = 30000  # Max chars in tool result (matches Claude Code)
@@ -104,49 +106,23 @@ class ToolRegistry:
 
     def _extract_parameters(self, func: Callable) -> dict[str, Any]:
         """Extract JSON Schema parameters from function signature."""
-        import types
-        import typing
-
         sig = inspect.signature(func)
         properties = {}
         required = []
-
-        type_mapping = {
-            str: "string",
-            int: "integer",
-            float: "number",
-            bool: "boolean",
-            list: "array",
-            dict: "object",
-        }
+        descriptions = self._extract_param_descriptions(func.__doc__ or "")
 
         for param_name, param in sig.parameters.items():
             if param_name in ("self", "cls"):
                 continue
 
-            # Get type annotation
-            param_type = param.annotation
-            json_type = "string"  # Default
+            schema = self._annotation_to_schema(param.annotation)
+            if description := descriptions.get(param_name):
+                schema["description"] = description
+            if param.default != inspect.Parameter.empty and param.default is not None:
+                if isinstance(param.default, (str, int, float, bool, list, dict)):
+                    schema["default"] = param.default
 
-            if param_type != inspect.Parameter.empty:
-                # Handle Python 3.10+ Union types (int | None)
-                if isinstance(param_type, types.UnionType):
-                    args = getattr(param_type, "__args__", ())
-                    for arg in args:
-                        if arg is not type(None):
-                            json_type = type_mapping.get(arg, "string")
-                            break
-                # Handle typing.Union and typing.Optional
-                elif getattr(param_type, "__origin__", None) is typing.Union:
-                    args = getattr(param_type, "__args__", ())
-                    for arg in args:
-                        if arg is not type(None):
-                            json_type = type_mapping.get(arg, "string")
-                            break
-                else:
-                    json_type = type_mapping.get(param_type, "string")
-
-            properties[param_name] = {"type": json_type}
+            properties[param_name] = schema
 
             # Check if required (no default value)
             if param.default == inspect.Parameter.empty:
@@ -157,6 +133,105 @@ class ToolRegistry:
             "properties": properties,
             "required": required,
         }
+
+    def _annotation_to_schema(self, annotation: Any) -> dict[str, Any]:
+        """Convert a Python annotation into JSON Schema."""
+        if annotation == inspect.Parameter.empty:
+            return {"type": "string"}
+
+        primitive_types = {
+            str: "string",
+            int: "integer",
+            float: "number",
+            bool: "boolean",
+        }
+
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+
+        if origin is None and isinstance(annotation, py_types.UnionType):
+            origin = py_types.UnionType
+            args = getattr(annotation, "__args__", ())
+
+        if origin is not None:
+            origin_name = getattr(origin, "__name__", "")
+
+            if origin_name == "Literal":
+                values = [value for value in args if value is not None]
+                value_type = "string"
+                for value in values:
+                    inferred = primitive_types.get(type(value))
+                    if inferred:
+                        value_type = inferred
+                        break
+
+                schema = {"type": value_type}
+                if values:
+                    schema["enum"] = list(values)
+                return schema
+
+            if origin in (list, tuple, set):
+                item_schema = self._annotation_to_schema(args[0]) if args else {"type": "string"}
+                return {"type": "array", "items": item_schema}
+
+            if origin is dict:
+                value_schema = self._annotation_to_schema(args[1]) if len(args) > 1 else {}
+                return {"type": "object", "additionalProperties": value_schema}
+
+            if origin in (py_types.UnionType, getattr(__import__("typing"), "Union")):
+                non_none_args = [arg for arg in args if arg is not type(None)]
+                if len(non_none_args) == 1:
+                    return self._annotation_to_schema(non_none_args[0])
+                return {"anyOf": [self._annotation_to_schema(arg) for arg in non_none_args]}
+
+        if annotation in primitive_types:
+            return {"type": primitive_types[annotation]}
+        if annotation in (list, tuple, set):
+            return {"type": "array", "items": {"type": "string"}}
+        if annotation is dict:
+            return {"type": "object"}
+
+        return {"type": "string"}
+
+    def _extract_param_descriptions(self, docstring: str) -> dict[str, str]:
+        """Extract Google-style parameter descriptions from a docstring."""
+        if not docstring:
+            return {}
+
+        descriptions: dict[str, str] = {}
+        current_param: str | None = None
+        in_args_block = False
+
+        for raw_line in inspect.cleandoc(docstring).splitlines():
+            line = raw_line.rstrip()
+            stripped = line.strip()
+
+            if stripped in {"Args:", "Arguments:"}:
+                in_args_block = True
+                current_param = None
+                continue
+
+            if not in_args_block:
+                continue
+
+            if not stripped:
+                current_param = None
+                continue
+
+            if not line.startswith((" ", "\t")) and stripped.endswith(":"):
+                break
+
+            if ":" in stripped and not stripped.startswith(("-", "*")):
+                name, description = stripped.split(":", 1)
+                if name.replace("_", "").isalnum():
+                    current_param = name.strip()
+                    descriptions[current_param] = description.strip()
+                    continue
+
+            if current_param and stripped:
+                descriptions[current_param] = f"{descriptions[current_param]} {stripped}".strip()
+
+        return descriptions
 
     def get_genai_tools(
         self, tool_names: list[str] | None = None
@@ -304,10 +379,6 @@ TOOL_SPECS: list[ToolSpec] = [
     # ── Run (unified) ────────────────────────────────────────────────
     ToolSpec("src.servers.run_unified", "run", sensitive=True, timeout=300.0),
 
-    # ── Computer (legacy) ────────────────────────────────────────────
-    ToolSpec("src.servers.computer", "execute_python",  sensitive=True, timeout=300.0),
-    ToolSpec("src.servers.computer", "install_package", sensitive=True, timeout=300.0),
-
     # ── Memory ───────────────────────────────────────────────────────
     ToolSpec("src.servers.memory", "note",         sensitive=True,  timeout=60.0),
     ToolSpec("src.servers.memory", "save_note",    sensitive=True,  timeout=60.0),
@@ -322,10 +393,6 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("src.servers.task", "add_task",            name="task_create",        sensitive=False, timeout=60.0),
     ToolSpec("src.servers.task", "list_tasks",          name="task_list",          sensitive=False, timeout=60.0),
     ToolSpec("src.servers.task", "update_task_status",  name="task_update_status", sensitive=False, timeout=60.0),
-
-    # ── Shell (critical) ─────────────────────────────────────────────
-    ToolSpec("src.servers.shell", "execute_command",            name="shell_execute",    sensitive=True, timeout=300.0, critical=True),
-    ToolSpec("src.servers.shell", "execute_command_background", name="shell_background", sensitive=True, timeout=60.0,  critical=True),
 
     # ── Git ──────────────────────────────────────────────────────────
     ToolSpec("src.servers.git", "git",        sensitive=True,  timeout=60.0),

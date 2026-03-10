@@ -17,6 +17,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import tasks_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,7 +150,7 @@ class TaskManager:
     """
 
     def __init__(self, storage_path: Path | None = None):
-        self.storage_path = storage_path or Path.cwd() / ".doraemon" / "tasks.json"
+        self.storage_path = storage_path or tasks_path()
         self._tasks: dict[str, Task] = {}
         self._load()
 

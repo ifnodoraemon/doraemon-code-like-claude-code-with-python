@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .paths import theme_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -254,7 +256,7 @@ class ThemeManager:
         Args:
             config_path: Path to theme config file
         """
-        self._config_path = config_path or Path.home() / ".doraemon" / "theme.json"
+        self._config_path = config_path or theme_path()
         self._current_theme: str = "default"
         self._custom_themes: dict[str, Theme] = {}
 

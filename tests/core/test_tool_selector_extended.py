@@ -20,6 +20,7 @@ class TestToolConstants:
         assert isinstance(WRITE_TOOLS, list)
         assert len(WRITE_TOOLS) > 0
         assert "write" in WRITE_TOOLS
+        assert "run" in WRITE_TOOLS
 
     def test_aux_tools_defined(self):
         """Test that AUX_TOOLS is defined."""

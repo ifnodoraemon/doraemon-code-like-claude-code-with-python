@@ -19,6 +19,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .paths import layered_memory_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -126,7 +128,7 @@ class LayeredMemory:
             project_id: Project identifier
             user_id: User identifier
         """
-        self._storage_dir = storage_dir or Path.home() / ".doraemon" / "memory"
+        self._storage_dir = storage_dir or layered_memory_dir()
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
         self._organization_id = organization_id

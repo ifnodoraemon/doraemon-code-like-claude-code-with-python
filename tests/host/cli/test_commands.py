@@ -2071,8 +2071,8 @@ class TestToggleCommands:
 class TestInitCommand:
     """Test /init command."""
 
-    async def test_init_creates_doraemon_md(self):
-        """Test /init creates DORAEMON.md file."""
+    async def test_init_creates_agents_md(self):
+        """Test /init creates AGENTS.md file."""
         handler = CommandHandler(
             ctx=MagicMock(),
             tool_selector=MagicMock(),
@@ -2112,7 +2112,7 @@ class TestInitCommand:
                 assert result["handled"] is True
 
     async def test_init_skips_if_exists(self):
-        """Test /init skips if DORAEMON.md already exists."""
+        """Test /init skips if AGENTS.md already exists."""
         handler = CommandHandler(
             ctx=MagicMock(),
             tool_selector=MagicMock(),

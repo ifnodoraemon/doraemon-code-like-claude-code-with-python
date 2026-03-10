@@ -60,6 +60,15 @@ class CommandHandler:
 
         # Expose commonly accessed attributes for backward compatibility
         self.ctx = ctx
+        self.tool_selector = tool_selector
+        self.registry = registry
+        self.skill_mgr = skill_mgr
+        self.checkpoint_mgr = checkpoint_mgr
+        self.task_mgr = task_mgr
+        self.cost_tracker = cost_tracker
+        self.cmd_history = cmd_history
+        self.session_mgr = session_mgr
+        self.hook_mgr = hook_mgr
         self.model_name = model_name
         self.project = project
 

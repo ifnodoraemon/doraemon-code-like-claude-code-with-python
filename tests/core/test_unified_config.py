@@ -85,7 +85,7 @@ class TestUnifiedConfig:
 
     def test_from_env_and_file_with_file(self, tmp_path):
         """Test loading from config file."""
-        config_file = tmp_path / ".doraemon" / "config.json"
+        config_file = tmp_path / ".agent" / "config.json"
         config_file.parent.mkdir(parents=True)
 
         config_data = {
@@ -103,7 +103,7 @@ class TestUnifiedConfig:
 
     def test_from_env_and_file_env_overrides_file(self, tmp_path):
         """Test that env vars override file config."""
-        config_file = tmp_path / ".doraemon" / "config.json"
+        config_file = tmp_path / ".agent" / "config.json"
         config_file.parent.mkdir(parents=True)
 
         config_data = {"model": "file-model"}

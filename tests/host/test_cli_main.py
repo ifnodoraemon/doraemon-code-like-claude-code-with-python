@@ -454,13 +454,9 @@ def _chat_loop_patches(
         return_value="",
     )
 
-    # Mock load_project_memory and load_global_memory (called by build_system_prompt)
+    # Mock load_project_memory (called by build_system_prompt)
     patches["load_project_memory"] = patch(
         "src.host.cli.chat_loop.load_project_memory",
-        return_value="",
-    )
-    patches["load_global_memory"] = patch(
-        "src.host.cli.chat_loop.load_global_memory",
         return_value="",
     )
 

@@ -190,17 +190,14 @@ class TestSkillLoaderInitialization:
         """Test default initialization."""
         loader = SkillLoader()
         assert loader.project_dir == Path.cwd()
-        assert loader.global_dir == Path.home() / ".doraemon"
         assert loader._skills == {}
         assert loader._loaded is False
 
-    def test_initialization_custom_dirs(self):
-        """Test initialization with custom directories."""
+    def test_initialization_custom_project_dir(self):
+        """Test initialization with custom project directory."""
         project_dir = Path("/custom/project")
-        global_dir = Path("/custom/global")
-        loader = SkillLoader(project_dir=project_dir, global_dir=global_dir)
+        loader = SkillLoader(project_dir=project_dir)
         assert loader.project_dir == project_dir
-        assert loader.global_dir == global_dir
 
 
 class TestSkillLoaderDiscovery:
@@ -208,13 +205,13 @@ class TestSkillLoaderDiscovery:
 
     def test_discover_skills_empty(self, tmp_path):
         """Test discovery with no skills."""
-        loader = SkillLoader(project_dir=tmp_path, global_dir=tmp_path / "global")
+        loader = SkillLoader(project_dir=tmp_path)
         skills = loader.discover_skills()
         assert skills == []
 
     def test_discover_skills_with_valid_skill(self, tmp_path):
         """Test discovery with valid skill."""
-        skills_dir = tmp_path / ".doraemon" / "skills" / "test-skill"
+        skills_dir = tmp_path / ".agent" / "skills" / "test-skill"
         skills_dir.mkdir(parents=True)
         skill_file = skills_dir / "SKILL.md"
         skill_file.write_text("""---
@@ -233,19 +230,9 @@ Test content""")
         assert len(skills) == 1
         assert skills[0].name == "Test Skill"
 
-    def test_discover_skills_project_overrides_global(self, tmp_path):
-        """Test project skills are discovered alongside global skills."""
-        # Create global skill
-        global_skills_dir = tmp_path / "global" / "skills" / "test-skill"
-        global_skills_dir.mkdir(parents=True)
-        (global_skills_dir / "SKILL.md").write_text("""---
-name: Test Skill
-description: Global version
----
-Global""")
-
-        # Create project skill with same name
-        project_skills_dir = tmp_path / "project" / ".doraemon" / "skills" / "test-skill"
+    def test_discover_skills_project_only(self, tmp_path):
+        """Test discovery only reads project-local skills."""
+        project_skills_dir = tmp_path / "project" / ".agent" / "skills" / "test-skill"
         project_skills_dir.mkdir(parents=True)
         (project_skills_dir / "SKILL.md").write_text("""---
 name: Test Skill
@@ -253,14 +240,9 @@ description: Project version
 ---
 Project""")
 
-        loader = SkillLoader(
-            project_dir=tmp_path / "project",
-            global_dir=tmp_path / "global"
-        )
+        loader = SkillLoader(project_dir=tmp_path / "project")
         skills = loader.discover_skills()
-        # Should have both project and global skills discovered
-        # (the override happens during loading, not discovery)
-        assert len(skills) >= 1
+        assert len(skills) == 1
 
 
 class TestSkillLoaderLoading:
@@ -407,7 +389,7 @@ class TestSkillLoaderRelevance:
 
     def test_get_relevant_skills_with_threshold(self, tmp_path):
         """Test getting relevant skills respects threshold."""
-        skills_dir = tmp_path / ".doraemon" / "skills" / "python"
+        skills_dir = tmp_path / ".agent" / "skills" / "python"
         skills_dir.mkdir(parents=True)
         (skills_dir / "SKILL.md").write_text("""---
 name: Python
@@ -425,7 +407,7 @@ Content""")
 
     def test_get_relevant_skills_max_skills(self, tmp_path):
         """Test getting relevant skills respects max_skills."""
-        skills_dir = tmp_path / ".doraemon" / "skills"
+        skills_dir = tmp_path / ".agent" / "skills"
         for i in range(5):
             skill_dir = skills_dir / f"skill{i}"
             skill_dir.mkdir(parents=True)
@@ -469,7 +451,7 @@ class TestSkillManagerContextSkills:
 
     def test_get_skills_for_context_with_skills(self, tmp_path):
         """Test getting skills for matching context."""
-        skills_dir = tmp_path / ".doraemon" / "skills" / "python"
+        skills_dir = tmp_path / ".agent" / "skills" / "python"
         skills_dir.mkdir(parents=True)
         (skills_dir / "SKILL.md").write_text("""---
 name: Python Dev
@@ -489,7 +471,7 @@ Write Python code following PEP 8""")
 
     def test_get_skills_for_context_truncation(self, tmp_path):
         """Test skill content is truncated if too long."""
-        skills_dir = tmp_path / ".doraemon" / "skills" / "large"
+        skills_dir = tmp_path / ".agent" / "skills" / "large"
         skills_dir.mkdir(parents=True)
         large_content = "x" * 20000  # Very large content
         (skills_dir / "SKILL.md").write_text(f"""---
@@ -509,7 +491,7 @@ priority: 0
 
     def test_get_active_skills(self, tmp_path):
         """Test getting active skills."""
-        skills_dir = tmp_path / ".doraemon" / "skills" / "python"
+        skills_dir = tmp_path / ".agent" / "skills" / "python"
         skills_dir.mkdir(parents=True)
         (skills_dir / "SKILL.md").write_text("""---
 name: Python

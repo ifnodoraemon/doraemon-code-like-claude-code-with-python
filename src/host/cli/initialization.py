@@ -16,6 +16,7 @@ from src.core.cost_tracker import BudgetConfig, CostTracker
 from src.core.hooks import HookManager
 from src.core.model_client import ModelClient
 from src.core.permissions import PermissionManager
+from src.core.paths import hooks_path, permissions_path
 from src.core.session import SessionManager
 from src.core.skills import SkillManager
 from src.core.tool_selector import ToolSelector
@@ -76,7 +77,7 @@ def initialize_hook_manager(ctx: ContextManager) -> HookManager:
         session_id=ctx.session_id,
         permission_mode="default",
     )
-    hooks_file = Path(".doraemon/hooks.json")
+    hooks_file = hooks_path()
     if hooks_file.exists():
         hook_mgr.load_from_file(hooks_file)
     return hook_mgr
@@ -113,9 +114,9 @@ def initialize_session_manager() -> SessionManager:
 
 
 def initialize_permission_manager() -> PermissionManager:
-    """Initialize the permission manager, loading rules from .doraemon/permissions.json if exists."""
+    """Initialize the permission manager, loading project-local rules if present."""
     perm_mgr = PermissionManager()
-    rules_file = Path(".doraemon/permissions.json")
+    rules_file = permissions_path()
     if rules_file.exists():
         perm_mgr.load_rules_from_file(rules_file)
     return perm_mgr

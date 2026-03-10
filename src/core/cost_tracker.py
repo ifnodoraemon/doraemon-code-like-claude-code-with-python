@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .paths import usage_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -167,7 +169,7 @@ class CostTracker:
         self,
         project: str = "default",
         session_id: str = "",
-        storage_dir: str = ".doraemon/usage",
+        storage_dir: str = ".agent/usage",
         budget: BudgetConfig | None = None,
     ):
         """

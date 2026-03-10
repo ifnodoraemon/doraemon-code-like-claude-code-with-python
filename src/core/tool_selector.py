@@ -32,7 +32,7 @@ READ_TOOLS = [
 # 写入工具 - 只有 build 模式可用
 WRITE_TOOLS = [
     "write",  # 统一写入（创建/编辑/删除/移动/复制）
-    "shell_execute",  # 执行命令（包含 git、npm、pip 等）
+    "run",  # 统一执行（shell/python/background/install）
 ]
 
 # 辅助工具 - 按需使用
@@ -56,8 +56,6 @@ AUX_TOOLS = [
 ADVANCED_TOOLS = [
     "semantic_search",  # 语义搜索
     "index_codebase",  # 索引代码库
-    "execute_python",  # 执行 Python 代码
-    "shell_background",  # 后台执行
     "git",  # 统一 Git 工具（推荐）
     "git_status",  # Git 状态（向后兼容）
     "git_diff",  # Git 差异（向后兼容）

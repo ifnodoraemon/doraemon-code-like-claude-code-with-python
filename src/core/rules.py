@@ -1,69 +1,87 @@
-"""Rules and instructions loading system for Doraemon.
+"""Rules and instruction loading.
 
-This module handles loading project rules from:
-1. DORAEMON.md in project directory (project-specific rules)
-2. DORAEMON.md in ~/.doraemon/ (global user rules)
-3. Additional instruction files specified in config
+This module only loads project-local instructions:
+1. Hierarchical `AGENTS.md` files from the project root down to cwd
+2. Additional instruction files explicitly listed in config
+3. Project-local memory from `.agent/MEMORY.md`
 """
 
 from pathlib import Path
 
 from .logger import get_logger
+from .paths import MEMORY_FILENAME, RULES_FILENAME, memory_path
 
 logger = get_logger(__name__)
 
-# The rules file name
-RULES_FILE = "DORAEMON.md"
+
+def _read_instruction_file(path: Path) -> str | None:
+    """Read a single instruction file."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.error(f"Failed to read {path}: {e}")
+        return None
+
+
+def _find_project_boundary(project_dir: Path) -> Path:
+    """Find the repository / project root used for AGENTS.md discovery."""
+    for candidate in [project_dir, *project_dir.parents]:
+        if (candidate / ".git").exists() or (candidate / "pyproject.toml").exists():
+            return candidate
+    return project_dir
+
+
+def _combine_instruction_sections(sections: list[tuple[str, str]]) -> str | None:
+    """Combine labeled instruction sections into one prompt fragment."""
+    if not sections:
+        return None
+    return "\n\n---\n\n".join(f"# {label}\n\n{content}" for label, content in sections)
+
+
+def _load_hierarchical_agents(project_dir: Path) -> list[tuple[str, str]]:
+    """Load `AGENTS.md` files from project root down to the current directory."""
+    boundary = _find_project_boundary(project_dir.resolve())
+    search_dirs: list[Path] = []
+    current = project_dir.resolve()
+
+    while True:
+        search_dirs.append(current)
+        if current == boundary or current.parent == current:
+            break
+        current = current.parent
+
+    sections: list[tuple[str, str]] = []
+    for directory in reversed(search_dirs):
+        agents_path = directory / RULES_FILENAME
+        if not agents_path.exists():
+            continue
+
+        content = _read_instruction_file(agents_path)
+        if not content:
+            continue
+
+        if directory == boundary:
+            label = f"Project Instructions ({RULES_FILENAME})"
+        else:
+            label = f"Nested Instructions ({RULES_FILENAME}: {directory.relative_to(boundary)})"
+        sections.append((label, content))
+
+    return sections
 
 
 def load_project_rules(project_dir: Path | None = None) -> str | None:
-    """
-    Load DORAEMON.md file from project directory.
-
-    Args:
-        project_dir: Project directory to search in (defaults to cwd)
-
-    Returns:
-        Content of DORAEMON.md or None if not found
-    """
+    """Load hierarchical project `AGENTS.md` instructions."""
     if project_dir is None:
         project_dir = Path.cwd()
 
-    rules_file = project_dir / RULES_FILE
+    sections = _load_hierarchical_agents(project_dir)
 
-    if rules_file.exists():
-        try:
-            content = rules_file.read_text(encoding="utf-8")
-            logger.info(f"Loaded project rules: {rules_file}")
-            return content
-        except Exception as e:
-            logger.error(f"Failed to read {RULES_FILE}: {e}")
-            return None
-
-    logger.debug(f"No project {RULES_FILE} found")
-    return None
-
-
-def load_global_rules() -> str | None:
-    """
-    Load DORAEMON.md from user's home directory.
-
-    Returns:
-        Content of global DORAEMON.md or None if not found
-    """
-    global_rules = Path.home() / ".doraemon" / RULES_FILE
-
-    if global_rules.exists():
-        try:
-            content = global_rules.read_text(encoding="utf-8")
-            logger.info(f"Loaded global rules: {global_rules}")
-            return content
-        except Exception as e:
-            logger.error(f"Failed to read global {RULES_FILE}: {e}")
-            return None
-
-    logger.debug(f"No global {RULES_FILE} found")
-    return None
+    combined = _combine_instruction_sections(sections)
+    if combined:
+        logger.info("Loaded project rules and instructions")
+    else:
+        logger.debug(f"No project {RULES_FILENAME} found")
+    return combined
 
 
 def load_instruction_file(file_path: str, base_dir: Path | None = None) -> str | None:
@@ -125,9 +143,8 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     Load all instructions from various sources and combine them.
 
     Loading order:
-    1. Project DORAEMON.md (highest priority)
-    2. Global DORAEMON.md
-    3. Additional instruction files from config
+    1. Project AGENTS.md files (top-down)
+    2. Additional instruction files from config
 
     Args:
         config: Configuration dictionary
@@ -138,17 +155,12 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     """
     instructions = []
 
-    # 1. Project DORAEMON.md (highest priority)
+    # 1. Project AGENTS.md hierarchy
     project_rules = load_project_rules(project_dir)
     if project_rules:
-        instructions.append(f"# Project Rules ({RULES_FILE})\n\n" + project_rules)
+        instructions.append(f"# Project Rules ({RULES_FILENAME})\n\n" + project_rules)
 
-    # 2. Global DORAEMON.md
-    global_rules = load_global_rules()
-    if global_rules:
-        instructions.append(f"# Global Rules (~/.doraemon/{RULES_FILE})\n\n" + global_rules)
-
-    # 3. Additional instruction files from config
+    # 2. Additional instruction files from config
     instruction_files = config.get("instructions", [])
     if instruction_files:
         logger.info(f"Loading {len(instruction_files)} additional instruction files")
@@ -171,23 +183,15 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
 
 
 def create_default_rules(project_dir: Path | None = None) -> Path:
-    """
-    Create a default DORAEMON.md file in the project directory.
-
-    Args:
-        project_dir: Project directory (defaults to cwd)
-
-    Returns:
-        Path to created DORAEMON.md file
-    """
+    """Create a default `AGENTS.md` file in the project directory."""
     if project_dir is None:
         project_dir = Path.cwd()
 
-    rules_file = project_dir / RULES_FILE
+    rules_file = project_dir / RULES_FILENAME
 
     default_content = """# Project Rules
 
-This file contains project-specific rules and conventions for Doraemon Code.
+This file contains project-specific rules and conventions for the agent.
 
 ## Project Overview
 <!-- Brief description of what this project does -->
@@ -210,7 +214,7 @@ This file contains project-specific rules and conventions for Doraemon Code.
 """
 
     rules_file.write_text(default_content, encoding="utf-8")
-    logger.info(f"Created default {RULES_FILE}: {rules_file}")
+    logger.info(f"Created default {RULES_FILENAME}: {rules_file}")
 
     return rules_file
 
@@ -240,49 +244,19 @@ Follow these project-specific rules and conventions in all your responses.
 """
 
 
-# Memory file name
-MEMORY_FILE = "MEMORY.md"
-
-
 def load_project_memory(project_dir: Path | None = None) -> str | None:
-    """
-    Load MEMORY.md from project's .doraemon directory.
-
-    Args:
-        project_dir: Project directory (defaults to cwd)
-
-    Returns:
-        Content of .doraemon/MEMORY.md or None if not found
-    """
+    """Load project-local `.agent/MEMORY.md`."""
     if project_dir is None:
         project_dir = Path.cwd()
 
-    memory_file = project_dir / ".doraemon" / MEMORY_FILE
+    memory_file = memory_path(project_dir)
     if memory_file.exists():
         try:
             content = memory_file.read_text(encoding="utf-8")
             logger.info(f"Loaded project memory: {memory_file}")
             return content
         except Exception as e:
-            logger.error(f"Failed to read {MEMORY_FILE}: {e}")
-    return None
-
-
-def load_global_memory() -> str | None:
-    """
-    Load MEMORY.md from ~/.doraemon/.
-
-    Returns:
-        Content of global MEMORY.md or None if not found
-    """
-    global_memory = Path.home() / ".doraemon" / MEMORY_FILE
-    if global_memory.exists():
-        try:
-            content = global_memory.read_text(encoding="utf-8")
-            logger.info(f"Loaded global memory: {global_memory}")
-            return content
-        except Exception as e:
-            logger.error(f"Failed to read global {MEMORY_FILE}: {e}")
+            logger.error(f"Failed to read {MEMORY_FILENAME}: {e}")
     return None
 
 

@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .paths import conversations_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,7 +146,7 @@ class ContextConfig:
 
     # Persistence
     auto_save: bool = True
-    save_directory: str = ".doraemon/conversations"
+    save_directory: str = ".agent/conversations"
 
 
 # Model context window sizes (latest generation only, from official docs 2026-03)

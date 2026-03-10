@@ -18,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .paths import sessions_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,7 +111,7 @@ class SessionManager:
     Manages multiple sessions with persistence.
 
     Usage:
-        mgr = SessionManager(base_dir=".doraemon/sessions")
+        mgr = SessionManager(base_dir=".agent/sessions")
 
         # Create new session
         session = mgr.create_session(project="myproject", name="auth-refactor")
@@ -128,7 +130,7 @@ class SessionManager:
         mgr.export_session("abc123", format="markdown", path="session.md")
     """
 
-    def __init__(self, base_dir: str | Path = ".doraemon/sessions"):
+    def __init__(self, base_dir: str | Path = ".agent/sessions"):
         """
         Initialize session manager.
 

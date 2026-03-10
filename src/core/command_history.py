@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .paths import history_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,7 +87,7 @@ class CommandHistory:
         if history_file:
             self._history_file = Path(history_file)
         else:
-            self._history_file = Path.home() / ".doraemon" / "history" / f"{project}.json"
+            self._history_file = history_dir() / f"{project}.json"
 
         self._history_file.parent.mkdir(parents=True, exist_ok=True)
         self._entries: list[HistoryEntry] = []

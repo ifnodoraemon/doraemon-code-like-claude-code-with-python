@@ -6,6 +6,8 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from src.core.paths import chroma_dir, persona_path, state_dir
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,8 +21,8 @@ mcp = FastMCP("DoraemonMemory")
 # --------------------------
 # Core Data Structures
 # --------------------------
-PERSIST_DIR = ".doraemon/chroma_db"
-MEMORY_FILE = ".doraemon/memory.json"
+PERSIST_DIR = str(chroma_dir())
+MEMORY_FILE = str(persona_path())
 
 # Lazy-initialized globals
 _initialized = False
@@ -37,7 +39,7 @@ def _ensure_initialized():
         return
     _initialized = True
 
-    os.makedirs(".doraemon", exist_ok=True)
+    state_dir().mkdir(parents=True, exist_ok=True)
 
     try:
         import chromadb

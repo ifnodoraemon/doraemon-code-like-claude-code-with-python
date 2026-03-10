@@ -268,8 +268,8 @@ class Doctor:
     def check_project_config(self) -> CheckResult:
         """Check project configuration."""
         config_paths = [
-            self.project_dir / ".doraemon" / "config.json",
-            self.project_dir / "DORAEMON.md",
+            self.project_dir / ".agent" / "config.json",
+            self.project_dir / "AGENTS.md",
             self.project_dir / ".env",
         ]
 
@@ -288,7 +288,7 @@ class Doctor:
                 status=CheckStatus.WARNING,
                 message="No configuration found",
                 details="Project may need initialization",
-                fix_suggestion="Run /init to create DORAEMON.md",
+                fix_suggestion="Run /init to create AGENTS.md",
             )
 
         status = CheckStatus.OK if not missing else CheckStatus.WARNING
@@ -303,8 +303,7 @@ class Doctor:
         """Check file system permissions."""
         test_paths = [
             self.project_dir,
-            self.project_dir / ".doraemon",
-            Path.home() / ".doraemon",
+            self.project_dir / ".agent",
         ]
 
         issues = []

@@ -24,6 +24,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .paths import recovery_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -171,7 +173,7 @@ class TaskRecoveryManager:
             storage_dir: Directory for task state storage
             auto_save_interval: Auto-save interval in seconds
         """
-        self._storage_dir = storage_dir or Path.home() / ".doraemon" / "recovery"
+        self._storage_dir = storage_dir or recovery_dir()
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
         self._tasks: dict[str, RecoverableTask] = {}

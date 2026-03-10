@@ -11,6 +11,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from src.core.paths import config_path, memory_path, skills_dir
+from src.core.rules import create_default_rules
 from src.host.cli.command_context import CommandContext
 
 console = Console()
@@ -169,31 +171,15 @@ class CoreCommandHandler:
         return result
 
     def _handle_init(self):
-        """Initialize project with DORAEMON.md."""
-        fname = "DORAEMON.md"
+        """Initialize project with AGENTS.md."""
+        fname = "AGENTS.md"
         path = Path.cwd() / fname
         if path.exists():
             console.print(f"[yellow]{fname} already exists.[/yellow]")
             return
 
-        content = """# Doraemon Code Project Rules
-
-Project specific rules for Doraemon Code.
-
-## Tech Stack
-- Language: Python 3.10+
-- Framework: FastAPI
-
-## Code Style
-- 4 space indentation
-- Type hints required
-
-## Directory Structure
-- src/: Source code
-- tests/: Tests
-"""
         try:
-            path.write_text(content, encoding="utf-8")
+            create_default_rules(Path.cwd())
             console.print(f"[green]Initialized project. Created {fname}[/green]")
             console.print("[dim]Edit this file to define project-specific rules.[/dim]")
         except Exception as e:
@@ -204,7 +190,7 @@ Project specific rules for Doraemon Code.
         console.print("""
 [bold]Commands:[/bold]
   /help           - Show this help
-  /init           - Initialize project (create DORAEMON.md)
+  /init           - Initialize project (create AGENTS.md)
   /mode <name>    - Switch mode (plan/build)
   /model [name]   - Switch/list AI models
   /status         - Show system status
@@ -307,7 +293,7 @@ Project specific rules for Doraemon Code.
             console.print("  [dim]No skills currently active[/dim]")
         console.print("\n[dim]Skills are loaded automatically based on conversation context.[/dim]")
         console.print(
-            "[dim]Put SKILL.md files in .doraemon/skills/<name>/ to add custom skills.[/dim]"
+            f"[dim]Put SKILL.md files in {skills_dir()}/<name>/ to add custom skills.[/dim]"
         )
 
     def _show_tools(self, mode: str, tool_names: list, sensitive_tools: set):
@@ -810,12 +796,12 @@ Project specific rules for Doraemon Code.
         import json
         import os
 
-        config_path = Path.home() / ".doraemon" / "config.json"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_file = config_path()
+        config_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Load config
-        if config_path.exists():
-            config_data = json.loads(config_path.read_text())
+        if config_file.exists():
+            config_data = json.loads(config_file.read_text())
         else:
             config_data = {}
 
@@ -845,7 +831,7 @@ Project specific rules for Doraemon Code.
             key = cmd_args[1]
             value = " ".join(cmd_args[2:])
             config_data[key] = value
-            config_path.write_text(json.dumps(config_data, indent=2))
+            config_file.write_text(json.dumps(config_data, indent=2))
             console.print(f"[green]Set {key} = {value}[/green]")
 
         elif subcommand == "model":
@@ -879,35 +865,24 @@ Project specific rules for Doraemon Code.
 
         Usage:
             /memory              - Edit project MEMORY.md
-            /memory global       - Edit global ~/.doraemon/MEMORY.md
             /memory show         - Show current memory content
         """
         import os
 
-        project_memory = Path(".doraemon/MEMORY.md")
-        global_memory = Path.home() / ".doraemon" / "MEMORY.md"
+        project_memory = memory_path()
 
         if not cmd_args or cmd_args[0] == "project":
             target = project_memory
             target.parent.mkdir(parents=True, exist_ok=True)
-        elif cmd_args[0] == "global":
-            target = global_memory
-            target.parent.mkdir(parents=True, exist_ok=True)
         elif cmd_args[0] == "show":
-            console.print("[bold cyan]Project Memory (.doraemon/MEMORY.md):[/bold cyan]")
+            console.print("[bold cyan]Project Memory (.agent/MEMORY.md):[/bold cyan]")
             if project_memory.exists():
                 console.print(project_memory.read_text())
             else:
                 console.print("[dim](not found)[/dim]")
-
-            console.print("\n[bold cyan]Global Memory (~/.doraemon/MEMORY.md):[/bold cyan]")
-            if global_memory.exists():
-                console.print(global_memory.read_text())
-            else:
-                console.print("[dim](not found)[/dim]")
             return
         else:
-            console.print("[red]Usage: /memory [project|global|show][/red]")
+            console.print("[red]Usage: /memory [project|show][/red]")
             return
 
         # Create file if not exists
@@ -954,8 +929,8 @@ Project specific rules for Doraemon Code.
             checks.append(("ANTHROPIC_API_KEY", "✓" if anthropic_key else "✗", anthropic_key))
 
         # Directories
-        checks.append((".doraemon/", "✓" if Path(".doraemon").exists() else "Will create", True))
-        checks.append(("DORAEMON.md", "✓" if Path("DORAEMON.md").exists() else "Use /init", Path("DORAEMON.md").exists()))
+        checks.append((".agent/", "✓" if Path(".agent").exists() else "Will create", True))
+        checks.append(("AGENTS.md", "✓" if Path("AGENTS.md").exists() else "Use /init", Path("AGENTS.md").exists()))
 
         # Git
         try:
@@ -994,4 +969,3 @@ Project specific rules for Doraemon Code.
             "tool_definitions": convert_tools_to_definitions(genai_tools),
             "system_prompt": prompt,
         }
-

@@ -15,6 +15,7 @@ from typing import Any
 import chromadb
 from mcp.server.fastmcp import FastMCP
 
+from src.core.paths import chroma_dir, state_dir
 from src.core.security import validate_path
 from src.services.embeddings import RemoteEmbeddingFunction
 
@@ -28,11 +29,11 @@ mcp = FastMCP("DoraemonSemanticSearch")
 # Configuration
 # ========================================
 
-PERSIST_DIR = ".doraemon/chroma_db"
+PERSIST_DIR = str(chroma_dir())
 COLLECTION_NAME = "codebase_index_remote"
 
 # Ensure directory exists
-os.makedirs(".doraemon", exist_ok=True)
+state_dir().mkdir(parents=True, exist_ok=True)
 
 # Initialize ChromaDB
 try:

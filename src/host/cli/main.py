@@ -30,6 +30,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
+from src.core.paths import config_path
 from src.core.session import SessionManager
 from src.host.cli.chat_loop import chat_loop
 
@@ -208,13 +209,13 @@ def config(
     value: str = typer.Argument(None, help="Configuration value"),
 ):
     """Manage configuration settings."""
-    config_path = Path.home() / ".doraemon" / "config.json"
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_file = config_path()
+    config_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Load existing config
-    if config_path.exists():
+    if config_file.exists():
         import json
-        config_data = json.loads(config_path.read_text())
+        config_data = json.loads(config_file.read_text())
     else:
         config_data = {}
 
@@ -242,7 +243,7 @@ def config(
         if key and value:
             config_data[key] = value
             import json
-            config_path.write_text(json.dumps(config_data, indent=2))
+            config_file.write_text(json.dumps(config_data, indent=2))
             console.print(f"[green]Set {key} = {value}[/green]")
         else:
             console.print("[red]Usage: doraemon config set <key> <value>[/red]")
@@ -255,7 +256,7 @@ def config(
             if isinstance(config_data[key], list):
                 config_data[key].append(value)
                 import json
-                config_path.write_text(json.dumps(config_data, indent=2))
+                config_file.write_text(json.dumps(config_data, indent=2))
                 console.print(f"[green]Added {value} to {key}[/green]")
             else:
                 console.print(f"[red]{key} is not a list[/red]")
@@ -267,7 +268,7 @@ def config(
                 if value in config_data[key]:
                     config_data[key].remove(value)
                     import json
-                    config_path.write_text(json.dumps(config_data, indent=2))
+                    config_file.write_text(json.dumps(config_data, indent=2))
                     console.print(f"[green]Removed {value} from {key}[/green]")
                 else:
                     console.print(f"[yellow]{value} not in {key}[/yellow]")
@@ -317,15 +318,11 @@ def doctor():
             checks.append(("API Keys", "⚠ No API keys configured", False))
 
     # Check directories
-    doraemon_dir = Path(".doraemon")
-    checks.append((".doraemon directory", "✓ Exists" if doraemon_dir.exists() else "Will be created", True))
+    agent_dir = Path(".agent")
+    checks.append((".agent directory", "✓ Exists" if agent_dir.exists() else "Will be created", True))
 
-    home_doraemon = Path.home() / ".doraemon"
-    checks.append(("~/.doraemon directory", "✓ Exists" if home_doraemon.exists() else "Will be created", True))
-
-    # Check DORAEMON.md
-    doraemon_md = Path("DORAEMON.md")
-    checks.append(("DORAEMON.md", "✓ Found" if doraemon_md.exists() else "Not found (use /init)", doraemon_md.exists()))
+    agents_md = Path("AGENTS.md")
+    checks.append(("AGENTS.md", "✓ Found" if agents_md.exists() else "Not found (use /init)", agents_md.exists()))
 
     # Check git
     import subprocess

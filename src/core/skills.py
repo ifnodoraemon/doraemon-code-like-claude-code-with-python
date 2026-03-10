@@ -1,5 +1,5 @@
 """
-Skills System for Doraemon
+Skills System
 
 Inspired by Anthropic's Agent Skills (October 2025):
 - Skills are reusable, structured packages of instructions and resources
@@ -7,7 +7,7 @@ Inspired by Anthropic's Agent Skills (October 2025):
 - Uses progressive disclosure to avoid context bloat
 
 Directory Structure:
-    .doraemon/skills/
+    .agent/skills/
     ├── python-dev/
     │   ├── SKILL.md          # Required: metadata and main instructions
     │   ├── style-guide.md    # Optional: additional resources
@@ -38,6 +38,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from .paths import skills_dir
 
 logger = logging.getLogger(__name__)
 
@@ -128,11 +130,7 @@ class Skill:
 
 class SkillLoader:
     """
-    Loads and manages skills from the filesystem.
-
-    Skills are discovered from:
-    1. .doraemon/skills/ in project directory
-    2. ~/.doraemon/skills/ for global skills
+    Loads and manages project-local skills from the filesystem.
     """
 
     SKILL_FILE = "SKILL.md"
@@ -140,10 +138,8 @@ class SkillLoader:
     def __init__(
         self,
         project_dir: Path | None = None,
-        global_dir: Path | None = None,
     ):
         self.project_dir = project_dir or Path.cwd()
-        self.global_dir = global_dir or Path.home() / ".doraemon"
 
         self._skills: dict[str, Skill] = {}
         self._loaded = False
@@ -157,23 +153,10 @@ class SkillLoader:
         """
         skills_metadata = []
 
-        # Project skills (higher priority)
-        project_skills_dir = self.project_dir / ".doraemon" / "skills"
+        project_skills_dir = skills_dir(self.project_dir)
         if project_skills_dir.exists():
             for skill_dir in project_skills_dir.iterdir():
                 if skill_dir.is_dir():
-                    metadata = self._load_skill_metadata(skill_dir)
-                    if metadata:
-                        skills_metadata.append(metadata)
-
-        # Global skills
-        global_skills_dir = self.global_dir / "skills"
-        if global_skills_dir.exists():
-            for skill_dir in global_skills_dir.iterdir():
-                if skill_dir.is_dir():
-                    # Skip if same name exists in project (project overrides)
-                    if any(s.name == skill_dir.name for s in skills_metadata):
-                        continue
                     metadata = self._load_skill_metadata(skill_dir)
                     if metadata:
                         skills_metadata.append(metadata)
@@ -242,14 +225,12 @@ class SkillLoader:
             self._loaded = True
 
         # Load skills that might be relevant
-        project_skills_dir = self.project_dir / ".doraemon" / "skills"
-        global_skills_dir = self.global_dir / "skills"
+        project_skills_dir = skills_dir(self.project_dir)
 
-        for skills_dir in [project_skills_dir, global_skills_dir]:
-            if skills_dir.exists():
-                for skill_dir in skills_dir.iterdir():
-                    if skill_dir.is_dir() and skill_dir.name not in self._skills:
-                        self.load_skill(skill_dir)
+        if project_skills_dir.exists():
+            for skill_dir in project_skills_dir.iterdir():
+                if skill_dir.is_dir() and skill_dir.name not in self._skills:
+                    self.load_skill(skill_dir)
 
         # Score and filter skills
         scored_skills = []
