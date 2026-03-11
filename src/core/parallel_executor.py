@@ -15,6 +15,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -246,6 +247,7 @@ class ParallelExecutor:
         self._timeout = timeout
         self._analyzer = DependencyAnalyzer()
         self._semaphore = asyncio.Semaphore(max_parallel)
+        self._sync_executor: ThreadPoolExecutor | None = None
 
     async def execute(
         self,
@@ -265,12 +267,13 @@ class ParallelExecutor:
         if not calls:
             return []
 
-        if strategy == ExecutionStrategy.SEQUENTIAL:
-            return await self._execute_sequential(calls)
-        elif strategy == ExecutionStrategy.PARALLEL:
-            return await self._execute_parallel(calls)
-        else:  # SMART
-            return await self._execute_smart(calls)
+        with self._sync_executor_scope():
+            if strategy == ExecutionStrategy.SEQUENTIAL:
+                return await self._execute_sequential(calls)
+            elif strategy == ExecutionStrategy.PARALLEL:
+                return await self._execute_parallel(calls)
+            else:  # SMART
+                return await self._execute_smart(calls)
 
     async def _execute_sequential(self, calls: list[ToolCall]) -> list[ToolResult]:
         """Execute tools sequentially."""
@@ -322,7 +325,7 @@ class ParallelExecutor:
                 else:
                     # Sync handler
                     output = await asyncio.get_running_loop().run_in_executor(
-                        None, self._tool_handler, call.name, call.arguments
+                        self._sync_executor, self._tool_handler, call.name, call.arguments
                     )
 
                 completed_at = time.time()
@@ -430,20 +433,25 @@ class ParallelExecutor:
         if not calls:
             return []
 
-        stages = self._analyzer.analyze(calls)
-        results = []
-        call_to_result: dict[str, ToolResult] = {}
+        with self._sync_executor_scope():
+            stages = self._analyzer.analyze(calls)
+            results = []
+            call_to_result: dict[str, ToolResult] = {}
 
-        for stage in stages:
-            # Execute stage in parallel
-            stage_results = await self._execute_stage_streaming(stage, on_result)
-            results.extend(stage_results)
+            for stage in stages:
+                # Execute stage in parallel
+                stage_results = await self._execute_stage_streaming(stage, on_result)
+                results.extend(stage_results)
 
-            # Store for dependency injection
-            for r in stage_results:
-                call_to_result[r.id] = r
+                # Store for dependency injection
+                for r in stage_results:
+                    call_to_result[r.id] = r
 
-        return results
+            return results
+
+    def _sync_executor_scope(self):
+        """Create a short-lived thread pool for sync handlers."""
+        return _SyncExecutorScope(self)
 
     async def _execute_stage_streaming(
         self,
@@ -483,6 +491,32 @@ class ParallelExecutor:
                 if not t.done():
                     t.cancel()
             raise
+
+
+class _SyncExecutorScope:
+    """Context manager for per-execution sync thread pools."""
+
+    def __init__(self, executor: ParallelExecutor):
+        self._executor = executor
+        self._created = False
+
+    def __enter__(self):
+        if (
+            not asyncio.iscoroutinefunction(self._executor._tool_handler)
+            and self._executor._sync_executor is None
+        ):
+            self._executor._sync_executor = ThreadPoolExecutor(
+                max_workers=self._executor._max_parallel,
+                thread_name_prefix="parallel_executor",
+            )
+            self._created = True
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._created and self._executor._sync_executor is not None:
+            self._executor._sync_executor.shutdown(wait=True, cancel_futures=True)
+            self._executor._sync_executor = None
+        return False
 
 
 async def execute_tools_streaming(
