@@ -154,10 +154,13 @@ def execute_command(
         output_lines = []
         last_activity_time = time.time()
 
+        idle_poll_interval = 0.1
+
         while True:
-            # Block waiting for output (up to 1s), avoids CPU-burning busy-loop
+            # Poll frequently enough that idle timeouts stay responsive even if
+            # the process is silent and wall-clock time is being simulated.
             try:
-                line = output_queue.get(timeout=1.0)
+                line = output_queue.get(timeout=idle_poll_interval)
                 output_lines.append(line)
                 last_activity_time = time.time()
                 # Drain any additional lines already queued
