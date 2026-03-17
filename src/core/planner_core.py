@@ -46,23 +46,6 @@ class TaskPlanner:
         ).hexdigest()[:6]
         return f"{prefix}_{hash_part}"
 
-    # Backward compatibility wrappers for analysis methods
-    def _estimate_complexity(self, text: str) -> int:
-        """Estimate complexity from text (backward compatibility wrapper)."""
-        return self._analyzer.estimate_complexity(text)
-
-    def _estimate_time(self, complexity: int) -> int:
-        """Estimate time based on complexity (backward compatibility wrapper)."""
-        return self._analyzer.estimate_time(complexity)
-
-    def _assess_risk(self, task: Task):
-        """Assess risk for a task (backward compatibility wrapper)."""
-        return self._analyzer.assess_risk(task)
-
-    def _recommend_checkpoints(self, tasks: list[Task]):
-        """Recommend checkpoints for tasks (backward compatibility wrapper)."""
-        return self._analyzer.recommend_checkpoints(tasks)
-
     def generate_plan(
         self, goal: str, context: dict[str, Any] | None = None
     ) -> ExecutionPlan:

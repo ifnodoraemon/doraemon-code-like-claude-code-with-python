@@ -1,9 +1,14 @@
 """Comprehensive tests for planner.py"""
-import pytest
+
 from src.core.planner import (
-    TaskStatus, TaskPriority, RiskLevel,
-    TaskDependency, RiskAssessment, Task, ExecutionPlan,
-    TaskPlanner
+    ExecutionPlan,
+    RiskAssessment,
+    RiskLevel,
+    Task,
+    TaskDependency,
+    TaskPlanner,
+    TaskPriority,
+    TaskStatus,
 )
 
 
@@ -273,27 +278,27 @@ class TestTaskPlanner:
         """Test complexity estimation for simple tasks."""
         planner = TaskPlanner()
         # "fix" keyword maps to complexity 2, use "typo" for complexity 1
-        complexity = planner._estimate_complexity("typo in readme")
+        complexity = planner._analyzer.estimate_complexity("typo in readme")
         assert complexity == 1
 
     def test_estimate_complexity_medium(self):
         """Test complexity estimation for medium tasks."""
         planner = TaskPlanner()
-        complexity = planner._estimate_complexity("implement new feature")
+        complexity = planner._analyzer.estimate_complexity("implement new feature")
         assert complexity == 3
 
     def test_estimate_complexity_high(self):
         """Test complexity estimation for high tasks."""
         planner = TaskPlanner()
-        complexity = planner._estimate_complexity("refactor entire architecture")
+        complexity = planner._analyzer.estimate_complexity("refactor entire architecture")
         assert complexity == 5
 
     def test_estimate_time(self):
         """Test time estimation."""
         planner = TaskPlanner()
-        assert planner._estimate_time(1) == 5
-        assert planner._estimate_time(3) == 30
-        assert planner._estimate_time(5) == 120
+        assert planner._analyzer.estimate_time(1) == 5
+        assert planner._analyzer.estimate_time(3) == 30
+        assert planner._analyzer.estimate_time(5) == 120
 
     def test_generate_plan_implementation(self):
         """Test generating plan for implementation task."""
@@ -331,14 +336,14 @@ class TestTaskPlanner:
         """Test risk assessment for low risk task."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Add comment", description="Add documentation comment")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level == RiskLevel.LOW
 
     def test_assess_risk_high_delete(self):
         """Test risk assessment for destructive operation."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Delete database", description="Remove old database")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level == RiskLevel.HIGH
         assert any("Destructive" in f for f in risk.factors)
 
@@ -346,14 +351,14 @@ class TestTaskPlanner:
         """Test risk assessment for production changes."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Deploy", description="Deploy to production")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level in [RiskLevel.MEDIUM, RiskLevel.HIGH]
 
     def test_recommend_checkpoints_high_complexity(self):
         """Test checkpoint recommendation for high complexity."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Complex", description="Complex task", complexity=5)
-        planner._recommend_checkpoints([task])
+        planner._analyzer.recommend_checkpoints([task])
         assert task.checkpoint_recommended is True
 
     def test_recommend_checkpoints_high_risk(self):
@@ -361,7 +366,7 @@ class TestTaskPlanner:
         planner = TaskPlanner()
         risk = RiskAssessment(level=RiskLevel.HIGH)
         task = Task(id="t1", title="Risky", description="Risky task", risk=risk)
-        planner._recommend_checkpoints([task])
+        planner._analyzer.recommend_checkpoints([task])
         assert task.checkpoint_recommended is True
 
     def test_recommend_checkpoints_many_files(self):
@@ -373,7 +378,7 @@ class TestTaskPlanner:
             description="Affects many files",
             files_affected=["f1", "f2", "f3", "f4"]
         )
-        planner._recommend_checkpoints([task])
+        planner._analyzer.recommend_checkpoints([task])
         assert task.checkpoint_recommended is True
 
     def test_update_task_status(self):

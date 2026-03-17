@@ -1,10 +1,14 @@
 """Advanced comprehensive tests for planner.py - 25+ tests for improved coverage"""
-import pytest
-from datetime import datetime
+
 from src.core.planner import (
-    TaskStatus, TaskPriority, RiskLevel,
-    TaskDependency, RiskAssessment, Task, ExecutionPlan,
-    TaskPlanner
+    ExecutionPlan,
+    RiskAssessment,
+    RiskLevel,
+    Task,
+    TaskDependency,
+    TaskPlanner,
+    TaskPriority,
+    TaskStatus,
 )
 
 
@@ -256,39 +260,39 @@ class TestTaskPlannerComplexityEstimation:
         planner = TaskPlanner()
 
         # Level 5
-        assert planner._estimate_complexity("refactor the architecture") == 5
-        assert planner._estimate_complexity("security migration") == 5
+        assert planner._analyzer.estimate_complexity("refactor the architecture") == 5
+        assert planner._analyzer.estimate_complexity("security migration") == 5
 
         # Level 4
-        assert planner._estimate_complexity("integrate new API") == 4
-        assert planner._estimate_complexity("optimize database") == 4
+        assert planner._analyzer.estimate_complexity("integrate new API") == 4
+        assert planner._analyzer.estimate_complexity("optimize database") == 4
 
         # Level 3
-        assert planner._estimate_complexity("implement new feature") == 3
+        assert planner._analyzer.estimate_complexity("implement new feature") == 3
 
         # Level 2
-        assert planner._estimate_complexity("fix bug in code") == 2
-        assert planner._estimate_complexity("fix typo") == 2  # "fix" is level 2
+        assert planner._analyzer.estimate_complexity("fix bug in code") == 2
+        assert planner._analyzer.estimate_complexity("fix typo") == 2  # "fix" is level 2
 
     def test_estimate_complexity_default(self):
         """Test complexity estimation defaults to 2."""
         planner = TaskPlanner()
-        complexity = planner._estimate_complexity("random task description")
+        complexity = planner._analyzer.estimate_complexity("random task description")
         assert complexity == 2
 
     def test_estimate_time_mapping(self):
         """Test time estimation for each complexity level."""
         planner = TaskPlanner()
-        assert planner._estimate_time(1) == 5
-        assert planner._estimate_time(2) == 15
-        assert planner._estimate_time(3) == 30
-        assert planner._estimate_time(4) == 60
-        assert planner._estimate_time(5) == 120
+        assert planner._analyzer.estimate_time(1) == 5
+        assert planner._analyzer.estimate_time(2) == 15
+        assert planner._analyzer.estimate_time(3) == 30
+        assert planner._analyzer.estimate_time(4) == 60
+        assert planner._analyzer.estimate_time(5) == 120
 
     def test_estimate_time_unknown_complexity(self):
         """Test time estimation for unknown complexity."""
         planner = TaskPlanner()
-        time = planner._estimate_time(10)
+        time = planner._analyzer.estimate_time(10)
         assert time == 30  # Default
 
 
@@ -349,14 +353,14 @@ class TestTaskPlannerRiskAssessment:
         """Test low risk assessment."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Add comment", description="Add documentation")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level == RiskLevel.LOW
 
     def test_assess_risk_delete_operation(self):
         """Test high risk for delete operations."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Delete old files", description="Remove deprecated code")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level == RiskLevel.HIGH
         assert any("Destructive" in f for f in risk.factors)
 
@@ -364,7 +368,7 @@ class TestTaskPlannerRiskAssessment:
         """Test high risk for production changes."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Deploy", description="Deploy to production")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level == RiskLevel.HIGH
         assert any("production" in f.lower() for f in risk.factors)
 
@@ -372,7 +376,7 @@ class TestTaskPlannerRiskAssessment:
         """Test medium/high risk for database changes."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Migrate", description="Database migration")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level in [RiskLevel.MEDIUM, RiskLevel.HIGH]
         assert any("Database" in f for f in risk.factors)
 
@@ -380,7 +384,7 @@ class TestTaskPlannerRiskAssessment:
         """Test high risk for security changes."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Update", description="Update security credentials")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert risk.level == RiskLevel.HIGH
         assert any("Security" in f for f in risk.factors)
 
@@ -388,7 +392,7 @@ class TestTaskPlannerRiskAssessment:
         """Test risk assessment includes mitigations."""
         planner = TaskPlanner()
         task = Task(id="t1", title="Delete", description="Delete database")
-        risk = planner._assess_risk(task)
+        risk = planner._analyzer.assess_risk(task)
         assert len(risk.mitigations) > 0
 
 
@@ -400,7 +404,7 @@ class TestTaskPlannerCheckpoints:
         planner = TaskPlanner()
         task = Task(id="t1", title="Complex", description="Desc", complexity=4)
         tasks = [task]
-        planner._recommend_checkpoints(tasks)
+        planner._analyzer.recommend_checkpoints(tasks)
         assert task.checkpoint_recommended is True
 
     def test_recommend_checkpoints_high_risk(self):
@@ -409,7 +413,7 @@ class TestTaskPlannerCheckpoints:
         risk = RiskAssessment(level=RiskLevel.HIGH)
         task = Task(id="t1", title="Risky", description="Desc", risk=risk)
         tasks = [task]
-        planner._recommend_checkpoints(tasks)
+        planner._analyzer.recommend_checkpoints(tasks)
         assert task.checkpoint_recommended is True
 
     def test_recommend_checkpoints_many_files(self):
@@ -422,7 +426,7 @@ class TestTaskPlannerCheckpoints:
             files_affected=["f1.py", "f2.py", "f3.py"]
         )
         tasks = [task]
-        planner._recommend_checkpoints(tasks)
+        planner._analyzer.recommend_checkpoints(tasks)
         assert task.checkpoint_recommended is True
 
     def test_recommend_checkpoints_low_risk(self):
@@ -436,7 +440,7 @@ class TestTaskPlannerCheckpoints:
             risk=RiskAssessment(level=RiskLevel.LOW)
         )
         tasks = [task]
-        planner._recommend_checkpoints(tasks)
+        planner._analyzer.recommend_checkpoints(tasks)
         assert task.checkpoint_recommended is False
 
 
