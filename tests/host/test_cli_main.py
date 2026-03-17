@@ -600,10 +600,7 @@ class TestChatLoopInitialization:
         with _apply_patches(patches) as mocks:
             await chat_loop(project="test", prompt="Hello")
 
-            mock_console = mocks["console"]
-            mock_console.print.assert_called()
-            calls = [str(c) for c in mock_console.print.call_args_list]
-            assert any("headless" in str(c).lower() for c in calls)
+            mocks["prompt"].assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1168,10 +1165,7 @@ class TestChatLoopSkillsAndHooks:
 
             await chat_loop(project="test")
 
-            mock_console = mocks["console"]
-            mock_console.print.assert_called()
-            calls = [str(c) for c in mock_console.print.call_args_list]
-            assert any("headless" in str(c).lower() for c in calls)
+            mocks["prompt"].assert_not_called()
 
     async def test_chat_loop_ignores_background_tasks_for_display(self):
         """Test background tasks no longer produce narration."""

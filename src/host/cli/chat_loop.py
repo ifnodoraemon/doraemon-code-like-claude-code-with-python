@@ -308,7 +308,6 @@ def show_runtime_status(*, cost_tracker) -> None:
 def _read_multiline_input(first_line: str, delimiter: str) -> str:
     """Continue reading until the closing delimiter is seen."""
     lines = [first_line]
-    console.print("[dim]Multi-line mode (close with matching delimiter)...[/dim]")
     while True:
         if len(lines) >= 1000:
             console.print(
@@ -333,7 +332,6 @@ def read_user_input(
     if state.initial_prompt:
         user_input = state.initial_prompt
         state.initial_prompt = None
-        console.print(f"\n[bold {mode_color}]> {user_input}[/bold {mode_color}]")
         return InputResult(user_input=user_input, ctrl_c_count=ctrl_c_count)
 
     if headless:
@@ -354,9 +352,8 @@ def read_user_input(
     except KeyboardInterrupt:
         ctrl_c_count += 1
         if ctrl_c_count >= 2:
-            console.print("\n[yellow]Exiting...[/yellow]")
             return InputResult(user_input=None, ctrl_c_count=ctrl_c_count, should_exit=True)
-        console.print("\n[dim]Press Ctrl+C again to exit, or type to continue.[/dim]")
+        console.print("\n[dim]Ctrl+C again to exit[/dim]")
         return InputResult(user_input=None, ctrl_c_count=ctrl_c_count)
 
 
@@ -745,8 +742,6 @@ async def initialize_chat_runtime(
     piped_input, _ = check_piped_input()
     initial_prompt = combine_initial_prompt(prompt, piped_input)
     headless = bool(initial_prompt) or print_mode
-    if headless and not print_mode:
-        console.print("[dim cyan]Running in headless mode[/dim cyan]")
 
     from src.host.cli.initialization import initialize_model_client
 
