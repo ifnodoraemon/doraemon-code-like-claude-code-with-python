@@ -1269,8 +1269,6 @@ async def dispatch_user_input(
             tool_definitions=state.tool_definitions,
             conversation_history=state.conversation_history,
             active_skills_content=state.active_skills_content,
-            build_system_prompt=build_system_prompt,
-            convert_tools_to_definitions=convert_tools_to_definitions,
         )
         apply_command_result(result=result, state=state)
         state.session_data = persist_session_state(
@@ -1350,6 +1348,8 @@ async def chat_loop(
         model_name=runtime.model_name,
         project=project,
         permission_mgr=runtime.permission_mgr,
+        build_system_prompt=build_system_prompt,
+        convert_tools_to_definitions=convert_tools_to_definitions,
     )
 
     # Setup tab completion for slash commands

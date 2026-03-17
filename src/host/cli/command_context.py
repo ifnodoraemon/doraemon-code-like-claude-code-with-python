@@ -26,3 +26,5 @@ class CommandContext:
     model_name: str
     project: str
     permission_mgr: Any = field(default=None)
+    build_system_prompt: Any = field(default=None)
+    convert_tools_to_definitions: Any = field(default=None)

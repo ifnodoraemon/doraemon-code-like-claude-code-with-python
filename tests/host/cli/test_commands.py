@@ -122,8 +122,6 @@ class TestHelpCommandFallback:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -158,8 +156,6 @@ class TestHelpCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -198,8 +194,6 @@ class TestClearCommand:
                 tool_definitions=[],
                 conversation_history=[{"role": "user", "content": "hello"}],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             ctx.clear.assert_called_once_with(keep_summaries=True)
@@ -235,8 +229,6 @@ class TestClearCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             # Verify keep_summaries=True is passed
@@ -273,8 +265,6 @@ class TestModeCommand:
             project="test",
         )
 
-        build_system_prompt = MagicMock(return_value="build prompt")
-        convert_tools = MagicMock(return_value=[])
 
         with patch("src.host.cli.commands_core.console"):
             result = await handler.handle(
@@ -285,8 +275,6 @@ class TestModeCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=build_system_prompt,
-                convert_tools_to_definitions=convert_tools,
             )
 
             assert result.mode == "build"
@@ -318,8 +306,6 @@ class TestModeCommand:
             project="test",
         )
 
-        build_system_prompt = MagicMock(return_value="plan prompt")
-        convert_tools = MagicMock(return_value=[])
 
         with patch("src.host.cli.commands_core.console"):
             result = await handler.handle(
@@ -330,8 +316,6 @@ class TestModeCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=build_system_prompt,
-                convert_tools_to_definitions=convert_tools,
             )
 
             assert result.mode == "plan"
@@ -363,8 +347,6 @@ class TestModeCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.mode == "build"
@@ -396,8 +378,6 @@ class TestModeCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.mode == "build"  # Mode unchanged
@@ -435,8 +415,6 @@ class TestResetCommand:
             project="test",
         )
 
-        build_system_prompt = MagicMock(return_value="build prompt")
-        convert_tools = MagicMock(return_value=[])
 
         with patch("src.host.cli.commands_core.console"):
             result = await handler.handle(
@@ -447,8 +425,6 @@ class TestResetCommand:
                 tool_definitions=[],
                 conversation_history=[{"role": "user", "content": "test"}],
                 active_skills_content="skill1",
-                build_system_prompt=build_system_prompt,
-                convert_tools_to_definitions=convert_tools,
             )
 
             ctx.reset.assert_called_once()
@@ -490,8 +466,6 @@ class TestResetCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.mode == "build"
@@ -530,8 +504,6 @@ class TestSkillsCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -566,8 +538,6 @@ class TestSkillsCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -619,8 +589,6 @@ class TestCheckpointsCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -655,8 +623,6 @@ class TestCheckpointsCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -698,8 +664,6 @@ class TestRewindCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -737,8 +701,6 @@ class TestRewindCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -776,8 +738,6 @@ class TestRewindCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -834,8 +794,6 @@ class TestSessionsCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -872,8 +830,6 @@ class TestSessionsCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -916,8 +872,6 @@ class TestHistoryCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -952,8 +906,6 @@ class TestHistoryCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1010,8 +962,6 @@ class TestCostCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1064,8 +1014,6 @@ class TestCostCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1121,8 +1069,6 @@ class TestTasksCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1157,8 +1103,6 @@ class TestTasksCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1194,8 +1138,6 @@ class TestUnknownCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1232,8 +1174,6 @@ class TestReturnValueStructure:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             required_keys = {
@@ -1277,8 +1217,6 @@ class TestReturnValueStructure:
                 tool_definitions=[],
                 conversation_history=original_history,
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.mode == original_mode
@@ -1321,8 +1259,6 @@ class TestSessionManagementCommands:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1354,8 +1290,6 @@ class TestSessionManagementCommands:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1392,8 +1326,6 @@ class TestSessionManagementCommands:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1430,8 +1362,6 @@ class TestSessionManagementCommands:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1470,8 +1400,6 @@ class TestSessionManagementCommands:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1514,9 +1442,7 @@ class TestModelCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1551,9 +1477,7 @@ class TestModelCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1595,9 +1519,7 @@ class TestPluginCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1632,9 +1554,7 @@ class TestPluginCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1669,9 +1589,7 @@ class TestPluginCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1701,8 +1619,6 @@ class TestPluginCommand:
                 tool_definitions=[],
                 conversation_history=[],
                 active_skills_content="",
-                build_system_prompt=MagicMock(return_value="prompt"),
-                convert_tools_to_definitions=MagicMock(return_value=[]),
             )
 
             assert result.handled is True
@@ -1744,9 +1660,7 @@ class TestThemeCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1781,9 +1695,7 @@ class TestThemeCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1824,9 +1736,7 @@ class TestToggleCommands:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1864,9 +1774,7 @@ class TestToggleCommands:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1908,9 +1816,7 @@ class TestInitCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
 
@@ -1946,9 +1852,7 @@ class TestInitCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                    build_system_prompt=MagicMock(return_value="prompt"),
-                    convert_tools_to_definitions=MagicMock(return_value=[]),
-                    )
+                            )
 
                 assert result.handled is True
                 # Verify write_text was not called

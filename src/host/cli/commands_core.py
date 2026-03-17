@@ -57,8 +57,6 @@ class CoreCommandHandler:
         tool_definitions: list,
         conversation_history: list,
         active_skills_content: str,
-        build_system_prompt,
-        convert_tools_to_definitions,
     ) -> CommandResult | None:
         """Handle core commands."""
         result = CommandResult.default(
@@ -82,13 +80,11 @@ class CoreCommandHandler:
                 cmd_args,
                 result,
                 active_skills_content,
-                build_system_prompt,
-                convert_tools_to_definitions,
             ),
             "skills": self._show_skills,
             "clear": lambda: self._handle_clear_command(result),
             "compact": lambda: self._handle_compact_command(result),
-            "reset": lambda: self._handle_reset_command(result, build_system_prompt, convert_tools_to_definitions),
+            "reset": lambda: self._handle_reset_command(result),
             "doctor": self._run_doctor,
         }
 
@@ -105,8 +101,6 @@ class CoreCommandHandler:
         cmd_args: list[str],
         result: CommandResult,
         active_skills_content: str,
-        build_system_prompt,
-        convert_tools_to_definitions,
     ) -> None:
         """Switch mode and refresh tooling."""
         if not cmd_args:
@@ -121,10 +115,10 @@ class CoreCommandHandler:
         result.mode = new_mode
         new_tool_names = self.tool_selector.get_tools_for_mode(new_mode)
         genai_tools = self.registry.get_genai_tools(new_tool_names)
-        new_tool_definitions = convert_tools_to_definitions(genai_tools)
+        new_tool_definitions = self.convert_tools_to_definitions(genai_tools)
         result.tool_names = new_tool_names
         result.tool_definitions = new_tool_definitions
-        result.system_prompt = build_system_prompt(new_mode, active_skills_content)
+        result.system_prompt = self.build_system_prompt(new_mode, active_skills_content)
         self.hook_mgr.permission_mode = new_mode
         if self.permission_mgr:
             self.permission_mgr.set_mode(new_mode)
@@ -156,8 +150,6 @@ class CoreCommandHandler:
     def _handle_reset_command(
         self,
         result: CommandResult,
-        build_system_prompt,
-        convert_tools_to_definitions,
     ) -> None:
         """Reset context and restore build-mode defaults."""
         self.ctx.reset()
@@ -166,8 +158,8 @@ class CoreCommandHandler:
         new_tool_names = self.tool_selector.get_tools_for_mode("build")
         genai_tools = self.registry.get_genai_tools(new_tool_names)
         result.tool_names = new_tool_names
-        result.tool_definitions = convert_tools_to_definitions(genai_tools)
-        result.system_prompt = build_system_prompt("build", "")
+        result.tool_definitions = self.convert_tools_to_definitions(genai_tools)
+        result.system_prompt = self.build_system_prompt("build", "")
         result.conversation_history = []
         console.print("[green]Full reset complete[/green]")
 

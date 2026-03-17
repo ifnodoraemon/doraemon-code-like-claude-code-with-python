@@ -29,7 +29,17 @@ class CommandHandler:
         model_name: str,
         project: str,
         permission_mgr=None,
+        build_system_prompt=None,
+        convert_tools_to_definitions=None,
     ):
+        if build_system_prompt is None or convert_tools_to_definitions is None:
+            from src.host.cli import chat_loop as chat_loop_module
+
+            build_system_prompt = build_system_prompt or chat_loop_module.build_system_prompt
+            convert_tools_to_definitions = (
+                convert_tools_to_definitions or chat_loop_module.convert_tools_to_definitions
+            )
+
         self.cc = CommandContext(
             ctx=ctx,
             tool_selector=tool_selector,
@@ -44,6 +54,8 @@ class CommandHandler:
             model_name=model_name,
             project=project,
             permission_mgr=permission_mgr,
+            build_system_prompt=build_system_prompt,
+            convert_tools_to_definitions=convert_tools_to_definitions,
         )
 
         self.core_handler = CoreCommandHandler(self.cc)
@@ -59,8 +71,6 @@ class CommandHandler:
         tool_definitions: list,
         conversation_history: list,
         active_skills_content: str,
-        build_system_prompt,
-        convert_tools_to_definitions,
     ) -> CommandResult:
         """Handle a slash command by delegating to the appropriate handler."""
         fallback = CommandResult.default(
@@ -79,8 +89,6 @@ class CommandHandler:
             tool_definitions,
             conversation_history,
             active_skills_content,
-            build_system_prompt,
-            convert_tools_to_definitions,
         )
         if core_result:
             return core_result
