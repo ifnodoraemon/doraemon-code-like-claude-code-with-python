@@ -30,8 +30,7 @@ import threading
 import types as py_types
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
-from typing import get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 from google.genai import types
 
@@ -178,7 +177,7 @@ class ToolRegistry:
                 value_schema = self._annotation_to_schema(args[1]) if len(args) > 1 else {}
                 return {"type": "object", "additionalProperties": value_schema}
 
-            if origin in (py_types.UnionType, getattr(__import__("typing"), "Union")):
+            if origin in (py_types.UnionType, Union):
                 non_none_args = [arg for arg in args if arg is not type(None)]
                 if len(non_none_args) == 1:
                     return self._annotation_to_schema(non_none_args[0])
@@ -389,10 +388,7 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("src.servers.web", "search_internet", name="web_search", sensitive=False, timeout=30.0),
 
     # ── Task ─────────────────────────────────────────────────────────
-    ToolSpec("src.servers.task", "task",               sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.task", "add_task",            name="task_create",        sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.task", "list_tasks",          name="task_list",          sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.task", "update_task_status",  name="task_update_status", sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.task", "task", sensitive=False, timeout=60.0),
 
     # ── LSP ──────────────────────────────────────────────────────────
     ToolSpec("src.servers.lsp", "lsp",             sensitive=False, timeout=120.0),
@@ -403,37 +399,16 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("src.servers.lsp", "lsp_rename",      sensitive=True,  timeout=60.0),
     ToolSpec("src.servers.lsp", "lsp_definition",  sensitive=False, timeout=30.0),
 
-    # ── Lint ─────────────────────────────────────────────────────────
-    ToolSpec("src.servers.lint", "lint",                    sensitive=False, timeout=180.0),
-    ToolSpec("src.servers.lint", "lint_python_ruff",        sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.lint", "format_python_ruff",      sensitive=True,  timeout=60.0),
-    ToolSpec("src.servers.lint", "typecheck_python_mypy",   sensitive=False, timeout=120.0),
-    ToolSpec("src.servers.lint", "lint_javascript_eslint",  sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.lint", "lint_all",                sensitive=False, timeout=180.0),
-    ToolSpec("src.servers.lint", "code_complexity",         sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.lint", "check_security",          sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.lint", "get_lint_summary",        sensitive=False, timeout=60.0),
-
     # ── Semantic Search ──────────────────────────────────────────────
     ToolSpec("src.servers.semantic_search", "semantic_search", sensitive=False, timeout=120.0),
     ToolSpec("src.servers.semantic_search", "index_codebase",  sensitive=False, timeout=300.0),
 
     # ── Misc ─────────────────────────────────────────────────────────
     ToolSpec("src.servers.ask_user", "ask_user",      sensitive=False, timeout=300.0),
-    ToolSpec("src.servers.system",   "switch_mode",   sensitive=True,  timeout=10.0),
-
-    # ── Spec ─────────────────────────────────────────────────────────
-    ToolSpec("src.servers.spec", "spec_update_task", sensitive=False, timeout=10.0),
-    ToolSpec("src.servers.spec", "spec_check_item",  sensitive=False, timeout=10.0),
-    ToolSpec("src.servers.spec", "spec_progress",    sensitive=False, timeout=10.0),
 
     # ── Browser ──────────────────────────────────────────────────────
     ToolSpec("src.servers.browser", "browse_page",     sensitive=False, timeout=60.0),
     ToolSpec("src.servers.browser", "take_screenshot", sensitive=False, timeout=60.0),
-
-    # ── GitHub ───────────────────────────────────────────────────────
-    ToolSpec("src.servers.github", "github_list_issues",  sensitive=False, timeout=30.0),
-    ToolSpec("src.servers.github", "github_create_issue", sensitive=True,  timeout=60.0),
 
     # ── Database ─────────────────────────────────────────────────────
     ToolSpec("src.servers.database", "db_read_query",     sensitive=False, timeout=60.0),

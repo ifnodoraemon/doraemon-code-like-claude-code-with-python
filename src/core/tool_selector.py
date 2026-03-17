@@ -28,11 +28,6 @@ AUX_TOOLS = [
     "browse_page",  # 网页浏览 (Playwright)
     "take_screenshot",  # 网页截图
     "task",  # 统一任务工具
-    "task_create",  # 创建任务
-    "task_list",  # 查看任务
-    "task_update_status",  # 更新任务状态
-    "github_list_issues",  # GitHub Issues
-    "github_create_issue",  # GitHub Create Issue
     "db_read_query",  # 数据库查询
     "db_write_query",  # 数据库修改
     "db_list_tables",  # 列出数据库表
@@ -40,7 +35,6 @@ AUX_TOOLS = [
     "fetch_url",  # 获取网页
     "save_note",  # 保存笔记
     "search_notes",  # 搜索笔记
-    "switch_mode",  # 切换模式 (plan/build)
 ]
 
 # 高级工具 - 特殊场景

@@ -32,7 +32,7 @@ class TestToolConstants:
         assert isinstance(AUX_TOOLS, list)
         assert len(AUX_TOOLS) > 0
         assert "task" in AUX_TOOLS
-        assert "task_list" in AUX_TOOLS
+        assert "web_search" in AUX_TOOLS
 
     def test_advanced_tools_defined(self):
         """Test that ADVANCED_TOOLS is defined."""
@@ -141,7 +141,7 @@ class TestToolSelectorExtended:
         tools = selector.get_tools_for_mode("build")
         assert tools.index("read") < tools.index("write")
         assert tools.index("write") < tools.index("web_search")
-        assert tools.index("task") < tools.index("github_list_issues")
+        assert tools.index("task") < tools.index("db_read_query")
 
 
 class TestGlobalFunctions:

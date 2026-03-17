@@ -35,6 +35,5 @@ class TestToolSelector:
         plan_tools = selector.get_tools_for_mode("plan")
         build_tools = selector.get_tools_for_mode("build")
 
-        for tool_name in ["task", "task_create", "task_list", "task_update_status"]:
-            assert tool_name in plan_tools
-            assert tool_name in build_tools
+        assert "task" in plan_tools
+        assert "task" in build_tools

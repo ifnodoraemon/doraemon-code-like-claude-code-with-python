@@ -30,21 +30,13 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 VALIDATION_TOOLS = {
-    "lint",
-    "lint_python_ruff",
-    "typecheck_python_mypy",
-    "lint_javascript_eslint",
-    "lint_all",
-    "get_lint_summary",
     "lsp_diagnostics",
-    "check_security",
-    "code_complexity",
 }
 
 
 def get_modified_paths(tool_name: str, args: dict[str, Any]) -> list[str]:
     """Return paths likely modified by a tool call."""
-    if tool_name in {"multi_edit", "notebook_edit", "lsp_rename", "format_python_ruff"}:
+    if tool_name in {"multi_edit", "notebook_edit", "lsp_rename"}:
         path = args.get("path")
         return [path] if isinstance(path, str) and path else []
 
