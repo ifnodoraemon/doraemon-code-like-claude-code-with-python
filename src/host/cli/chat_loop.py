@@ -84,6 +84,28 @@ class TurnMetrics:
     usage_available: bool
 
 
+@dataclass
+class ChatRuntime:
+    """Long-lived runtime dependencies for the chat loop."""
+
+    model_client: object
+    registry: object
+    tool_selector: object
+    ctx: object
+    skill_mgr: object
+    checkpoint_mgr: object
+    task_mgr: object
+    hook_mgr: object
+    cost_tracker: object
+    cmd_history: object
+    bash_executor: object
+    session_mgr: object
+    permission_mgr: object | None
+    sensitive_tools: set[str]
+    model_name: str
+    headless: bool
+
+
 def _is_context_overflow(error: Exception) -> bool:
     """Check if an error is caused by context window overflow."""
     msg = str(error).lower()
@@ -623,6 +645,15 @@ def display_turn_metrics(*, metrics: TurnMetrics, state: ChatLoopState, ctx, cos
     )
 
 
+def combine_initial_prompt(prompt: str | None, piped_input: str | None) -> str | None:
+    """Merge CLI prompt and piped stdin content into one initial prompt."""
+    if not piped_input:
+        return prompt
+    if prompt:
+        return f"{prompt}\n{piped_input}"
+    return piped_input
+
+
 def check_piped_input() -> tuple[str | None, bool]:
     """
     Check for piped input (headless mode detection).
@@ -752,6 +783,94 @@ def persist_session_state(
     except Exception as e:
         logger.warning(f"Failed to persist session state: {e}")
         return session_data
+
+
+async def initialize_chat_runtime(
+    *,
+    project: str,
+    resume_session: str | None,
+    session_name: str | None,
+    prompt: str | None,
+    print_mode: bool,
+) -> tuple[ChatRuntime, ChatLoopState]:
+    """Initialize model client, managers, session state, and prompt state."""
+    piped_input, _ = check_piped_input()
+    initial_prompt = combine_initial_prompt(prompt, piped_input)
+    headless = bool(initial_prompt) or print_mode
+    if headless and not print_mode:
+        console.print("[dim cyan]Running in headless mode[/dim cyan]")
+
+    from src.host.cli.initialization import initialize_model_client
+
+    model_client = await initialize_model_client()
+    if not validate_client_mode(model_client):
+        await model_client.close()
+        raise RuntimeError("Invalid model client configuration")
+
+    managers = await initialize_all_managers(project)
+    registry = managers["registry"]
+    tool_selector = managers["tool_selector"]
+    ctx = managers["ctx"]
+    skill_mgr = managers["skill_mgr"]
+    checkpoint_mgr = managers["checkpoint_mgr"]
+    task_mgr = managers["task_mgr"]
+    hook_mgr = managers["hook_mgr"]
+    cost_tracker = managers["cost_tracker"]
+    cmd_history = managers["cmd_history"]
+    bash_executor = managers["bash_executor"]
+    session_mgr = managers["session_mgr"]
+    permission_mgr = managers.get("permission_mgr")
+    sensitive_tools = registry.get_sensitive_tools()
+
+    session_data = restore_session_history(session_mgr, ctx, resume_session)
+    show_startup_info(model_client, project, ctx)
+
+    mode = getattr(getattr(session_data, "metadata", None), "mode", "build")
+    model_name = load_config().get("model")
+    if not model_name:
+        raise ValueError("Project config is missing required 'model'")
+
+    session_data = persist_session_state(
+        session_mgr,
+        ctx,
+        project,
+        mode,
+        session_name=session_name,
+        session_data=session_data,
+    )
+    tool_names, tool_definitions = resolve_tooling(tool_selector, registry, mode)
+    console.print(f"[dim]Tools: {len(tool_definitions)} ({mode} mode)[/dim]")
+
+    runtime = ChatRuntime(
+        model_client=model_client,
+        registry=registry,
+        tool_selector=tool_selector,
+        ctx=ctx,
+        skill_mgr=skill_mgr,
+        checkpoint_mgr=checkpoint_mgr,
+        task_mgr=task_mgr,
+        hook_mgr=hook_mgr,
+        cost_tracker=cost_tracker,
+        cmd_history=cmd_history,
+        bash_executor=bash_executor,
+        session_mgr=session_mgr,
+        permission_mgr=permission_mgr,
+        sensitive_tools=sensitive_tools,
+        model_name=model_name,
+        headless=headless,
+    )
+    state = ChatLoopState(
+        mode=mode,
+        tool_names=tool_names,
+        tool_definitions=tool_definitions,
+        active_skills_content="",
+        system_prompt=build_system_prompt(mode, ""),
+        conversation_history=restore_conversation_history(ctx),
+        initial_prompt=initial_prompt,
+        turn_count=0,
+        session_data=session_data,
+    )
+    return runtime, state
 
 
 def show_startup_info(model_client, project: str, ctx):
@@ -1193,6 +1312,76 @@ async def process_tool_calls(
     return accumulated_text, files_modified
 
 
+async def dispatch_user_input(
+    *,
+    user_input: str,
+    state: ChatLoopState,
+    runtime: ChatRuntime,
+    cmd_handler,
+    project: str,
+    session_name: str | None,
+) -> tuple[bool, TurnMetrics | None]:
+    """Handle exit/bash/command input before delegating to the agent turn."""
+    if user_input.lower() in {"exit", "quit", "/exit"}:
+        return True, None
+
+    if user_input.startswith("!"):
+        await handle_bash_mode(
+            user_input,
+            runtime.bash_executor,
+            runtime.ctx,
+            runtime.cmd_history,
+        )
+        return False, None
+
+    if user_input.startswith("/"):
+        cmd_parts = user_input[1:].split()
+        result = await cmd_handler.handle(
+            cmd=cmd_parts[0].lower() if cmd_parts else "",
+            cmd_args=cmd_parts[1:] if len(cmd_parts) > 1 else [],
+            mode=state.mode,
+            tool_names=state.tool_names,
+            tool_definitions=state.tool_definitions,
+            conversation_history=state.conversation_history,
+            active_skills_content=state.active_skills_content,
+            build_system_prompt=build_system_prompt,
+            convert_tools_to_definitions=convert_tools_to_definitions,
+            sensitive_tools=set(runtime.sensitive_tools),
+        )
+        apply_command_result(result=result, state=state)
+        state.session_data = persist_session_state(
+            runtime.session_mgr,
+            runtime.ctx,
+            project,
+            state.mode,
+            session_name=session_name,
+            session_data=state.session_data,
+        )
+        return False, None
+
+    runtime.cmd_history.add(user_input)
+    metrics = await execute_agent_turn(
+        user_input=user_input,
+        state=state,
+        ctx=runtime.ctx,
+        checkpoint_mgr=runtime.checkpoint_mgr,
+        hook_mgr=runtime.hook_mgr,
+        tool_selector=runtime.tool_selector,
+        registry=runtime.registry,
+        skill_mgr=runtime.skill_mgr,
+        model_client=runtime.model_client,
+        model_name=runtime.model_name,
+        project=project,
+        sensitive_tools=runtime.sensitive_tools,
+        headless=runtime.headless,
+        cost_tracker=runtime.cost_tracker,
+        permission_mgr=runtime.permission_mgr,
+        session_mgr=runtime.session_mgr,
+        session_name=session_name,
+    )
+    return False, metrics
+
+
 async def chat_loop(
     project: str = "default",
     resume_session: str | None = None,
@@ -1204,120 +1393,39 @@ async def chat_loop(
     """Main chat loop with automatic context management."""
     configure_root_logger()
 
-    # Check for piped input (Headless detection)
-    piped_input, _headless_from_pipe = check_piped_input()
-
-    initial_prompt = prompt
-    if piped_input:
-        if initial_prompt:
-            initial_prompt = f"{initial_prompt}\n{piped_input}"
-        else:
-            initial_prompt = piped_input
-
-    # Print mode implies headless
-    headless = bool(initial_prompt) or print_mode
-    if headless and not print_mode:
-        console.print("[dim cyan]Running in headless mode[/dim cyan]")
-
-    # Initialize model client
-    from src.host.cli.initialization import initialize_model_client
-
     try:
-        model_client = await initialize_model_client()
+        runtime, state = await initialize_chat_runtime(
+            project=project,
+            resume_session=resume_session,
+            session_name=session_name,
+            prompt=prompt,
+            print_mode=print_mode,
+        )
     except Exception as e:
-        console.print(f"[red]Failed to initialize model client: {e}[/red]")
+        console.print(f"[red]Failed to initialize runtime: {e}[/red]")
         return
-
-    if not validate_client_mode(model_client):
-        await model_client.close()
-        return
-
-    # Initialize all managers
-    try:
-        managers = await initialize_all_managers(project)
-    except Exception as e:
-        console.print(f"[red]Failed to initialize managers: {e}[/red]")
-        await model_client.close()
-        return
-
-    # Extract managers
-    registry = managers["registry"]
-    tool_selector = managers["tool_selector"]
-    ctx = managers["ctx"]
-    skill_mgr = managers["skill_mgr"]
-    checkpoint_mgr = managers["checkpoint_mgr"]
-    task_mgr = managers["task_mgr"]
-    hook_mgr = managers["hook_mgr"]
-    cost_tracker = managers["cost_tracker"]
-    cmd_history = managers["cmd_history"]
-    bash_executor = managers["bash_executor"]
-    session_mgr = managers["session_mgr"]
-    permission_mgr = managers.get("permission_mgr")
-    sensitive_tools = registry.get_sensitive_tools()
-
-
-    # Handle session resume
-    session_data = restore_session_history(session_mgr, ctx, resume_session)
-
-    # Show startup info
-    show_startup_info(model_client, project, ctx)
-
-    # State
-    mode = getattr(getattr(session_data, "metadata", None), "mode", "build")
-    turn_count = 0
-
-    model_name = load_config().get("model")
-    if not model_name:
-        raise ValueError("Project config is missing required 'model'")
-    session_data = persist_session_state(
-        session_mgr,
-        ctx,
-        project,
-        mode,
-        session_name=session_name,
-        session_data=session_data,
-    )
-
-    # Get tools for current mode
-    tool_names, tool_definitions = resolve_tooling(tool_selector, registry, mode)
-    console.print(f"[dim]Tools: {len(tool_definitions)} ({mode} mode)[/dim]")
-
-    # Build system prompt
-    active_skills_content = ""
-    system_prompt = build_system_prompt(mode, active_skills_content)
-    state = ChatLoopState(
-        mode=mode,
-        tool_names=tool_names,
-        tool_definitions=tool_definitions,
-        active_skills_content=active_skills_content,
-        system_prompt=system_prompt,
-        conversation_history=restore_conversation_history(ctx),
-        initial_prompt=initial_prompt,
-        turn_count=turn_count,
-        session_data=session_data,
-    )
 
     # Trigger SessionStart hook
-    await hook_mgr.trigger(
+    await runtime.hook_mgr.trigger(
         HookEvent.SESSION_START,
-        message_count=len(ctx.messages),
+        message_count=len(runtime.ctx.messages),
     )
 
     # Initialize command handler
     cmd_handler = CommandHandler(
-        ctx=ctx,
-        tool_selector=tool_selector,
-        registry=registry,
-        skill_mgr=skill_mgr,
-        checkpoint_mgr=checkpoint_mgr,
-        task_mgr=task_mgr,
-        cost_tracker=cost_tracker,
-        cmd_history=cmd_history,
-        session_mgr=session_mgr,
-        hook_mgr=hook_mgr,
-        model_name=model_name,
+        ctx=runtime.ctx,
+        tool_selector=runtime.tool_selector,
+        registry=runtime.registry,
+        skill_mgr=runtime.skill_mgr,
+        checkpoint_mgr=runtime.checkpoint_mgr,
+        task_mgr=runtime.task_mgr,
+        cost_tracker=runtime.cost_tracker,
+        cmd_history=runtime.cmd_history,
+        session_mgr=runtime.session_mgr,
+        hook_mgr=runtime.hook_mgr,
+        model_name=runtime.model_name,
         project=project,
-        permission_mgr=permission_mgr,
+        permission_mgr=runtime.permission_mgr,
     )
 
     # Setup tab completion for slash commands
@@ -1329,11 +1437,11 @@ async def chat_loop(
         "theme", "vim", "thinking", "workspace", "add-dir", "cost", "agents",
         "history", "exit",
     ]
-    cmd_history.setup_completer(slash_commands)
+    runtime.cmd_history.setup_completer(slash_commands)
 
     console.print(
         Panel.fit(
-            f"[bold blue]🤖 Code Agent[/bold blue]\n[dim]Type /help for commands. Mode: {mode}[/dim]",
+            f"[bold blue]🤖 Code Agent[/bold blue]\n[dim]Type /help for commands. Mode: {state.mode}[/dim]",
             border_style="blue",
         )
     )
@@ -1343,10 +1451,10 @@ async def chat_loop(
     try:
         while True:
             mode_color = MODE_COLORS.get(state.mode, "yellow")
-            show_runtime_status(task_mgr=task_mgr, cost_tracker=cost_tracker)
+            show_runtime_status(task_mgr=runtime.task_mgr, cost_tracker=runtime.cost_tracker)
             input_result = read_user_input(
                 state=state,
-                headless=headless,
+                headless=runtime.headless,
                 mode_color=mode_color,
                 ctrl_c_count=_ctrl_c_count,
             )
@@ -1355,78 +1463,24 @@ async def chat_loop(
                 break
             if input_result.user_input is None:
                 continue
-            user_input = input_result.user_input
-
-            # Exit
-            if user_input.lower() in ["exit", "quit", "/exit"]:
-                break
-
-            # Bash mode (! prefix)
-            if user_input.startswith("!"):
-                await handle_bash_mode(user_input, bash_executor, ctx, cmd_history)
-                continue
-
-            # Slash commands
-            if user_input.startswith("/"):
-                cmd_parts = user_input[1:].split()
-                cmd = cmd_parts[0].lower() if cmd_parts else ""
-                cmd_args = cmd_parts[1:] if len(cmd_parts) > 1 else []
-
-                result = await cmd_handler.handle(
-                    cmd=cmd,
-                    cmd_args=cmd_args,
-                    mode=state.mode,
-                    tool_names=state.tool_names,
-                    tool_definitions=state.tool_definitions,
-                    conversation_history=state.conversation_history,
-                    active_skills_content=state.active_skills_content,
-                    build_system_prompt=build_system_prompt,
-                    convert_tools_to_definitions=convert_tools_to_definitions,
-                    sensitive_tools=set(sensitive_tools),
-                )
-
-                apply_command_result(
-                    result=result,
-                    state=state,
-                )
-                state.session_data = persist_session_state(
-                    session_mgr,
-                    ctx,
-                    project,
-                    state.mode,
-                    session_name=session_name,
-                    session_data=state.session_data,
-                )
-                continue
-
-            cmd_history.add(user_input)
-            metrics = await execute_agent_turn(
-                user_input=user_input,
+            should_exit, metrics = await dispatch_user_input(
+                user_input=input_result.user_input,
                 state=state,
-                ctx=ctx,
-                checkpoint_mgr=checkpoint_mgr,
-                hook_mgr=hook_mgr,
-                tool_selector=tool_selector,
-                registry=registry,
-                skill_mgr=skill_mgr,
-                model_client=model_client,
-                model_name=model_name,
+                runtime=runtime,
+                cmd_handler=cmd_handler,
                 project=project,
-                sensitive_tools=sensitive_tools,
-                headless=headless,
-                cost_tracker=cost_tracker,
-                permission_mgr=permission_mgr,
-                session_mgr=session_mgr,
                 session_name=session_name,
             )
+            if should_exit:
+                break
             if metrics is None:
                 continue
             display_turn_metrics(
                 metrics=metrics,
                 state=state,
-                ctx=ctx,
-                cost_tracker=cost_tracker,
-                model_name=model_name,
+                ctx=runtime.ctx,
+                cost_tracker=runtime.cost_tracker,
+                model_name=runtime.model_name,
             )
 
             # Print mode: exit after first response
@@ -1447,20 +1501,22 @@ async def chat_loop(
         traceback.print_exc()
     finally:
         persist_session_state(
-            session_mgr,
-            ctx,
+            runtime.session_mgr,
+            runtime.ctx,
             project,
             state.mode,
             session_name=session_name,
             session_data=state.session_data,
         )
         try:
-            await hook_mgr.trigger(HookEvent.SESSION_END, message_count=len(ctx.messages))
+            await runtime.hook_mgr.trigger(
+                HookEvent.SESSION_END,
+                message_count=len(runtime.ctx.messages),
+            )
         except Exception:
             pass
         try:
-            if model_client:
-                await model_client.close()
+            await runtime.model_client.close()
         except Exception:
             pass
         console.print("[dim]Session ended[/dim]")
