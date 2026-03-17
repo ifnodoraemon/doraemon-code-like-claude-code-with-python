@@ -1,16 +1,4 @@
-"""
-Tool Selector - 按模式分配工具
-
-设计原则（参考 OpenCode/Claude Code）：
-- 工具精简，不要太细
-- 按模式（plan/build）控制权限，而不是动态搜索
-- 支持 MCP 扩展外部工具
-
-工具分类：
-- 核心工具：所有模式都可用的基础能力
-- 写入工具：只有 build 模式可用
-- MCP 工具：通过 MCP 协议扩展的外部工具
-"""
+"""Tool selection by mode."""
 
 import logging
 from dataclasses import dataclass, field
@@ -57,32 +45,6 @@ ADVANCED_TOOLS = [
     "semantic_search",  # 语义搜索
     "index_codebase",  # 索引代码库
 ]
-
-PHASE_PRIORITY_GROUPS: dict[str, list[list[str]]] = {
-    "gathering": [
-        ["read", "search", "semantic_search", "ask_user"],
-        ["web_search", "browse_page", "fetch_url", "take_screenshot"],
-        ["search_notes", "db_read_query", "db_list_tables", "db_describe_table"],
-        ["write", "run"],
-    ],
-    "editing": [
-        ["write", "read", "search"],
-        ["run"],
-        ["semantic_search", "ask_user"],
-    ],
-    "verifying": [
-        ["run"],
-        ["read", "search", "semantic_search"],
-        ["ask_user", "search_notes"],
-    ],
-    "finishing": [
-        ["run", "read", "search"],
-        ["ask_user", "search_notes"],
-        ["write"],
-    ],
-}
-
-
 
 @dataclass
 class ToolConfig:
@@ -131,31 +93,6 @@ class ToolSelector:
         tools.extend(self.mcp_tools)
 
         return tools
-
-    def get_tools_for_state(self, mode: str, phase: str | None = None) -> list[str]:
-        """Get tools for the current mode, reordered by the active phase."""
-        tools = self.get_tools_for_mode(mode)
-        if not phase:
-            return tools
-
-        priority_groups = PHASE_PRIORITY_GROUPS.get(phase.lower())
-        if not priority_groups:
-            return tools
-
-        priority_rank: dict[str, int] = {}
-        original_order = {tool_name: index for index, tool_name in enumerate(tools)}
-        next_rank = 0
-        for group in priority_groups:
-            for tool_name in group:
-                if tool_name not in priority_rank:
-                    priority_rank[tool_name] = next_rank
-            next_rank += 1
-
-        default_rank = len(priority_groups)
-        return sorted(
-            tools,
-            key=lambda tool_name: (priority_rank.get(tool_name, default_rank), original_order[tool_name]),
-        )
 
     def register_mcp_tools(self, tool_names: list[str]) -> None:
         """

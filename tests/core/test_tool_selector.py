@@ -24,8 +24,8 @@ class TestToolSelector:
         build_tools = selector.get_tools_for_mode("build")
         assert len(plan_tools) <= len(build_tools)
 
-    def test_get_tools_for_state_prioritizes_reads_in_gathering(self):
+    def test_get_tools_for_mode_preserves_default_build_order(self):
         selector = ToolSelector()
-        tools = selector.get_tools_for_state("build", "gathering")
+        tools = selector.get_tools_for_mode("build")
         assert tools.index("read") < tools.index("write")
         assert tools.index("search") < tools.index("run")

@@ -182,28 +182,6 @@ class RalphLoopManager:
             self._save()
         return True
 
-    def suggest_outcome(
-        self,
-        task_id: str,
-        *,
-        files_modified: list[str],
-        verification_performed: bool,
-        is_stuck: bool,
-        recent_failures: list[str],
-    ) -> tuple[str, str]:
-        """Suggest the next Ralph command after an inner-agent run."""
-        if is_stuck or recent_failures:
-            reason = recent_failures[-1] if recent_failures else "agent reported being stuck"
-            return "blocked", f"/ralph blocked {task_id} {reason[:120]}"
-
-        if files_modified and verification_performed:
-            return "done", f"/ralph done {task_id} verified changes for {', '.join(files_modified[:3])}"
-
-        if files_modified:
-            return "progress", f"/ralph resume-active  # task {task_id} still in progress; verification pending"
-
-        return "progress", f"/ralph resume-active  # task {task_id} needs more work"
-
     def build_prompt(self, task: RalphTask) -> str:
         """Create a fresh-run prompt for the inner coding agent."""
         acceptance = task.acceptance_criteria or "Not specified"

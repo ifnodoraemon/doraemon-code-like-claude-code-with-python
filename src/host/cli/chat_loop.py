@@ -263,9 +263,9 @@ def convert_tools_to_definitions(registry_tools: list) -> list:
     return definitions
 
 
-def resolve_tooling_for_phase(tool_selector, registry, mode: str, phase: str | None):
-    """Resolve tool names/definitions with phase-aware ordering."""
-    tool_names = tool_selector.get_tools_for_state(mode, phase)
+def resolve_tooling(tool_selector, registry, mode: str):
+    """Resolve tool names and definitions for the current mode."""
+    tool_names = tool_selector.get_tools_for_mode(mode)
     genai_tools = registry.get_genai_tools(tool_names)
     return tool_names, convert_tools_to_definitions(genai_tools)
 
@@ -274,10 +274,8 @@ def handle_ralph_post_turn(
     ralph_mgr,
     *,
     accumulated_text: str,
-    files_modified: list[str],
-    loop_controller: AgentLoopController,
 ) -> None:
-    """Record Ralph progress and print a suggested next command."""
+    """Record Ralph progress for the active outer task."""
     if ralph_mgr is None:
         return
 
@@ -285,21 +283,8 @@ def handle_ralph_post_turn(
     if active_ralph_task is None:
         return
 
-    suggestion_kind, suggestion_command = ralph_mgr.suggest_outcome(
-        active_ralph_task.id,
-        files_modified=files_modified,
-        verification_performed=loop_controller.state.verification_performed,
-        is_stuck=loop_controller.state.is_stuck,
-        recent_failures=loop_controller.state.recent_failures,
-    )
     summary_note = accumulated_text.strip().replace("\n", " ")[:200] or "turn completed"
     ralph_mgr.record_progress(active_ralph_task.id, summary_note)
-    color = {
-        "done": "green",
-        "blocked": "yellow",
-        "progress": "cyan",
-    }.get(suggestion_kind, "white")
-    console.print(f"[{color}]Ralph suggestion:[/{color}] {suggestion_command}")
 
 
 def prepare_user_turn(
@@ -335,12 +320,7 @@ def prepare_user_turn(
 
     ctx.add_user_message(user_content)
     loop_controller.begin_turn(user_input)
-    tool_names, tool_definitions = resolve_tooling_for_phase(
-        tool_selector,
-        registry,
-        mode,
-        loop_controller.state.phase.value,
-    )
+    tool_names, tool_definitions = resolve_tooling(tool_selector, registry, mode)
 
     new_skills_content = skill_mgr.get_skills_for_context(user_input)
     updated_system_prompt = system_prompt
@@ -541,8 +521,6 @@ async def finalize_turn(
     handle_ralph_post_turn(
         ralph_mgr,
         accumulated_text=accumulated_text,
-        files_modified=files_modified,
-        loop_controller=loop_controller,
     )
 
     await hook_mgr.trigger(HookEvent.STOP, message_count=len(ctx.messages))
@@ -646,12 +624,7 @@ async def execute_agent_turn(
         loop_controller=loop_controller,
         tool_selector=tool_selector,
     )
-    state.tool_names, state.tool_definitions = resolve_tooling_for_phase(
-        tool_selector,
-        registry,
-        state.mode,
-        loop_controller.state.phase.value,
-    )
+    state.tool_names, state.tool_definitions = resolve_tooling(tool_selector, registry, state.mode)
 
     finalization = await finalize_turn(
         accumulated_text=accumulated_text,
@@ -1233,11 +1206,10 @@ async def process_tool_calls(
         # Re-call model with updated conversation history (streaming)
         if model_client and conversation_history is not None and tool_definitions is not None:
             if loop_controller is not None and tool_selector is not None:
-                _, tool_definitions = resolve_tooling_for_phase(
+                _, tool_definitions = resolve_tooling(
                     tool_selector,
                     registry,
                     loop_controller.state.mode,
-                    loop_controller.state.phase.value,
                 )
             active_system_prompt = (
                 loop_controller.compose_system_prompt(system_prompt)
@@ -1391,12 +1363,7 @@ async def chat_loop(
     )
 
     # Get tools for current mode
-    tool_names, tool_definitions = resolve_tooling_for_phase(
-        tool_selector,
-        registry,
-        mode,
-        None,
-    )
+    tool_names, tool_definitions = resolve_tooling(tool_selector, registry, mode)
     console.print(f"[dim]Tools: {len(tool_definitions)} ({mode} mode)[/dim]")
 
     # Build system prompt

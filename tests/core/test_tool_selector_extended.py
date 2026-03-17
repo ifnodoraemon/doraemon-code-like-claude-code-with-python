@@ -191,18 +191,12 @@ class TestToolSelectorExtended:
         build_tools = selector.get_tools_for_mode("build")
         assert set(unknown_tools) == set(build_tools)
 
-    def test_verifying_phase_prioritizes_run(self):
-        """Test that verify phase moves run to the front in build mode."""
+    def test_build_mode_keeps_stable_default_order(self):
+        """Test that build mode uses the configured default order."""
         selector = ToolSelector()
-        tools = selector.get_tools_for_state("build", "verifying")
-        assert tools[0] == "run"
-
-    def test_unknown_phase_keeps_default_order(self):
-        """Test that unknown phase falls back to mode-only ordering."""
-        selector = ToolSelector()
-        default_tools = selector.get_tools_for_mode("build")
-        phase_tools = selector.get_tools_for_state("build", "unknown-phase")
-        assert phase_tools == default_tools
+        tools = selector.get_tools_for_mode("build")
+        assert tools.index("read") < tools.index("write")
+        assert tools.index("write") < tools.index("web_search")
 
 
 class TestGlobalFunctions:

@@ -32,40 +32,16 @@ def test_ralph_manager_marks_task_blocked(tmp_path):
     assert blocked.notes[-1] == "blocked: need repro steps"
 
 
-def test_ralph_manager_suggests_outcome_from_run_state(tmp_path):
+def test_ralph_manager_records_progress_notes(tmp_path):
     mgr = RalphLoopManager(project_dir=tmp_path)
     task = mgr.add_task("Improve test stability")
     mgr.choose_next_task()
 
-    kind, command = mgr.suggest_outcome(
-        task.id,
-        files_modified=["src/app.py"],
-        verification_performed=True,
-        is_stuck=False,
-        recent_failures=[],
-    )
-    assert kind == "done"
-    assert command.startswith(f"/ralph done {task.id}")
+    assert mgr.record_progress(task.id, "inspected failing tests") is True
 
-    kind, command = mgr.suggest_outcome(
-        task.id,
-        files_modified=[],
-        verification_performed=False,
-        is_stuck=True,
-        recent_failures=["tests keep timing out"],
-    )
-    assert kind == "blocked"
-    assert command.startswith(f"/ralph blocked {task.id}")
-
-    kind, command = mgr.suggest_outcome(
-        task.id,
-        files_modified=["src/app.py"],
-        verification_performed=False,
-        is_stuck=False,
-        recent_failures=[],
-    )
-    assert kind == "progress"
-    assert command.startswith("/ralph resume-active")
+    updated = mgr.get_task(task.id)
+    assert updated is not None
+    assert updated.notes[-1] == "progress: inspected failing tests"
 
 
 def test_ralph_manager_can_resume_active_prompt(tmp_path):
