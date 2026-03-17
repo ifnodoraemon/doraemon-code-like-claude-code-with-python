@@ -304,9 +304,6 @@ class BashModeExecutor:
 
         # Execute command
         output = executor.execute("ls -la")
-
-        # Execute and capture for context
-        result = executor.execute_for_context("git status")
     """
 
     def __init__(self, cwd: str | Path | None = None):
@@ -370,29 +367,3 @@ class BashModeExecutor:
                 "error": str(e),
                 "exit_code": -1,
             }
-
-    def execute_for_context(self, command: str, timeout: float = 30) -> str:
-        """
-        Execute command and format output for conversation context.
-
-        Args:
-            command: Command to execute
-            timeout: Timeout in seconds
-
-        Returns:
-            Formatted output string for context
-        """
-        result = self.execute(command, timeout)
-
-        lines = [f"$ {command}"]
-
-        if result["output"]:
-            lines.append(result["output"].rstrip())
-
-        if result["error"]:
-            lines.append(f"[stderr] {result['error'].rstrip()}")
-
-        if result["exit_code"] != 0:
-            lines.append(f"[exit code: {result['exit_code']}]")
-
-        return "\n".join(lines)

@@ -858,7 +858,12 @@ async def handle_bash_mode(user_input: str, bash_executor, ctx, cmd_history):
             console.print(result["output"])
         if result["error"]:
             console.print(f"[red]{result['error']}[/red]")
-        ctx.add_user_message(bash_executor.execute_for_context(bash_cmd))
+        context_lines = [f"$ {bash_cmd}"]
+        if result["output"]:
+            context_lines.append(result["output"].rstrip())
+        if result["error"]:
+            context_lines.append(result["error"].rstrip())
+        ctx.add_user_message("\n".join(context_lines))
         cmd_history.add(user_input)
 
 

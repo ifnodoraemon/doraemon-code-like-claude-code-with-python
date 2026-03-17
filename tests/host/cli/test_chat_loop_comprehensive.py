@@ -457,7 +457,6 @@ class TestHandleBashMode:
         """Test handling simple bash command."""
         bash_executor = MagicMock()
         bash_executor.execute.return_value = {"output": "result", "error": ""}
-        bash_executor.execute_for_context.return_value = "Command executed"
 
         ctx = MagicMock()
         cmd_history = MagicMock()
@@ -473,7 +472,6 @@ class TestHandleBashMode:
         """Test bash command with error output."""
         bash_executor = MagicMock()
         bash_executor.execute.return_value = {"output": "", "error": "Command not found"}
-        bash_executor.execute_for_context.return_value = "Error occurred"
 
         ctx = MagicMock()
         cmd_history = MagicMock()
@@ -499,7 +497,6 @@ class TestHandleBashMode:
         """Test bash command with output."""
         bash_executor = MagicMock()
         bash_executor.execute.return_value = {"output": "file1.txt\nfile2.txt", "error": ""}
-        bash_executor.execute_for_context.return_value = "Files listed"
 
         ctx = MagicMock()
         cmd_history = MagicMock()
@@ -514,7 +511,6 @@ class TestHandleBashMode:
         """Test bash mode with extra whitespace."""
         bash_executor = MagicMock()
         bash_executor.execute.return_value = {"output": "result", "error": ""}
-        bash_executor.execute_for_context.return_value = "Done"
 
         ctx = MagicMock()
         cmd_history = MagicMock()

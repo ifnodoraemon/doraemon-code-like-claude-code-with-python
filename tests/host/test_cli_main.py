@@ -119,7 +119,6 @@ def _make_mock_managers(
     # Bash executor
     bash_executor = MagicMock()
     bash_executor.execute.return_value = {"output": "result", "error": ""}
-    bash_executor.execute_for_context.return_value = "Command executed"
 
     # Session manager
     session_mgr = MagicMock()
