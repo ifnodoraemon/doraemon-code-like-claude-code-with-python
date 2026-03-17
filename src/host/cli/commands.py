@@ -61,7 +61,6 @@ class CommandHandler:
         active_skills_content: str,
         build_system_prompt,
         convert_tools_to_definitions,
-        sensitive_tools: set,
     ) -> CommandResult:
         """Handle a slash command by delegating to the appropriate handler."""
         fallback = CommandResult.default(
@@ -82,7 +81,6 @@ class CommandHandler:
             active_skills_content,
             build_system_prompt,
             convert_tools_to_definitions,
-            sensitive_tools,
         )
         if core_result:
             return core_result

@@ -1271,7 +1271,6 @@ async def dispatch_user_input(
             active_skills_content=state.active_skills_content,
             build_system_prompt=build_system_prompt,
             convert_tools_to_definitions=convert_tools_to_definitions,
-            sensitive_tools=set(runtime.sensitive_tools),
         )
         apply_command_result(result=result, state=state)
         state.session_data = persist_session_state(

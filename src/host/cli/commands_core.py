@@ -59,7 +59,6 @@ class CoreCommandHandler:
         active_skills_content: str,
         build_system_prompt,
         convert_tools_to_definitions,
-        sensitive_tools: set,
     ) -> CommandResult | None:
         """Handle core commands."""
         result = CommandResult.default(
