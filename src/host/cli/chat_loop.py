@@ -18,7 +18,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-from src.core.agent_loop import AgentLoopController
+from src.core.agent_loop import AgentLoopController, RecommendedShift
 from src.core.config import load_config
 from src.core.context_manager import ConversationSummary
 from src.core.hooks import HookEvent
@@ -439,6 +439,37 @@ def apply_command_result(
         state.system_prompt = result.system_prompt
     if result.next_prompt:
         state.initial_prompt = result.next_prompt
+
+
+def build_shift_reminder(loop_controller: AgentLoopController | None) -> str | None:
+    """Build a host-side nudge when the policy recommends a concrete shift."""
+    if loop_controller is None:
+        return None
+
+    shift = loop_controller.state.recommended_shift
+    if shift == RecommendedShift.VERIFY_NOW:
+        return (
+            "[Verification Reminder]\n"
+            "You modified files but have not verified the changes yet. "
+            "Before finalizing, run the most relevant checks "
+            "(for example lint, typecheck, tests, or build) and then report the results."
+        )
+
+    if shift == RecommendedShift.SUMMARIZE_BLOCKER:
+        return (
+            "[Strategy Reminder]\n"
+            "You appear blocked. Stop repeating the same failing actions. "
+            "Summarize the blocker, state the missing evidence, and either inspect one new surface or explain why progress is blocked."
+        )
+
+    if shift == RecommendedShift.READ_NEW_SURFACE:
+        return (
+            "[Strategy Reminder]\n"
+            "The current approach is not producing progress. Read one different file, run one targeted search, "
+            "or perform one validating command before continuing."
+        )
+
+    return None
 
 
 async def send_model_request_with_retry(
@@ -1189,16 +1220,20 @@ async def process_tool_calls(
         if not has_tool_call:
             if loop_controller is not None:
                 loop_controller.finalize_response(response)
-            if (
-                (loop_controller.should_nudge_verification() if loop_controller else files_modified)
-                and not verification_performed
+            shift_reminder = build_shift_reminder(loop_controller)
+            should_nudge = (
+                shift_reminder is not None
                 and not verification_nudged
                 and model_client is not None
                 and conversation_history is not None
                 and tool_definitions is not None
-            ):
+            )
+            if should_nudge:
                 verification_nudged = True
-                if loop_controller is not None:
+                if (
+                    loop_controller is not None
+                    and loop_controller.state.recommended_shift == RecommendedShift.VERIFY_NOW
+                ):
                     loop_controller.mark_verification_nudged()
                 if loop_controller is not None and tool_selector is not None:
                     _, tool_definitions = resolve_tooling_for_phase(
@@ -1207,13 +1242,7 @@ async def process_tool_calls(
                         loop_controller.state.mode,
                         loop_controller.state.phase.value,
                     )
-                reminder = (
-                    "[Verification Reminder]\n"
-                    "You modified files but have not verified the changes yet. "
-                    "Before finalizing, run the most relevant checks "
-                    "(for example lint, typecheck, tests, or build) and then report the results."
-                )
-                conversation_history.append(Message(role="user", content=reminder))
+                conversation_history.append(Message(role="user", content=shift_reminder))
                 active_system_prompt = (
                     loop_controller.compose_system_prompt(system_prompt)
                     if loop_controller is not None
@@ -1232,7 +1261,7 @@ async def process_tool_calls(
                     last_usage = response.usage
                     continue
                 except Exception as e:
-                    console.print(f"[red]API Error during verification reminder: {e}[/red]")
+                    console.print(f"[red]API Error during strategy reminder: {e}[/red]")
 
             logger.info(
                 f"Turn complete: accumulated_text={len(accumulated_text)} chars, content={bool(response.content)}"

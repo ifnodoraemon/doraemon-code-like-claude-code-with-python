@@ -23,6 +23,15 @@ class AgentPhase(str, Enum):
     FINISHING = "finishing"
 
 
+class RecommendedShift(str, Enum):
+    """Preferred next shift when the loop needs stronger guidance."""
+
+    CONTINUE = "continue"
+    READ_NEW_SURFACE = "read_new_surface"
+    VERIFY_NOW = "verify_now"
+    SUMMARIZE_BLOCKER = "summarize_blocker"
+
+
 VALIDATION_MARKERS = (
     "pytest",
     "ruff",
@@ -106,6 +115,7 @@ class AgentState:
     recent_tool_signatures: list[str] = field(default_factory=list)
     recent_failures: list[str] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)
+    recommended_shift: RecommendedShift = RecommendedShift.CONTINUE
     strategy_hint: str = ""
     parallel_opportunities: list[str] = field(default_factory=list)
     speculative_batches: list[str] = field(default_factory=list)
@@ -124,6 +134,7 @@ class AgentState:
         self.recent_tool_signatures = []
         self.recent_failures = []
         self.evidence = []
+        self.recommended_shift = RecommendedShift.CONTINUE
         self.strategy_hint = ""
         self.parallel_opportunities = []
         self.speculative_batches = []
@@ -171,17 +182,40 @@ class AgentPolicyEngine:
 
     def should_nudge_verification(self, state: AgentState) -> bool:
         """Ask the model to verify only when edits happened and verification did not."""
-        return bool(
-            state.files_modified and not state.verification_performed and not state.verification_nudged
+        return (
+            state.recommended_shift == RecommendedShift.VERIFY_NOW
+            and not state.verification_nudged
         )
+
+    def recommend_shift(self, state: AgentState) -> RecommendedShift:
+        """Choose the strongest useful strategy shift for the current state."""
+        if state.is_stuck:
+            if state.recent_failures:
+                return RecommendedShift.SUMMARIZE_BLOCKER
+            return RecommendedShift.READ_NEW_SURFACE
+
+        if state.files_modified and not state.verification_performed:
+            return RecommendedShift.VERIFY_NOW
+
+        return RecommendedShift.CONTINUE
 
     def evaluate_strategy_hint(self, state: AgentState) -> str:
         """Suggest a strategy shift when the loop is stuck or can batch work."""
-        if state.is_stuck:
+        if state.recommended_shift == RecommendedShift.SUMMARIZE_BLOCKER:
             return (
-                "You appear to be stuck. Stop repeating the same reads or failed actions. "
-                "Summarize what is missing, then switch strategy: inspect a different file, "
-                "run a validating command, or explain the blocker."
+                "You appear to be blocked. Stop repeating the same reads or failed actions. "
+                "Summarize the blocker, identify the missing evidence, then change strategy."
+            )
+
+        if state.recommended_shift == RecommendedShift.READ_NEW_SURFACE:
+            return (
+                "You are not making progress with the current surface. Read one different file, "
+                "run one targeted search, or perform one validating check before deciding the next move."
+            )
+
+        if state.recommended_shift == RecommendedShift.VERIFY_NOW:
+            return (
+                "You have already changed files. Verify now with the highest-signal checks before doing more work."
             )
 
         if state.phase == AgentPhase.GATHERING:
@@ -262,7 +296,7 @@ class AgentPolicyEngine:
         """Detect repeated, low-progress behavior and mark the loop as stuck."""
         if not pending_calls:
             state.is_stuck = False
-            state.strategy_hint = self.evaluate_strategy_hint(state)
+            self.refresh_guidance(state)
             return
 
         signature = self._build_tool_signature(pending_calls)
@@ -276,6 +310,11 @@ class AgentPolicyEngine:
         repeated_failures = len(state.recent_failures) >= 2
 
         state.is_stuck = repeated_plan or too_many_tool_iterations or repeated_failures
+        self.refresh_guidance(state)
+
+    def refresh_guidance(self, state: AgentState) -> None:
+        """Recompute guidance derived from the current state."""
+        state.recommended_shift = self.recommend_shift(state)
         state.strategy_hint = self.evaluate_strategy_hint(state)
         state.parallel_opportunities = self.suggest_parallel_opportunities(state)
         state.speculative_batches = self.suggest_speculative_batches(state)
@@ -306,6 +345,7 @@ class AgentPolicyEngine:
             f"Modified files this turn: {modified}\n"
             f"Verification: {'done' if state.verification_performed else 'pending'}\n"
             f"Stuck detector: {'triggered' if state.is_stuck else 'clear'}\n"
+            f"Recommended shift: {state.recommended_shift.value}\n"
             f"Recent tools: {recent_tools}\n"
             f"Recent failures: {failures}\n\n"
             f"Strategy hint: {strategy_hint}\n\n"
@@ -374,9 +414,7 @@ class AgentLoopController:
         lowered = result_text.lower()
         if "error" in lowered or "failed" in lowered or "denied" in lowered:
             self.state.recent_failures.append(result_text[:200])
-        self.state.strategy_hint = self.policy.evaluate_strategy_hint(self.state)
-        self.state.parallel_opportunities = self.policy.suggest_parallel_opportunities(self.state)
-        self.state.speculative_batches = self.policy.suggest_speculative_batches(self.state)
+        self.policy.refresh_guidance(self.state)
 
     def finalize_response(self, response: ChatResponse) -> None:
         self.state.phase = self.policy.determine_phase(
@@ -385,9 +423,7 @@ class AgentLoopController:
             verification_performed=self.state.verification_performed,
             response_has_tool_calls=bool(response.tool_calls),
         )
-        self.state.strategy_hint = self.policy.evaluate_strategy_hint(self.state)
-        self.state.parallel_opportunities = self.policy.suggest_parallel_opportunities(self.state)
-        self.state.speculative_batches = self.policy.suggest_speculative_batches(self.state)
+        self.policy.refresh_guidance(self.state)
 
     def should_nudge_verification(self) -> bool:
         return self.policy.should_nudge_verification(self.state)
@@ -395,9 +431,7 @@ class AgentLoopController:
     def mark_verification_nudged(self) -> None:
         self.state.verification_nudged = True
         self.state.phase = AgentPhase.VERIFYING
-        self.state.strategy_hint = self.policy.evaluate_strategy_hint(self.state)
-        self.state.parallel_opportunities = self.policy.suggest_parallel_opportunities(self.state)
-        self.state.speculative_batches = self.policy.suggest_speculative_batches(self.state)
+        self.policy.refresh_guidance(self.state)
 
     def compose_system_prompt(self, base_prompt: str) -> str:
         return f"{base_prompt}{self.policy.build_prompt_suffix(self.state)}"

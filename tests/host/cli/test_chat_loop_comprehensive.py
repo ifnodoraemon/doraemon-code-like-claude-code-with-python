@@ -16,8 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.core.agent_loop import AgentLoopController
 from src.core.model_utils import ClientMode, Message, ToolDefinition
 from src.host.cli.chat_loop import (
+    build_shift_reminder,
     build_system_prompt,
     check_piped_input,
     convert_tools_to_definitions,
@@ -749,6 +751,92 @@ class TestProcessToolCalls:
             )
 
         assert text == "Headless response"
+
+    async def test_process_tool_calls_uses_strategy_reminder_for_blocked_shift(self):
+        response = MagicMock()
+        response.content = "Need another step"
+        response.tool_calls = None
+        response.has_tool_calls = False
+        response.thought = None
+        response.usage = {"prompt_tokens": 10, "completion_tokens": 5}
+
+        registry = MagicMock()
+        checkpoint_mgr = MagicMock()
+        hook_mgr = MagicMock()
+        ctx = MagicMock()
+        ctx.session_id = "test-session"
+        cost_tracker = MagicMock()
+        model_client = MagicMock()
+        follow_up = MagicMock()
+        follow_up.content = "Blocked summary"
+        follow_up.tool_calls = None
+        follow_up.has_tool_calls = False
+        follow_up.thought = None
+        follow_up.usage = {"prompt_tokens": 12, "completion_tokens": 6}
+        conversation_history = []
+
+        loop_controller = AgentLoopController.create(project="demo", mode="build")
+        loop_controller.begin_turn("fix flaky test")
+        loop_controller.state.is_stuck = True
+        loop_controller.state.recent_failures.append("failed: timeout in CI")
+        loop_controller.policy.refresh_guidance(loop_controller.state)
+
+        with patch("src.host.cli.chat_loop.console"), patch(
+            "src.host.cli.chat_loop.stream_model_response",
+            new_callable=AsyncMock,
+            return_value=follow_up,
+        ) as mock_stream:
+            text, files, messages = await process_tool_calls(
+                response=response,
+                registry=registry,
+                sensitive_tools=set(),
+                checkpoint_mgr=checkpoint_mgr,
+                hook_mgr=hook_mgr,
+                ctx=ctx,
+                headless=False,
+                model_name="test-model",
+                cost_tracker=cost_tracker,
+                model_client=model_client,
+                conversation_history=conversation_history,
+                tool_definitions=[],
+                system_prompt="Base prompt",
+                loop_controller=loop_controller,
+            )
+
+        assert text == "Need another stepBlocked summary"
+        assert files == []
+        assert messages == []
+        assert mock_stream.call_count == 1
+        reminder_message = conversation_history[-1]
+        assert reminder_message.role == "user"
+        assert "[Strategy Reminder]" in reminder_message.content
+        assert "Summarize the blocker" in reminder_message.content
+
+
+class TestShiftReminder:
+    def test_build_shift_reminder_for_verification(self):
+        controller = AgentLoopController.create(project="demo", mode="build")
+        controller.begin_turn("optimize hot path")
+        controller.state.files_modified.add("src/app.py")
+        controller.policy.refresh_guidance(controller.state)
+
+        reminder = build_shift_reminder(controller)
+
+        assert reminder is not None
+        assert "[Verification Reminder]" in reminder
+
+    def test_build_shift_reminder_for_blocker(self):
+        controller = AgentLoopController.create(project="demo", mode="build")
+        controller.begin_turn("fix flaky CI")
+        controller.state.is_stuck = True
+        controller.state.recent_failures.append("failed: timeout")
+        controller.policy.refresh_guidance(controller.state)
+
+        reminder = build_shift_reminder(controller)
+
+        assert reminder is not None
+        assert "[Strategy Reminder]" in reminder
+        assert "Summarize the blocker" in reminder
 
 
 # ============================================================================
