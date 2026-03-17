@@ -538,7 +538,7 @@ class TestProcessToolCalls:
         cost_tracker = MagicMock()
 
         with patch('src.host.cli.chat_loop.console'):
-            text, files, messages = await process_tool_calls(
+            text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
                 sensitive_tools=set(),
@@ -552,7 +552,6 @@ class TestProcessToolCalls:
 
         assert text == "Test response"
         assert files == []
-        assert messages == []
 
     async def test_process_tool_calls_with_thought(self):
         """Test response with thought process."""
@@ -570,7 +569,7 @@ class TestProcessToolCalls:
         cost_tracker = MagicMock()
 
         with patch('src.host.cli.chat_loop.console'):
-            text, files, messages = await process_tool_calls(
+            text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
                 sensitive_tools=set(),
@@ -600,7 +599,7 @@ class TestProcessToolCalls:
         cost_tracker = MagicMock()
 
         with patch('src.host.cli.chat_loop.console'):
-            text, files, messages = await process_tool_calls(
+            text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
                 sensitive_tools=set(),
@@ -647,7 +646,7 @@ class TestProcessToolCalls:
 
             with patch('src.host.cli.chat_loop.console'):
                 # This should stop at MAX_TOOL_STEPS
-                text, files, messages = await process_tool_calls(
+                text, files = await process_tool_calls(
                     response=responses[0],
                     registry=registry,
                     sensitive_tools=set(),
@@ -675,7 +674,7 @@ class TestProcessToolCalls:
         cost_tracker = MagicMock()
 
         with patch('src.host.cli.chat_loop.console'):
-            text, files, messages = await process_tool_calls(
+            text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
                 sensitive_tools=set(),
@@ -706,7 +705,7 @@ class TestProcessToolCalls:
         cost_tracker = MagicMock()
 
         with patch('src.host.cli.chat_loop.console'):
-            text, files, messages = await process_tool_calls(
+            text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
                 sensitive_tools=set(),
@@ -736,7 +735,7 @@ class TestProcessToolCalls:
         cost_tracker = MagicMock()
 
         with patch('src.host.cli.chat_loop.console'):
-            text, files, messages = await process_tool_calls(
+            text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
                 sensitive_tools=set(),

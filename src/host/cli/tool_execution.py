@@ -342,7 +342,7 @@ def detect_tool_loop(
     return False, ""
 
 
-def parse_tool_arguments(args_raw: Any) -> tuple[dict[str, Any], str]:
+def parse_tool_arguments(args_raw: Any) -> dict[str, Any]:
     """
     Parse tool arguments from raw format.
 
@@ -350,16 +350,12 @@ def parse_tool_arguments(args_raw: Any) -> tuple[dict[str, Any], str]:
         args_raw: Raw arguments (string or dict)
 
     Returns:
-        tuple of (parsed_args, normalized_json_string)
+        Parsed tool arguments as a dictionary
     """
     try:
         if isinstance(args_raw, str):
-            args = json.loads(args_raw)
-        else:
-            args = args_raw
-
-        args_str_normalized = json.dumps(args, sort_keys=True)
-        return args, args_str_normalized
+            return json.loads(args_raw)
+        return args_raw
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse tool arguments: {args_raw}, error: {e}")
-        return {"_parse_error": f"Invalid JSON arguments: {e}"}, "{}"
+        return {"_parse_error": f"Invalid JSON arguments: {e}"}

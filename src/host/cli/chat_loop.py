@@ -564,7 +564,7 @@ async def execute_agent_turn(
     if response is None:
         return None
 
-    accumulated_text, files_modified, _tool_results_messages = await process_tool_calls(
+    accumulated_text, files_modified = await process_tool_calls(
         response=response,
         project=project,
         registry=registry,
@@ -581,7 +581,6 @@ async def execute_agent_turn(
         system_prompt=state.system_prompt,
         permission_mgr=permission_mgr,
     )
-    state.tool_names, state.tool_definitions = resolve_tooling(tool_selector, registry, state.mode)
 
     finalization = await finalize_turn(
         accumulated_text=accumulated_text,
@@ -918,7 +917,7 @@ async def process_tool_calls(
     system_prompt: str = "",
     permission_mgr=None,
     project: str | None = None,
-) -> tuple[str, list[str], list[Message]]:
+) -> tuple[str, list[str]]:
     """
     Process tool calls from model response with agentic loop.
 
@@ -926,14 +925,13 @@ async def process_tool_calls(
     reasoning. Continues until the model responds with text only (no tool calls).
 
     Returns:
-        tuple of (accumulated_text, files_modified, tool_results_messages)
+        tuple of (accumulated_text, files_modified)
     """
     project = project or Path.cwd().name
     accumulated_text = ""
     files_modified = []
     tool_steps = 0
     previous_tool_calls = []
-    tool_results_messages = []
     last_usage = response.usage
     while True:
         if tool_steps >= MAX_TOOL_STEPS:
@@ -995,7 +993,7 @@ async def process_tool_calls(
                 tool_call_id = tc.get("id", "")
 
                 args_raw = func.get("arguments", {})
-                args, args_str_normalized = parse_tool_arguments(args_raw)
+                args = parse_tool_arguments(args_raw)
 
                 # Loop Detection
                 is_loop, loop_msg = detect_tool_loop(tool_name, args, previous_tool_calls)
@@ -1121,7 +1119,6 @@ async def process_tool_calls(
                 tool_call_id=tr["tool_call_id"],
                 name=tr["name"],
             )
-            tool_results_messages.append(tool_msg)
             if conversation_history is not None:
                 conversation_history.append(tool_msg)
 
@@ -1175,7 +1172,7 @@ async def process_tool_calls(
             )
             break
 
-    return accumulated_text, files_modified, tool_results_messages
+    return accumulated_text, files_modified
 
 
 async def chat_loop(
