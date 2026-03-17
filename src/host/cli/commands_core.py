@@ -620,16 +620,12 @@ class CoreCommandHandler:
         except Exception:
             return None
 
-    async def _handle_review(self, cmd_args: list[str], conversation_history: list) -> dict | None:
-        """
-        Handle /review command - view and navigate conversation history.
-
-        Usage:
-            /review              - Show recent conversation turns
-            /review <n>          - Show last n turns
-            /review goto <n>     - Go back to turn n (discard later messages)
-            /review search <q>   - Search conversation for keyword
-        """
+    async def _handle_review(
+        self,
+        cmd_args: list[str],
+        conversation_history: list,
+    ) -> CommandResult | None:
+        """Handle /review command - view and navigate conversation history."""
 
         messages = self.ctx.messages
 
@@ -637,48 +633,46 @@ class CoreCommandHandler:
             console.print("[yellow]No conversation history yet.[/yellow]")
             return None
 
-        # Parse subcommand
         if not cmd_args:
-            # Default: show last 10 turns
             self._show_conversation_history(messages, limit=10)
             return None
 
         subcommand = cmd_args[0].lower()
-
         if subcommand.isdigit():
-            # /review <n> - show last n turns
-            limit = int(subcommand)
-            self._show_conversation_history(messages, limit=limit)
+            self._show_conversation_history(messages, limit=int(subcommand))
             return None
 
-        elif subcommand == "goto":
-            # /review goto <n> - go back to turn n
-            if len(cmd_args) < 2 or not cmd_args[1].isdigit():
-                console.print("[red]Usage: /review goto <turn_number>[/red]")
-                return None
-
-            target_turn = int(cmd_args[1])
-            return self._goto_turn(messages, target_turn, conversation_history)
-
-        elif subcommand == "search":
-            # /review search <query>
-            if len(cmd_args) < 2:
-                console.print("[red]Usage: /review search <keyword>[/red]")
-                return None
-
-            query = " ".join(cmd_args[1:])
-            self._search_conversation(messages, query)
-            return None
-
-        elif subcommand == "all":
-            # /review all - show all messages
-            self._show_conversation_history(messages, limit=None)
-            return None
-
-        else:
+        handlers = {
+            "goto": lambda: self._handle_review_goto(cmd_args, messages, conversation_history),
+            "search": lambda: self._handle_review_search(cmd_args, messages),
+            "all": lambda: self._show_conversation_history(messages, limit=None),
+        }
+        handler = handlers.get(subcommand)
+        if handler is None:
             console.print(f"[red]Unknown subcommand: {subcommand}[/red]")
             console.print("[dim]Usage: /review [n|goto <n>|search <q>|all][/dim]")
             return None
+        return handler()
+
+    def _handle_review_goto(
+        self,
+        cmd_args: list[str],
+        messages: list,
+        conversation_history: list,
+    ) -> CommandResult | None:
+        """Handle `/review goto`."""
+        if len(cmd_args) < 2 or not cmd_args[1].isdigit():
+            console.print("[red]Usage: /review goto <turn_number>[/red]")
+            return None
+        return self._goto_turn(messages, int(cmd_args[1]), conversation_history)
+
+    def _handle_review_search(self, cmd_args: list[str], messages: list) -> None:
+        """Handle `/review search`."""
+        if len(cmd_args) < 2:
+            console.print("[red]Usage: /review search <keyword>[/red]")
+            return None
+        self._search_conversation(messages, " ".join(cmd_args[1:]))
+        return None
 
     def _show_conversation_history(self, messages: list, limit: int | None = 10):
         """Display conversation history with turn numbers."""
@@ -708,45 +702,41 @@ class CoreCommandHandler:
 
         console.print("[dim]Use /review goto <turn> to go back to a specific turn[/dim]")
 
-    def _goto_turn(self, messages: list, target_turn: int, conversation_history: list) -> dict:
+    def _goto_turn(
+        self,
+        messages: list,
+        target_turn: int,
+        conversation_history: list,
+    ) -> CommandResult:
         """Go back to a specific turn, discarding later messages."""
-        # Calculate message index (2 messages per turn: user + assistant)
         target_idx = target_turn * 2
 
         if target_idx > len(messages):
             console.print(f"[red]Turn {target_turn} doesn't exist. Max turn: {len(messages) // 2}[/red]")
-            return self._default_result()
+            return CommandResult()
 
         if target_idx <= 0:
             console.print("[red]Turn number must be positive.[/red]")
-            return self._default_result()
+            return CommandResult()
 
-        # Confirm with user
         from rich.prompt import Confirm
         msgs_to_remove = len(messages) - target_idx
         if msgs_to_remove > 0:
             if not Confirm.ask(
                 f"This will remove {msgs_to_remove} messages (turns {target_turn + 1} onwards). Continue?",
-                default=False
+                default=False,
             ):
                 console.print("[yellow]Cancelled.[/yellow]")
-                return {"handled": True}
+                return CommandResult()
 
-            # Truncate messages
             self.ctx.messages = messages[:target_idx]
             self.ctx._auto_save()
-
-            # Clear and rebuild conversation_history
             conversation_history.clear()
-
             console.print(f"[green]Returned to turn {target_turn}. Later messages removed.[/green]")
         else:
             console.print(f"[yellow]Already at or before turn {target_turn}.[/yellow]")
 
-        return {
-            "handled": True,
-            "conversation_history": [],  # Signal to rebuild from ctx
-        }
+        return CommandResult(conversation_history=[])
 
     def _search_conversation(self, messages: list, query: str):
         """Search conversation history for a keyword."""
@@ -828,186 +818,196 @@ class CoreCommandHandler:
         console.print(table)
 
     async def _handle_config(self, cmd_args: list[str]):
-        """
-        Handle /config command - interactive configuration.
-
-        Usage:
-            /config              - Show current config
-            /config set <k> <v>  - Set a config value
-            /config model        - Change model interactively
-        """
+        """Handle /config command - interactive configuration."""
         import json
 
         config_file = config_path()
         config_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Load config
         if config_file.exists():
             config_data = json.loads(config_file.read_text())
         else:
             config_data = get_default_config()
 
         if not cmd_args:
-            # Show current config
-            table = Table(title="Configuration", show_header=True)
-            table.add_column("Key", style="cyan")
-            table.add_column("Value", style="green")
-            table.add_column("Source", style="dim")
-
-            for k, v in config_data.items():
-                table.add_row(k, str(v), "config.json")
-
-            console.print(table)
-            console.print("\n[dim]Use /config set <key> <value> to change settings[/dim]")
-            return
+            self._show_config(config_data)
+            return None
 
         subcommand = cmd_args[0].lower()
-
-        if subcommand == "set" and len(cmd_args) >= 3:
-            key = cmd_args[1]
-            value = " ".join(cmd_args[2:])
-            config_data[key] = value
-            config_file.write_text(json.dumps(config_data, indent=2))
-            console.print(f"[green]Set {key} = {value}[/green]")
-
-        elif subcommand == "model":
-            # Interactive model selection
-            from rich.prompt import Prompt
-            models = [
-                "gemini-3-pro-preview",
-                "gemini-2.5-flash",
-                "gpt-4o",
-                "gpt-4o-mini",
-                "claude-sonnet-4-5-20250929",
-                "claude-opus-4-6",
-            ]
-            console.print("[bold]Available Models:[/bold]")
-            for i, m in enumerate(models, 1):
-                console.print(f"  {i}. {m}")
-            choice = Prompt.ask("Select model (number or name)", default="1")
-            if choice.isdigit() and 1 <= int(choice) <= len(models):
-                selected = models[int(choice) - 1]
-            else:
-                selected = choice
-            config_data["model"] = selected
-            config_file.write_text(json.dumps(config_data, indent=2))
-            console.print(f"[green]Selected: {selected}[/green]")
-            console.print(f"[dim]Saved model to {config_file}[/dim]")
-
-        else:
+        handlers = {
+            "set": lambda: self._set_config_value(cmd_args, config_data, config_file),
+            "model": lambda: self._select_config_model(config_data, config_file),
+        }
+        handler = handlers.get(subcommand)
+        if handler is None:
             console.print("[red]Usage: /config [set <key> <value> | model][/red]")
+            return None
+        handler()
+        return None
+
+    def _show_config(self, config_data: dict) -> None:
+        """Display current config values."""
+        table = Table(title="Configuration", show_header=True)
+        table.add_column("Key", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_column("Source", style="dim")
+        for key, value in config_data.items():
+            table.add_row(key, str(value), "config.json")
+        console.print(table)
+        console.print("\n[dim]Use /config set <key> <value> to change settings[/dim]")
+
+    def _set_config_value(self, cmd_args: list[str], config_data: dict, config_file: Path) -> None:
+        """Handle `/config set`."""
+        if len(cmd_args) < 3:
+            console.print("[red]Usage: /config set <key> <value>[/red]")
+            return
+        import json
+
+        key = cmd_args[1]
+        value = " ".join(cmd_args[2:])
+        config_data[key] = value
+        config_file.write_text(json.dumps(config_data, indent=2))
+        console.print(f"[green]Set {key} = {value}[/green]")
+
+    def _select_config_model(self, config_data: dict, config_file: Path) -> None:
+        """Handle `/config model`."""
+        import json
+
+        from rich.prompt import Prompt
+
+        models = [
+            "gemini-3-pro-preview",
+            "gemini-2.5-flash",
+            "gpt-4o",
+            "gpt-4o-mini",
+            "claude-sonnet-4-5-20250929",
+            "claude-opus-4-6",
+        ]
+        console.print("[bold]Available Models:[/bold]")
+        for index, model in enumerate(models, 1):
+            console.print(f"  {index}. {model}")
+        choice = Prompt.ask("Select model (number or name)", default="1")
+        selected = models[int(choice) - 1] if choice.isdigit() and 1 <= int(choice) <= len(models) else choice
+        config_data["model"] = selected
+        config_file.write_text(json.dumps(config_data, indent=2))
+        console.print(f"[green]Selected: {selected}[/green]")
+        console.print(f"[dim]Saved model to {config_file}[/dim]")
 
     async def _handle_memory(self, cmd_args: list[str]):
-        """
-        Handle /memory command - edit MEMORY.md files and inspect note memory.
-
-        Usage:
-            /memory                - Edit project MEMORY.md
-            /memory show           - Show current MEMORY.md
-            /memory notes          - List note memory for this project
-            /memory search <query> - Search note memory for this project
-            /memory open <title>   - Open a note file in $EDITOR
-            /memory delete <title> - Delete a note from this project
-            /memory export [path]  - Export note memory JSON for this project
-            /memory persona        - Show current persona JSON
-            /memory persona set <key> <value> - Update persona JSON
-        """
+        """Handle /memory command - edit MEMORY.md files and inspect note memory."""
         project_memory = memory_path()
 
         if not cmd_args or cmd_args[0] == "project":
-            target = project_memory
-            target.parent.mkdir(parents=True, exist_ok=True)
-        elif cmd_args[0] == "show":
-            console.print("[bold cyan]Project Memory (.agent/MEMORY.md):[/bold cyan]")
-            if project_memory.exists():
-                console.print(project_memory.read_text())
-            else:
-                console.print("[dim](not found)[/dim]")
-            return
-        elif cmd_args[0] == "notes":
-            console.print(list_notes(collection_name=self.project))
-            return
-        elif cmd_args[0] == "search":
-            if len(cmd_args) < 2:
-                console.print("[red]Usage: /memory search <query>[/red]")
-                return
-            console.print(search_notes(query=" ".join(cmd_args[1:]), collection_name=self.project))
-            return
-        elif cmd_args[0] == "save":
-            if len(cmd_args) < 3:
-                console.print("[red]Usage: /memory save <title> <content>[/red]")
-                return
-            console.print(
-                save_note(
-                    title=cmd_args[1],
-                    content=" ".join(cmd_args[2:]),
-                    collection_name=self.project,
-                )
-            )
-            return
-        elif cmd_args[0] == "open":
-            if len(cmd_args) < 2:
-                console.print("[red]Usage: /memory open <title>[/red]")
-                return
-            title = " ".join(cmd_args[1:])
-            note_path = Path(get_note_file_path(title=title, collection_name=self.project))
-            if not note_path.exists():
-                console.print(get_note(title=title, collection_name=self.project))
-                return
-            editor = os.getenv("EDITOR", "nano")
-            console.print(f"[dim]Opening {note_path} in {editor}...[/dim]")
-            try:
-                subprocess.run([editor, str(note_path)], timeout=600)
-                console.print("[green]Note file saved.[/green]")
-            except Exception as e:
-                console.print(f"[red]Failed to open editor: {e}[/red]")
-                console.print(f"[dim]Edit manually: {note_path}[/dim]")
-            return
-        elif cmd_args[0] == "delete":
-            if len(cmd_args) < 2:
-                console.print("[red]Usage: /memory delete <title>[/red]")
-                return
-            console.print(delete_note(title=" ".join(cmd_args[1:]), collection_name=self.project))
-            return
-        elif cmd_args[0] == "export":
-            export_data = export_notes(collection_name=self.project, export_format="json")
-            if len(cmd_args) == 1:
-                console.print(export_data)
-                return
-            output_path = Path(cmd_args[1])
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(export_data, encoding="utf-8")
-            console.print(f"[green]Exported notes to {output_path}[/green]")
-            return
-        elif cmd_args[0] == "persona":
-            if len(cmd_args) == 1 or cmd_args[1] == "show":
-                console.print(get_user_persona())
-                return
-            if len(cmd_args) >= 4 and cmd_args[1] == "set":
-                console.print(update_user_persona(key=cmd_args[2], value=" ".join(cmd_args[3:])))
-                return
-            console.print("[red]Usage: /memory persona [show|set <key> <value>][/red]")
-            return
-        else:
+            self._open_memory_file(project_memory)
+            return None
+
+        handlers = {
+            "show": lambda: self._show_project_memory(project_memory),
+            "notes": self._list_project_notes,
+            "search": lambda: self._search_project_notes(cmd_args),
+            "save": lambda: self._save_project_note(cmd_args),
+            "open": lambda: self._open_project_note(cmd_args),
+            "delete": lambda: self._delete_project_note(cmd_args),
+            "export": lambda: self._export_project_notes(cmd_args),
+            "persona": lambda: self._handle_memory_persona(cmd_args),
+        }
+        handler = handlers.get(cmd_args[0])
+        if handler is None:
             console.print(
                 "[red]Usage: /memory [project|show|notes|search <query>|save <title> <content>|open <title>|delete <title>|export [path]|persona ...][/red]"
             )
-            return
+            return None
+        handler()
+        return None
 
-        # Create file if not exists
-        if not target.exists():
-            target.write_text("# Memory\n\nAdd notes here that should persist across sessions.\n")
-
-        # Open in editor
+    def _open_with_editor(self, target: Path, saved_message: str) -> None:
+        """Open a file in `$EDITOR` with consistent fallback handling."""
         editor = os.getenv("EDITOR", "nano")
         console.print(f"[dim]Opening {target} in {editor}...[/dim]")
-
         try:
             subprocess.run([editor, str(target)], timeout=600)
-            console.print("[green]Memory file saved.[/green]")
+            console.print(f"[green]{saved_message}[/green]")
         except Exception as e:
             console.print(f"[red]Failed to open editor: {e}[/red]")
             console.print(f"[dim]Edit manually: {target}[/dim]")
+
+    def _open_memory_file(self, target: Path) -> None:
+        """Open project MEMORY.md, creating it if needed."""
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            target.write_text("# Memory\n\nAdd notes here that should persist across sessions.\n")
+        self._open_with_editor(target, "Memory file saved.")
+
+    def _show_project_memory(self, project_memory: Path) -> None:
+        """Display project memory contents."""
+        console.print("[bold cyan]Project Memory (.agent/MEMORY.md):[/bold cyan]")
+        if project_memory.exists():
+            console.print(project_memory.read_text())
+        else:
+            console.print("[dim](not found)[/dim]")
+
+    def _list_project_notes(self) -> None:
+        """List project note memory."""
+        console.print(list_notes(collection_name=self.project))
+
+    def _search_project_notes(self, cmd_args: list[str]) -> None:
+        """Search project note memory."""
+        if len(cmd_args) < 2:
+            console.print("[red]Usage: /memory search <query>[/red]")
+            return
+        console.print(search_notes(query=" ".join(cmd_args[1:]), collection_name=self.project))
+
+    def _save_project_note(self, cmd_args: list[str]) -> None:
+        """Save a project note."""
+        if len(cmd_args) < 3:
+            console.print("[red]Usage: /memory save <title> <content>[/red]")
+            return
+        console.print(
+            save_note(
+                title=cmd_args[1],
+                content=" ".join(cmd_args[2:]),
+                collection_name=self.project,
+            )
+        )
+
+    def _open_project_note(self, cmd_args: list[str]) -> None:
+        """Open a project note in `$EDITOR`."""
+        if len(cmd_args) < 2:
+            console.print("[red]Usage: /memory open <title>[/red]")
+            return
+        title = " ".join(cmd_args[1:])
+        note_path = Path(get_note_file_path(title=title, collection_name=self.project))
+        if not note_path.exists():
+            console.print(get_note(title=title, collection_name=self.project))
+            return
+        self._open_with_editor(note_path, "Note file saved.")
+
+    def _delete_project_note(self, cmd_args: list[str]) -> None:
+        """Delete a project note."""
+        if len(cmd_args) < 2:
+            console.print("[red]Usage: /memory delete <title>[/red]")
+            return
+        console.print(delete_note(title=" ".join(cmd_args[1:]), collection_name=self.project))
+
+    def _export_project_notes(self, cmd_args: list[str]) -> None:
+        """Export project notes as JSON."""
+        export_data = export_notes(collection_name=self.project, export_format="json")
+        if len(cmd_args) == 1:
+            console.print(export_data)
+            return
+        output_path = Path(cmd_args[1])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(export_data, encoding="utf-8")
+        console.print(f"[green]Exported notes to {output_path}[/green]")
+
+    def _handle_memory_persona(self, cmd_args: list[str]) -> None:
+        """Handle `/memory persona`."""
+        if len(cmd_args) == 1 or cmd_args[1] == "show":
+            console.print(get_user_persona())
+            return
+        if len(cmd_args) >= 4 and cmd_args[1] == "set":
+            console.print(update_user_persona(key=cmd_args[2], value=" ".join(cmd_args[3:])))
+            return
+        console.print("[red]Usage: /memory persona [show|set <key> <value>][/red]")
 
     def _run_doctor(self):
         """Run diagnostic checks (same as CLI doctor command)."""
@@ -1061,21 +1061,3 @@ class CoreCommandHandler:
             table.add_row(name, f"[{style}]{status}[/{style}]", icon)
 
         console.print(table)
-
-    # ── Spec Mode ─────────────────────────────────────────────
-
-    def _make_tool_state(self, mode: str, tool_names: list[str],
-                         active_skills_content: str,
-                         build_system_prompt, convert_tools_to_definitions,
-                         extra_prompt: str = "") -> dict:
-        """Build the state dict for a mode switch (tools + system prompt)."""
-        genai_tools = self.registry.get_genai_tools(tool_names)
-        prompt = build_system_prompt(mode, active_skills_content)
-        if extra_prompt:
-            prompt += f"\n\n{extra_prompt}"
-        return {
-            "mode": mode,
-            "tool_names": tool_names,
-            "tool_definitions": convert_tools_to_definitions(genai_tools),
-            "system_prompt": prompt,
-        }
