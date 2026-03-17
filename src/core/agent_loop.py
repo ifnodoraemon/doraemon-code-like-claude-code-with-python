@@ -4,19 +4,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from enum import Enum
 
 from src.core.model_utils import ChatResponse
-
-
-class AgentPhase(str, Enum):
-    """High-level intent, not a hard workflow state."""
-
-    GATHERING = "gathering"
-    EDITING = "editing"
-    VERIFYING = "verifying"
-    FINISHING = "finishing"
-
 
 VALIDATION_MARKERS = (
     "pytest",
@@ -37,29 +26,6 @@ VALIDATION_MARKERS = (
     "go test",
     "tox",
 )
-
-READ_LIKE_TOOLS = {
-    "read",
-    "search",
-    "semantic_search",
-    "web_search",
-    "browse_page",
-    "take_screenshot",
-    "fetch_url",
-    "db_read_query",
-    "db_list_tables",
-    "db_describe_table",
-    "search_notes",
-    "ask_user",
-}
-
-WRITE_LIKE_TOOLS = {
-    "write",
-    "run",
-    "db_write_query",
-    "github_create_issue",
-    "save_note",
-}
 
 
 def is_validation_action(tool_name: str, args: dict) -> bool:
@@ -91,7 +57,6 @@ class AgentState:
     project: str
     mode: str
     current_goal: str = ""
-    phase: AgentPhase = AgentPhase.GATHERING
     turn_count: int = 0
     tool_iterations: int = 0
     files_modified: set[str] = field(default_factory=set)
@@ -106,7 +71,6 @@ class AgentState:
         """Reset per-turn state while keeping session-level counters."""
         self.turn_count += 1
         self.current_goal = goal.strip()
-        self.phase = AgentPhase.GATHERING
         self.tool_iterations = 0
         self.files_modified.clear()
         self.verification_performed = False
@@ -125,33 +89,6 @@ class AgentPolicyEngine:
     def _build_tool_signature(self, pending_calls: list[tuple[str, dict, str]]) -> str:
         normalized = [{"name": tool_name, "args": args} for tool_name, args, _ in pending_calls]
         return json.dumps(normalized, sort_keys=True, ensure_ascii=True)
-
-    def determine_phase(
-        self,
-        pending_tool_names: list[str],
-        files_modified: set[str],
-        verification_performed: bool,
-        response_has_tool_calls: bool,
-    ) -> AgentPhase:
-        """Infer the current intent from pending work and recent outcomes."""
-        if any(name in WRITE_LIKE_TOOLS for name in pending_tool_names):
-            if all(name == "run" for name in pending_tool_names):
-                return AgentPhase.VERIFYING
-            return AgentPhase.EDITING
-
-        if pending_tool_names:
-            if all(name in READ_LIKE_TOOLS for name in pending_tool_names):
-                return AgentPhase.GATHERING
-            if any(name == "run" for name in pending_tool_names):
-                return AgentPhase.VERIFYING
-
-        if files_modified and not verification_performed:
-            return AgentPhase.VERIFYING
-
-        if not response_has_tool_calls:
-            return AgentPhase.FINISHING
-
-        return AgentPhase.GATHERING
 
     def update_stuck_state(self, state: AgentState, pending_calls: list[tuple[str, dict, str]]) -> None:
         """Detect repeated, low-progress behavior and mark the loop as stuck."""
@@ -181,10 +118,10 @@ class AgentPolicyEngine:
             f"Project: {state.project}\n"
             f"Mode: {state.mode}\n"
             f"Current goal: {state.current_goal or 'unspecified'}\n"
-            f"Current phase: {state.phase.value}\n"
             f"Modified files this turn: {modified}\n"
             f"Verification: {'done' if state.verification_performed else 'pending'}\n"
             f"Stuck detector: {'triggered' if state.is_stuck else 'clear'}\n"
+            f"Tool iterations: {state.tool_iterations}\n"
             f"Recent tools: {recent_tools}\n"
             f"Recent failures: {failures}\n"
         )
@@ -192,7 +129,7 @@ class AgentPolicyEngine:
 
 @dataclass
 class AgentLoopController:
-    """Session-level controller combining state tracking and phase inference."""
+    """Session-level controller combining state tracking and stuck detection."""
 
     state: AgentState
     policy: AgentPolicyEngine = field(default_factory=AgentPolicyEngine)
@@ -214,15 +151,10 @@ class AgentLoopController:
                 self.state.evidence.append(preview)
 
     def record_tool_plan(self, pending_calls: list[tuple[str, dict, str]], response: ChatResponse) -> None:
+        del response
         tool_names = [tool_name for tool_name, _, _ in pending_calls]
         self.state.last_tool_names.extend(tool_names)
         self.state.tool_iterations += 1
-        self.state.phase = self.policy.determine_phase(
-            pending_tool_names=tool_names,
-            files_modified=self.state.files_modified,
-            verification_performed=self.state.verification_performed,
-            response_has_tool_calls=bool(response.tool_calls),
-        )
         self.policy.update_stuck_state(self.state, pending_calls)
 
     def record_tool_outcome(
@@ -236,21 +168,13 @@ class AgentLoopController:
             self.state.files_modified.update(modified_paths)
         if is_validation_action(tool_name, args):
             self.state.verification_performed = True
-            self.state.phase = AgentPhase.FINISHING
-        elif self.state.files_modified:
-            self.state.phase = AgentPhase.EDITING
 
         lowered = result_text.lower()
         if "error" in lowered or "failed" in lowered or "denied" in lowered:
             self.state.recent_failures.append(result_text[:200])
 
     def finalize_response(self, response: ChatResponse) -> None:
-        self.state.phase = self.policy.determine_phase(
-            pending_tool_names=[],
-            files_modified=self.state.files_modified,
-            verification_performed=self.state.verification_performed,
-            response_has_tool_calls=bool(response.tool_calls),
-        )
+        del response
 
     def compose_system_prompt(self, base_prompt: str) -> str:
         return f"{base_prompt}{self.policy.build_prompt_suffix(self.state)}"
