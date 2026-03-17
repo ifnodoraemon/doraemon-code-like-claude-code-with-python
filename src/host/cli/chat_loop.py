@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from rich.console import Console
@@ -50,6 +51,39 @@ MAX_TOOL_STEPS = 15  # Prevent infinite tool loops
 MAX_INLINE_FILE_CHARS = 50_000
 MAX_INLINE_DIR_ENTRIES = 100
 _DEPENDENCY_ANALYZER = DependencyAnalyzer()
+
+
+@dataclass
+class ChatLoopState:
+    """Mutable chat-loop state shared across helpers."""
+
+    mode: str
+    tool_names: list[str]
+    tool_definitions: list[ToolDefinition]
+    active_skills_content: str
+    system_prompt: str
+    conversation_history: list[Message]
+    initial_prompt: str | None
+    turn_count: int
+    session_data: dict | None
+
+
+@dataclass
+class InputResult:
+    """Resolved input for one chat-loop iteration."""
+
+    user_input: str | None
+    ctrl_c_count: int
+    should_exit: bool = False
+
+
+@dataclass
+class TurnMetrics:
+    """Usage metrics returned after a completed turn."""
+
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    usage_available: bool
 
 
 def _is_context_overflow(error: Exception) -> bool:
@@ -326,6 +360,87 @@ def prepare_user_turn(
     )
 
 
+def show_runtime_status(*, task_mgr, cost_tracker) -> None:
+    """Render background-task and budget warnings before prompting."""
+    running_tasks = task_mgr.get_running_tasks()
+    if running_tasks:
+        console.print(f"[dim cyan]⏳ {len(running_tasks)} background task(s) running[/dim cyan]")
+
+    budget_status = cost_tracker.check_budget()
+    if budget_status.get("warning"):
+        console.print(f"[yellow]⚠️ {budget_status['warning']}[/yellow]")
+
+
+def read_user_input(
+    *,
+    state: ChatLoopState,
+    headless: bool,
+    mode_color: str,
+    ctrl_c_count: int,
+) -> InputResult:
+    """Read the next user input, honoring initial prompts and headless mode."""
+    if state.initial_prompt:
+        user_input = state.initial_prompt
+        state.initial_prompt = None
+        console.print(f"\n[bold {mode_color}]> {user_input}[/bold {mode_color}]")
+        return InputResult(user_input=user_input, ctrl_c_count=ctrl_c_count)
+
+    if headless:
+        return InputResult(user_input=None, ctrl_c_count=ctrl_c_count, should_exit=True)
+
+    try:
+        user_input = Prompt.ask(f"\n[bold {mode_color}]You ({state.mode})[/bold {mode_color}]")
+        ctrl_c_count = 0
+
+        for delim in ('"""', "'''"):
+            stripped = user_input.strip()
+            if not stripped.startswith(delim) or stripped.endswith(delim):
+                continue
+
+            lines = [user_input]
+            console.print("[dim]Multi-line mode (close with matching delimiter)...[/dim]")
+            while True:
+                if len(lines) >= 1000:
+                    console.print(
+                        "[yellow]Multi-line input limit (1000 lines) reached, closing automatically.[/yellow]"
+                    )
+                    break
+                line = Prompt.ask("[dim]...[/dim]")
+                lines.append(line)
+                if delim in line:
+                    break
+            user_input = "\n".join(lines)
+            break
+
+        return InputResult(user_input=user_input, ctrl_c_count=ctrl_c_count)
+    except KeyboardInterrupt:
+        ctrl_c_count += 1
+        if ctrl_c_count >= 2:
+            console.print("\n[yellow]Exiting...[/yellow]")
+            return InputResult(user_input=None, ctrl_c_count=ctrl_c_count, should_exit=True)
+        console.print("\n[dim]Press Ctrl+C again to exit, or type to continue.[/dim]")
+        return InputResult(user_input=None, ctrl_c_count=ctrl_c_count)
+
+
+def apply_command_result(
+    *,
+    result,
+    state: ChatLoopState,
+    loop_controller: AgentLoopController,
+) -> None:
+    """Apply a command result to the mutable chat-loop state."""
+    state.mode = result.mode
+    loop_controller.update_mode(state.mode)
+    state.tool_names = result.tool_names
+    state.tool_definitions = result.tool_definitions
+    state.active_skills_content = result.active_skills_content
+    state.conversation_history = result.conversation_history
+    if result.system_prompt:
+        state.system_prompt = result.system_prompt
+    if result.next_prompt:
+        state.initial_prompt = result.next_prompt
+
+
 async def send_model_request_with_retry(
     *,
     model_client,
@@ -396,7 +511,7 @@ async def finalize_turn(
     model_name: str,
     loop_controller: AgentLoopController,
     ralph_mgr,
-) -> dict[str, int | float | None]:
+) -> TurnMetrics:
     """Finalize one completed agent turn."""
     if accumulated_text:
         conversation_history.append(Message(role="assistant", content=accumulated_text))
@@ -432,11 +547,155 @@ async def finalize_turn(
 
     await hook_mgr.trigger(HookEvent.STOP, message_count=len(ctx.messages))
 
-    return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "usage_available": 1 if usage else 0,
-    }
+    return TurnMetrics(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        usage_available=bool(usage),
+    )
+
+
+async def execute_agent_turn(
+    *,
+    user_input: str,
+    state: ChatLoopState,
+    ctx,
+    checkpoint_mgr,
+    hook_mgr,
+    loop_controller: AgentLoopController,
+    tool_selector,
+    registry,
+    skill_mgr,
+    model_client,
+    model_name: str,
+    project: str,
+    sensitive_tools: set[str],
+    headless: bool,
+    cost_tracker,
+    permission_mgr,
+    ralph_mgr,
+    session_mgr,
+    session_name: str | None,
+) -> TurnMetrics | None:
+    """Execute one non-command agent turn and persist resulting session state."""
+    user_input, image_paths = extract_image_references(user_input)
+    if image_paths:
+        console.print(f"[dim cyan]Images: {', '.join(Path(p).name for p in image_paths)}[/dim cyan]")
+
+    user_input = expand_file_references(user_input)
+    hook_result = await hook_mgr.trigger(
+        HookEvent.USER_PROMPT_SUBMIT,
+        user_prompt=user_input,
+        message_count=len(ctx.messages),
+    )
+    if not hook_result.continue_processing:
+        if hook_result.reason:
+            console.print(f"[yellow]{hook_result.reason}[/yellow]")
+        return None
+
+    (
+        user_content,
+        state.active_skills_content,
+        state.system_prompt,
+        state.tool_names,
+        state.tool_definitions,
+    ) = prepare_user_turn(
+        user_input,
+        image_paths,
+        ctx=ctx,
+        checkpoint_mgr=checkpoint_mgr,
+        hook_mgr=hook_mgr,
+        loop_controller=loop_controller,
+        tool_selector=tool_selector,
+        registry=registry,
+        mode=state.mode,
+        skill_mgr=skill_mgr,
+        active_skills_content=state.active_skills_content,
+        system_prompt=state.system_prompt,
+    )
+
+    response = await send_model_request_with_retry(
+        model_client=model_client,
+        conversation_history=state.conversation_history,
+        user_content=user_content,
+        system_prompt=state.system_prompt,
+        loop_controller=loop_controller,
+        tool_definitions=state.tool_definitions,
+        model_name=model_name,
+        ctx=ctx,
+        checkpoint_mgr=checkpoint_mgr,
+    )
+    if response is None:
+        return None
+
+    accumulated_text, files_modified, _tool_results_messages = await process_tool_calls(
+        response=response,
+        project=project,
+        registry=registry,
+        sensitive_tools=sensitive_tools,
+        checkpoint_mgr=checkpoint_mgr,
+        hook_mgr=hook_mgr,
+        ctx=ctx,
+        headless=headless,
+        model_name=model_name,
+        cost_tracker=cost_tracker,
+        model_client=model_client,
+        conversation_history=state.conversation_history,
+        tool_definitions=state.tool_definitions,
+        system_prompt=state.system_prompt,
+        permission_mgr=permission_mgr,
+        loop_controller=loop_controller,
+        tool_selector=tool_selector,
+    )
+    state.tool_names, state.tool_definitions = resolve_tooling_for_phase(
+        tool_selector,
+        registry,
+        state.mode,
+        loop_controller.state.phase.value,
+    )
+
+    finalization = await finalize_turn(
+        accumulated_text=accumulated_text,
+        files_modified=files_modified,
+        response=response,
+        conversation_history=state.conversation_history,
+        ctx=ctx,
+        hook_mgr=hook_mgr,
+        checkpoint_mgr=checkpoint_mgr,
+        cost_tracker=cost_tracker,
+        model_name=model_name,
+        loop_controller=loop_controller,
+        ralph_mgr=ralph_mgr,
+    )
+    state.session_data = persist_session_state(
+        session_mgr,
+        ctx,
+        project,
+        state.mode,
+        session_name=session_name,
+        session_data=state.session_data,
+    )
+    return finalization
+
+
+def display_turn_metrics(*, metrics: TurnMetrics, state: ChatLoopState, ctx, cost_tracker, model_name: str) -> None:
+    """Print turn usage and context stats."""
+    if not metrics.usage_available:
+        return
+
+    state.turn_count += 1
+    stats = ctx.get_context_stats()
+    cost = cost_tracker.calculate_cost(
+        model_name,
+        int(metrics.prompt_tokens or 0),
+        int(metrics.completion_tokens or 0),
+    )
+    console.print(
+        f"\n[dim]Turn {state.turn_count} | "
+        f"In: {int(metrics.prompt_tokens or 0):,} | "
+        f"Out: {int(metrics.completion_tokens or 0):,} | "
+        f"Cost: ${cost:.4f} | "
+        f"Ctx: {stats['usage_percent']}%[/dim]"
+    )
 
 
 def check_piped_input() -> tuple[str | None, bool]:
@@ -1191,8 +1450,17 @@ async def chat_loop(
     system_prompt = build_system_prompt(mode, active_skills_content)
     loop_controller = AgentLoopController.create(project=project, mode=mode)
 
-    # Restore conversation history
-    conversation_history = restore_conversation_history(ctx)
+    state = ChatLoopState(
+        mode=mode,
+        tool_names=tool_names,
+        tool_definitions=tool_definitions,
+        active_skills_content=active_skills_content,
+        system_prompt=system_prompt,
+        conversation_history=restore_conversation_history(ctx),
+        initial_prompt=initial_prompt,
+        turn_count=turn_count,
+        session_data=session_data,
+    )
 
     # Trigger SessionStart hook
     await hook_mgr.trigger(
@@ -1240,63 +1508,20 @@ async def chat_loop(
     _ctrl_c_count = 0
     try:
         while True:
-            mode_color = MODE_COLORS.get(mode, "yellow")
-
-            # Show running tasks
-            running_tasks = task_mgr.get_running_tasks()
-            if running_tasks:
-                console.print(
-                    f"[dim cyan]⏳ {len(running_tasks)} background task(s) running[/dim cyan]"
-                )
-
-            # Check budget warning
-            budget_status = cost_tracker.check_budget()
-            if budget_status.get("warning"):
-                console.print(f"[yellow]⚠️ {budget_status['warning']}[/yellow]")
-
-            # Determine user input
-            if initial_prompt:
-                user_input = initial_prompt
-                initial_prompt = None
-                console.print(f"\n[bold {mode_color}]> {user_input}[/bold {mode_color}]")
-            elif headless:
+            mode_color = MODE_COLORS.get(state.mode, "yellow")
+            show_runtime_status(task_mgr=task_mgr, cost_tracker=cost_tracker)
+            input_result = read_user_input(
+                state=state,
+                headless=headless,
+                mode_color=mode_color,
+                ctrl_c_count=_ctrl_c_count,
+            )
+            _ctrl_c_count = input_result.ctrl_c_count
+            if input_result.should_exit:
                 break
-            else:
-                try:
-                    user_input = Prompt.ask(
-                        f"\n[bold {mode_color}]You ({mode})[/bold {mode_color}]"
-                    )
-                    _ctrl_c_count = 0
-
-                    # Multi-line input: detect """ or ''' opener
-                    for delim in ('"""', "'''"):
-                        if user_input.strip().startswith(delim) and not user_input.strip().endswith(
-                            delim
-                        ):
-                            lines = [user_input]
-                            console.print(
-                                "[dim]Multi-line mode (close with matching delimiter)...[/dim]"
-                            )
-                            while True:
-                                if len(lines) >= 1000:
-                                    console.print(
-                                        "[yellow]Multi-line input limit (1000 lines) reached, closing automatically.[/yellow]"
-                                    )
-                                    break
-                                line = Prompt.ask("[dim]...[/dim]")
-                                lines.append(line)
-                                if delim in line:
-                                    break
-                            user_input = "\n".join(lines)
-                            break
-
-                except KeyboardInterrupt:
-                    _ctrl_c_count += 1
-                    if _ctrl_c_count >= 2:
-                        console.print("\n[yellow]Exiting...[/yellow]")
-                        break
-                    console.print("\n[dim]Press Ctrl+C again to exit, or type to continue.[/dim]")
-                    continue
+            if input_result.user_input is None:
+                continue
+            user_input = input_result.user_input
 
             # Exit
             if user_input.lower() in ["exit", "quit", "/exit"]:
@@ -1316,169 +1541,69 @@ async def chat_loop(
                 result = await cmd_handler.handle(
                     cmd=cmd,
                     cmd_args=cmd_args,
-                    mode=mode,
-                    tool_names=tool_names,
-                    tool_definitions=tool_definitions,
-                    conversation_history=conversation_history,
-                    active_skills_content=active_skills_content,
+                    mode=state.mode,
+                    tool_names=state.tool_names,
+                    tool_definitions=state.tool_definitions,
+                    conversation_history=state.conversation_history,
+                    active_skills_content=state.active_skills_content,
                     build_system_prompt=build_system_prompt,
                     convert_tools_to_definitions=convert_tools_to_definitions,
                     sensitive_tools=set(sensitive_tools),
                 )
 
-                # Update state from command result
-                mode = result.mode
-                loop_controller.update_mode(mode)
-                tool_names = result.tool_names
-                tool_definitions = result.tool_definitions
-                active_skills_content = result.active_skills_content
-                conversation_history = result.conversation_history
-                if result.system_prompt:
-                    system_prompt = result.system_prompt
-                if result.next_prompt:
-                    initial_prompt = result.next_prompt
-                session_data = persist_session_state(
+                apply_command_result(
+                    result=result,
+                    state=state,
+                    loop_controller=loop_controller,
+                )
+                state.session_data = persist_session_state(
                     session_mgr,
                     ctx,
                     project,
-                    mode,
+                    state.mode,
                     session_name=session_name,
-                    session_data=session_data,
+                    session_data=state.session_data,
                 )
                 continue
 
-            # Add to command history
             cmd_history.add(user_input)
-
-            # Extract image references before expanding text file references
-            user_input, image_paths = extract_image_references(user_input)
-            if image_paths:
-                console.print(
-                    f"[dim cyan]Images: {', '.join(Path(p).name for p in image_paths)}[/dim cyan]"
-                )
-
-            # Expand @file references (text files only, images already extracted)
-            user_input = expand_file_references(user_input)
-
-            hook_result = await hook_mgr.trigger(
-                HookEvent.USER_PROMPT_SUBMIT,
-                user_prompt=user_input,
-                message_count=len(ctx.messages),
-            )
-            if not hook_result.continue_processing:
-                if hook_result.reason:
-                    console.print(f"[yellow]{hook_result.reason}[/yellow]")
-                continue
-
-            (
-                user_content,
-                active_skills_content,
-                system_prompt,
-                tool_names,
-                tool_definitions,
-            ) = prepare_user_turn(
-                user_input,
-                image_paths,
+            metrics = await execute_agent_turn(
+                user_input=user_input,
+                state=state,
                 ctx=ctx,
                 checkpoint_mgr=checkpoint_mgr,
                 hook_mgr=hook_mgr,
                 loop_controller=loop_controller,
                 tool_selector=tool_selector,
                 registry=registry,
-                mode=mode,
                 skill_mgr=skill_mgr,
-                active_skills_content=active_skills_content,
-                system_prompt=system_prompt,
-            )
-
-            response = await send_model_request_with_retry(
                 model_client=model_client,
-                conversation_history=conversation_history,
-                user_content=user_content,
-                system_prompt=system_prompt,
-                loop_controller=loop_controller,
-                tool_definitions=tool_definitions,
                 model_name=model_name,
-                ctx=ctx,
-                checkpoint_mgr=checkpoint_mgr,
-            )
-            if response is None:
-                continue
-
-            # Process tool calls (agentic loop: sends tool results back to model)
-            accumulated_text, files_modified, tool_results_messages = await process_tool_calls(
-                response=response,
                 project=project,
-                registry=registry,
                 sensitive_tools=sensitive_tools,
-                checkpoint_mgr=checkpoint_mgr,
-                hook_mgr=hook_mgr,
-                ctx=ctx,
                 headless=headless,
-                model_name=model_name,
                 cost_tracker=cost_tracker,
-                model_client=model_client,
-                conversation_history=conversation_history,
-                tool_definitions=tool_definitions,
-                system_prompt=system_prompt,
                 permission_mgr=permission_mgr,
-                loop_controller=loop_controller,
-                tool_selector=tool_selector,
+                ralph_mgr=ralph_mgr,
+                session_mgr=session_mgr,
+                session_name=session_name,
             )
-            tool_names, tool_definitions = resolve_tooling_for_phase(
-                tool_selector,
-                registry,
-                mode,
-                loop_controller.state.phase.value,
-            )
-
-
-
-            finalization = await finalize_turn(
-                accumulated_text=accumulated_text,
-                files_modified=files_modified,
-                response=response,
-                conversation_history=conversation_history,
+            if metrics is None:
+                continue
+            display_turn_metrics(
+                metrics=metrics,
+                state=state,
                 ctx=ctx,
-                hook_mgr=hook_mgr,
-                checkpoint_mgr=checkpoint_mgr,
                 cost_tracker=cost_tracker,
                 model_name=model_name,
-                loop_controller=loop_controller,
-                ralph_mgr=ralph_mgr,
             )
-            session_data = persist_session_state(
-                session_mgr,
-                ctx,
-                project,
-                mode,
-                session_name=session_name,
-                session_data=session_data,
-            )
-
-            # Show usage stats
-            if finalization["usage_available"]:
-                turn_count += 1
-                stats = ctx.get_context_stats()
-                cost = cost_tracker.calculate_cost(
-                    model_name,
-                    int(finalization["prompt_tokens"] or 0),
-                    int(finalization["completion_tokens"] or 0),
-                )
-                console.print(
-                    f"\n[dim]Turn {turn_count} | "
-                    f"In: {int(finalization['prompt_tokens'] or 0):,} | "
-                    f"Out: {int(finalization['completion_tokens'] or 0):,} | "
-                    f"Cost: ${cost:.4f} | "
-                    f"Ctx: {stats['usage_percent']}%[/dim]"
-                )
 
             # Print mode: exit after first response
             if print_mode:
                 break
 
             # Max turns limit
-            if max_turns and turn_count >= max_turns:
+            if max_turns and state.turn_count >= max_turns:
                 console.print(f"[yellow]Reached max turns limit ({max_turns})[/yellow]")
                 break
 
@@ -1494,9 +1619,9 @@ async def chat_loop(
             session_mgr,
             ctx,
             project,
-            mode,
+            state.mode,
             session_name=session_name,
-            session_data=session_data,
+            session_data=state.session_data,
         )
         try:
             await hook_mgr.trigger(HookEvent.SESSION_END, message_count=len(ctx.messages))
