@@ -18,7 +18,6 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-from src.core.agent_loop import AgentLoopController
 from src.core.config import load_config
 from src.core.context_manager import ConversationSummary
 from src.core.hooks import HookEvent
@@ -40,7 +39,6 @@ from src.host.cli.tool_execution import (
     detect_tool_loop,
     execute_tool,
     get_modified_paths,
-    is_validation_tool_call,
     parse_tool_arguments,
 )
 
@@ -293,8 +291,6 @@ def prepare_user_turn(
     *,
     ctx,
     checkpoint_mgr,
-    hook_mgr,
-    loop_controller: AgentLoopController,
     tool_selector,
     registry,
     mode: str,
@@ -319,7 +315,6 @@ def prepare_user_turn(
         user_content = user_input
 
     ctx.add_user_message(user_content)
-    loop_controller.begin_turn(user_input)
     tool_names, tool_definitions = resolve_tooling(tool_selector, registry, mode)
 
     new_skills_content = skill_mgr.get_skills_for_context(user_input)
@@ -406,11 +401,9 @@ def apply_command_result(
     *,
     result,
     state: ChatLoopState,
-    loop_controller: AgentLoopController,
 ) -> None:
     """Apply a command result to the mutable chat-loop state."""
     state.mode = result.mode
-    loop_controller.update_mode(state.mode)
     state.tool_names = result.tool_names
     state.tool_definitions = result.tool_definitions
     state.active_skills_content = result.active_skills_content
@@ -427,7 +420,6 @@ async def send_model_request_with_retry(
     conversation_history: list[Message],
     user_content,
     system_prompt: str,
-    loop_controller: AgentLoopController,
     tool_definitions,
     model_name: str,
     ctx,
@@ -435,8 +427,7 @@ async def send_model_request_with_retry(
 ) -> ChatResponse | None:
     """Send a model request and retry once after context compaction."""
     conversation_history.append(Message(role="user", content=user_content))
-    active_system_prompt = loop_controller.compose_system_prompt(system_prompt)
-    messages_for_api = [Message(role="system", content=active_system_prompt)] + conversation_history
+    messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
 
     try:
         return await stream_model_response(
@@ -462,8 +453,7 @@ async def send_model_request_with_retry(
         conversation_history.clear()
         conversation_history.extend(restore_conversation_history(ctx))
         conversation_history.append(Message(role="user", content=user_content))
-        active_system_prompt = loop_controller.compose_system_prompt(system_prompt)
-        messages_for_api = [Message(role="system", content=active_system_prompt)] + conversation_history
+        messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
         try:
             return await stream_model_response(
                 model_client,
@@ -487,9 +477,6 @@ async def finalize_turn(
     ctx,
     hook_mgr,
     checkpoint_mgr,
-    cost_tracker,
-    model_name: str,
-    loop_controller: AgentLoopController,
     ralph_mgr,
 ) -> TurnMetrics:
     """Finalize one completed agent turn."""
@@ -539,7 +526,6 @@ async def execute_agent_turn(
     ctx,
     checkpoint_mgr,
     hook_mgr,
-    loop_controller: AgentLoopController,
     tool_selector,
     registry,
     skill_mgr,
@@ -581,8 +567,6 @@ async def execute_agent_turn(
         image_paths,
         ctx=ctx,
         checkpoint_mgr=checkpoint_mgr,
-        hook_mgr=hook_mgr,
-        loop_controller=loop_controller,
         tool_selector=tool_selector,
         registry=registry,
         mode=state.mode,
@@ -596,7 +580,6 @@ async def execute_agent_turn(
         conversation_history=state.conversation_history,
         user_content=user_content,
         system_prompt=state.system_prompt,
-        loop_controller=loop_controller,
         tool_definitions=state.tool_definitions,
         model_name=model_name,
         ctx=ctx,
@@ -621,8 +604,6 @@ async def execute_agent_turn(
         tool_definitions=state.tool_definitions,
         system_prompt=state.system_prompt,
         permission_mgr=permission_mgr,
-        loop_controller=loop_controller,
-        tool_selector=tool_selector,
     )
     state.tool_names, state.tool_definitions = resolve_tooling(tool_selector, registry, state.mode)
 
@@ -634,9 +615,6 @@ async def execute_agent_turn(
         ctx=ctx,
         hook_mgr=hook_mgr,
         checkpoint_mgr=checkpoint_mgr,
-        cost_tracker=cost_tracker,
-        model_name=model_name,
-        loop_controller=loop_controller,
         ralph_mgr=ralph_mgr,
     )
     state.session_data = persist_session_state(
@@ -965,8 +943,6 @@ async def process_tool_calls(
     system_prompt: str = "",
     permission_mgr=None,
     project: str | None = None,
-    loop_controller: AgentLoopController | None = None,
-    tool_selector=None,
 ) -> tuple[str, list[str], list[Message]]:
     """
     Process tool calls from model response with agentic loop.
@@ -984,7 +960,6 @@ async def process_tool_calls(
     previous_tool_calls = []
     tool_results_messages = []
     last_usage = response.usage
-    verification_performed = False
     while True:
         if tool_steps >= MAX_TOOL_STEPS:
             console.print(
@@ -1012,9 +987,6 @@ async def process_tool_calls(
 
         has_tool_call = response.has_tool_calls
         tool_results = []
-        if loop_controller is not None:
-            loop_controller.record_model_response(response)
-
         # Thought display
         if response.thought:
             console.print(
@@ -1065,9 +1037,6 @@ async def process_tool_calls(
 
 
                 pending_calls.append((tool_name, args, tool_call_id))
-
-            if loop_controller is not None:
-                loop_controller.record_tool_plan(pending_calls, response)
 
             # Execute tools: parallel for multiple independent calls, sequential for single/sensitive
             if len(pending_calls) > 1:
@@ -1134,33 +1103,11 @@ async def process_tool_calls(
                     tool_results.append(tool_result_dict)
 
             # Post-process: track modifications
-            for tool_name, args, tool_call_id in pending_calls:
+            for tool_name, args, _tool_call_id in pending_calls:
                 modified_paths = get_modified_paths(tool_name, args)
                 files_modified.extend(modified_paths)
-                verification_performed = verification_performed or is_validation_tool_call(
-                    tool_name, args
-                )
-                if loop_controller is not None:
-                    result_text = next(
-                        (
-                            tr["result"]
-                            for tr in tool_results
-                            if tr["tool_call_id"] == tool_call_id
-                        ),
-                        "",
-                    )
-                    loop_controller.record_tool_outcome(
-                        tool_name=tool_name,
-                        args=args,
-                        result_text=result_text,
-                        modified_paths=modified_paths,
-                    )
-
         # No more tool calls - done with this turn
         if not has_tool_call:
-            if loop_controller is not None:
-                loop_controller.finalize_response(response)
-
             logger.info(
                 f"Turn complete: accumulated_text={len(accumulated_text)} chars, content={bool(response.content)}"
             )
@@ -1205,18 +1152,7 @@ async def process_tool_calls(
 
         # Re-call model with updated conversation history (streaming)
         if model_client and conversation_history is not None and tool_definitions is not None:
-            if loop_controller is not None and tool_selector is not None:
-                _, tool_definitions = resolve_tooling(
-                    tool_selector,
-                    registry,
-                    loop_controller.state.mode,
-                )
-            active_system_prompt = (
-                loop_controller.compose_system_prompt(system_prompt)
-                if loop_controller is not None
-                else system_prompt
-            )
-            messages_for_api = [Message(role="system", content=active_system_prompt)] + conversation_history
+            messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
             try:
                 response = await stream_model_response(
                     model_client,
@@ -1242,14 +1178,7 @@ async def process_tool_calls(
                             name=tr["name"],
                         )
                         conversation_history.append(tool_msg)
-                    active_system_prompt = (
-                        loop_controller.compose_system_prompt(system_prompt)
-                        if loop_controller is not None
-                        else system_prompt
-                    )
-                    messages_for_api = [
-                        Message(role="system", content=active_system_prompt)
-                    ] + conversation_history
+                    messages_for_api = [Message(role="system", content=system_prompt)] + conversation_history
                     try:
                         response = await stream_model_response(
                             model_client,
@@ -1287,7 +1216,7 @@ async def chat_loop(
     configure_root_logger()
 
     # Check for piped input (Headless detection)
-    piped_input, headless_from_pipe = check_piped_input()
+    piped_input, _headless_from_pipe = check_piped_input()
 
     initial_prompt = prompt
     if piped_input:
@@ -1369,8 +1298,6 @@ async def chat_loop(
     # Build system prompt
     active_skills_content = ""
     system_prompt = build_system_prompt(mode, active_skills_content)
-    loop_controller = AgentLoopController.create(project=project, mode=mode)
-
     state = ChatLoopState(
         mode=mode,
         tool_names=tool_names,
@@ -1475,7 +1402,6 @@ async def chat_loop(
                 apply_command_result(
                     result=result,
                     state=state,
-                    loop_controller=loop_controller,
                 )
                 state.session_data = persist_session_state(
                     session_mgr,
@@ -1494,7 +1420,6 @@ async def chat_loop(
                 ctx=ctx,
                 checkpoint_mgr=checkpoint_mgr,
                 hook_mgr=hook_mgr,
-                loop_controller=loop_controller,
                 tool_selector=tool_selector,
                 registry=registry,
                 skill_mgr=skill_mgr,
