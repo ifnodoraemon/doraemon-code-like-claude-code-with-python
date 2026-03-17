@@ -19,13 +19,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.core.hooks import HookEvent
+from src.core.model_utils import ClientMode
 from src.host.cli.chat_loop import (
     build_system_prompt,
-    convert_tools_to_definitions,
     chat_loop,
+    convert_tools_to_definitions,
 )
-from src.core.model_utils import ClientMode
-from src.core.hooks import HookEvent
 
 
 def _make_mock_model_client(mode=ClientMode.DIRECT, mode_info=None):
@@ -181,7 +181,7 @@ class TestBuildSystemPrompt:
         with patch("src.host.cli.chat_loop.load_config") as mock_config, \
              patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
              patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
 
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Plan mode prompt"
@@ -197,7 +197,7 @@ class TestBuildSystemPrompt:
         with patch("src.host.cli.chat_loop.load_config") as mock_config, \
              patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
              patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
 
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Base"
@@ -230,7 +230,7 @@ class TestBuildSystemPrompt:
         with patch("src.host.cli.chat_loop.load_config") as mock_config, \
              patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
              patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
 
             mock_config.return_value = {}
             mock_sys_prompt.return_value = "Default prompt"
@@ -265,7 +265,7 @@ class TestBuildSystemPrompt:
         with patch("src.host.cli.chat_loop.load_config") as mock_config, \
              patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
              patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
+             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
 
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Prompt"
