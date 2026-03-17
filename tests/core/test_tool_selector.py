@@ -29,3 +29,12 @@ class TestToolSelector:
         tools = selector.get_tools_for_mode("build")
         assert tools.index("read") < tools.index("write")
         assert tools.index("search") < tools.index("run")
+
+    def test_task_tools_are_available_by_default(self):
+        selector = ToolSelector()
+        plan_tools = selector.get_tools_for_mode("plan")
+        build_tools = selector.get_tools_for_mode("build")
+
+        for tool_name in ["task", "task_create", "task_list", "task_update_status"]:
+            assert tool_name in plan_tools
+            assert tool_name in build_tools
