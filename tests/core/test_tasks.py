@@ -37,6 +37,8 @@ class TestTaskManager:
         assert persisted is not None
         assert persisted.title == "Implement feature"
         assert persisted.description == "Minimal state store"
+        assert persisted.workspace_id == f"task-{created.id}"
+        assert persisted.workspace_path is not None
 
     def test_list_filters_by_status_and_parent(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
@@ -93,6 +95,44 @@ class TestTaskManager:
 
         assert manager.list_tasks() == []
 
+    def test_ready_tasks_require_completed_dependencies(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        dep = manager.create_task("Dependency")
+        blocked = manager.create_task("Blocked", dependencies=[dep.id], priority=10)
+        ready = manager.create_task("Ready", priority=1)
+
+        ready_ids = [task.id for task in manager.list_ready_tasks()]
+        assert ready.id in ready_ids
+        assert blocked.id not in ready_ids
+
+        manager.update_task_status(dep.id, TaskStatus.COMPLETED)
+        ready_ids = [task.id for task in manager.list_ready_tasks()]
+        assert ready_ids[0] == blocked.id
+
+    def test_claim_and_release_task(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        created = manager.create_task("Claim me")
+
+        claimed = manager.claim_task(created.id, "agent-alpha")
+        assert claimed.assigned_agent == "agent-alpha"
+        assert claimed.status == TaskStatus.IN_PROGRESS
+
+        released = manager.release_task(created.id, agent_id="agent-alpha")
+        assert released.assigned_agent is None
+        assert released.status == TaskStatus.PENDING
+
+    def test_claim_requires_dependencies(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        dep = manager.create_task("Dependency")
+        created = manager.create_task("Blocked", dependencies=[dep.id])
+
+        try:
+            manager.claim_task(created.id, "agent-alpha")
+        except ValueError as exc:
+            assert "unresolved dependencies" in str(exc)
+        else:
+            raise AssertionError("Expected claim_task to reject unresolved dependencies")
+
 
 class TestTaskTool:
     def test_task_tool_returns_structured_json(self, tmp_path, monkeypatch):
@@ -123,6 +163,36 @@ class TestTaskTool:
         assert updated["task"]["status"] == "completed"
         assert deleted == {"deleted": task_id, "ok": True}
         assert cleared == {"cleared": True, "ok": True}
+
+    def test_task_tool_supports_dependencies_claims_and_ready_listing(
+        self, tmp_path, monkeypatch
+    ):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        monkeypatch.setattr("src.servers.task.manager", manager)
+
+        dep = json.loads(task(operation="create", title="Dep"))
+        blocked = json.loads(
+            task(
+                operation="create",
+                title="Blocked",
+                dependencies=dep["task"]["id"],
+                priority=9,
+            )
+        )
+        ready_before = json.loads(task(operation="ready"))
+        assert [item["id"] for item in ready_before["tasks"]] == [dep["task"]["id"]]
+
+        json.loads(task(operation="update", task_id=dep["task"]["id"], status="completed"))
+        claimed = json.loads(
+            task(operation="claim", task_id=blocked["task"]["id"], agent_id="agent-1")
+        )
+        released = json.loads(
+            task(operation="release", task_id=blocked["task"]["id"], agent_id="agent-1")
+        )
+
+        assert claimed["task"]["assigned_agent"] == "agent-1"
+        assert claimed["task"]["status"] == "in_progress"
+        assert released["task"]["status"] == "pending"
 
     def test_task_tool_validates_inputs(self, tmp_path, monkeypatch):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")

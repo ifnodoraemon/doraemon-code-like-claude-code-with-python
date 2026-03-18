@@ -177,7 +177,7 @@ class TestAgentMessageQueue:
         )
 
         await queue.send(msg)
-        received = await queue.receive(timeout=1.0)
+        received = await queue.receive(agent_id="agent_2", timeout=1.0)
 
         assert received is not None
         assert received.sender_id == "agent_1"
@@ -187,7 +187,7 @@ class TestAgentMessageQueue:
     async def test_message_queue_timeout(self):
         """Test message queue timeout."""
         queue = AgentMessageQueue()
-        received = await queue.receive(timeout=0.1)
+        received = await queue.receive(agent_id="missing-agent", timeout=0.1)
         assert received is None
 
     @pytest.mark.asyncio
@@ -236,6 +236,23 @@ class TestAgentMessageQueue:
 
         assert len(messages_1) == 1
         assert len(messages_2) == 1
+
+    @pytest.mark.asyncio
+    async def test_message_queue_persists_mailbox_entries(self, tmp_path):
+        """Test durable mailbox append logs."""
+        queue = AgentMessageQueue(storage_dir=tmp_path / "mailboxes")
+        msg = AgentMessage(
+            sender_id="agent_1",
+            recipient_id="agent_2",
+            message_type="request",
+            content="Persist me",
+        )
+
+        await queue.send(msg)
+        persisted = queue.get_mailbox_messages("agent_2")
+
+        assert len(persisted) == 1
+        assert persisted[0].content == "Persist me"
 
 
 class TestAgentStateManager:
@@ -575,6 +592,23 @@ class TestSubagentManager:
         assert received.content == "Test"
 
     @pytest.mark.asyncio
+    async def test_manager_get_mailbox_messages(self, manager, tmp_path):
+        """Test reading durable mailbox messages via manager."""
+        manager._message_queue = AgentMessageQueue(storage_dir=tmp_path / "mailboxes")
+        msg = AgentMessage(
+            sender_id="agent_1",
+            recipient_id="agent_2",
+            message_type="request",
+            content="Stored",
+        )
+
+        await manager.send_message(msg)
+        persisted = manager.get_mailbox_messages("agent_2")
+
+        assert len(persisted) == 1
+        assert persisted[0].content == "Stored"
+
+    @pytest.mark.asyncio
     async def test_manager_subscribe_to_messages(self, manager):
         """Test subscribing to messages."""
         received_messages = []
@@ -710,7 +744,7 @@ class TestIntegration:
         await queue.send(msg1)
 
         # Simulate agent 2 receiving and responding
-        received = await queue.receive(timeout=1.0)
+        received = await queue.receive(agent_id="agent_2", timeout=1.0)
         assert received.sender_id == "agent_1"
 
         # Agent 2 sends response
@@ -724,7 +758,7 @@ class TestIntegration:
         await queue.send(msg2)
 
         # Agent 1 receives response
-        response = await queue.receive(timeout=1.0)
+        response = await queue.receive(agent_id="agent_1", timeout=1.0)
         assert response.content == "Code looks good"
 
     @pytest.mark.asyncio
