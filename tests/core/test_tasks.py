@@ -54,6 +54,13 @@ class TestTaskManager:
 
         assert [task.id for task in completed_children] == [child.id]
 
+    def test_list_tasks_preserves_creation_order(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        first = manager.create_task("First", priority=100)
+        second = manager.create_task("Second", priority=0)
+
+        assert [task.id for task in manager.list_tasks()] == [first.id, second.id]
+
     def test_get_task_tree_is_computed_from_parent_links(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
         root = manager.create_task("Root")

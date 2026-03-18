@@ -191,6 +191,13 @@ class TestAgentMessageQueue:
         assert received is None
 
     @pytest.mark.asyncio
+    async def test_message_queue_legacy_timeout_signature(self):
+        """Test legacy receive(timeout) calls still work."""
+        queue = AgentMessageQueue()
+        received = await queue.receive(0.1)
+        assert received is None
+
+    @pytest.mark.asyncio
     async def test_message_queue_subscribe(self):
         """Test message subscription."""
         queue = AgentMessageQueue()

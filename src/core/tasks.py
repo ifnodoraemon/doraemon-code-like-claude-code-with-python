@@ -225,7 +225,7 @@ class TaskManager:
             tasks = [task for task in tasks if task.status == status]
         if parent_id is not _UNSET:
             tasks = [task for task in tasks if task.parent_id == parent_id]
-        return sorted(tasks, key=lambda task: (-task.priority, task.created_at, task.id))
+        return sorted(tasks, key=lambda task: (task.created_at, task.id))
 
     def list_ready_tasks(self, include_claimed: bool = False) -> list[Task]:
         ready = []
@@ -236,7 +236,7 @@ class TaskManager:
                 continue
             if self.are_dependencies_satisfied(task.id):
                 ready.append(task)
-        return ready
+        return sorted(ready, key=lambda task: (-task.priority, task.created_at, task.id))
 
     def are_dependencies_satisfied(self, task_id: str) -> bool:
         task = self.get_task(task_id)

@@ -21,7 +21,7 @@ import json
 import logging
 import time
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -217,11 +217,14 @@ class AgentMessageQueue:
 
     async def receive(
         self,
-        agent_id: str | None = None,
+        agent_id: str | float | None = None,
         timeout: float | None = None,
     ) -> AgentMessage | None:
         """Receive the next message globally or for a specific recipient."""
-        queue = self._recipient_queues[agent_id] if agent_id else self._global_queue
+        if isinstance(agent_id, (int, float)) and timeout is None:
+            timeout = float(agent_id)
+            agent_id = None
+        queue = self._recipient_queues[agent_id] if isinstance(agent_id, str) else self._global_queue
         try:
             if timeout:
                 return await asyncio.wait_for(queue.get(), timeout=timeout)
@@ -253,9 +256,10 @@ class AgentMessageQueue:
         path = self.get_mailbox_path(agent_id)
         if not path.exists():
             return []
+        recent = deque(maxlen=max(1, limit))
         with path.open(encoding="utf-8") as handle:
-            lines = handle.readlines()
-        recent = lines[-limit:]
+            for line in handle:
+                recent.append(line)
         messages: list[AgentMessage] = []
         for line in recent:
             try:
