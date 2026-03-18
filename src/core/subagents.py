@@ -253,10 +253,12 @@ class AgentMessageQueue:
 
     def get_mailbox_messages(self, agent_id: str, limit: int = 100) -> list[AgentMessage]:
         """Read recent durable messages for an agent without loading all history."""
+        if limit <= 0:
+            return []
         path = self.get_mailbox_path(agent_id)
         if not path.exists():
             return []
-        recent = deque(maxlen=max(1, limit))
+        recent = deque(maxlen=limit)
         with path.open(encoding="utf-8") as handle:
             for line in handle:
                 recent.append(line)

@@ -260,6 +260,7 @@ class TestAgentMessageQueue:
 
         assert len(persisted) == 1
         assert persisted[0].content == "Persist me"
+        assert queue.get_mailbox_messages("agent_2", limit=0) == []
 
 
 class TestAgentStateManager:

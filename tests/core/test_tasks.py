@@ -128,6 +128,17 @@ class TestTaskManager:
         assert released.assigned_agent is None
         assert released.status == TaskStatus.PENDING
 
+    def test_claim_is_idempotent_for_same_agent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        created = manager.create_task("Claim me")
+
+        first = manager.claim_task(created.id, "agent-alpha")
+        second = manager.claim_task(created.id, "agent-alpha")
+
+        assert first.id == second.id
+        assert second.assigned_agent == "agent-alpha"
+        assert second.status == TaskStatus.IN_PROGRESS
+
     def test_claim_requires_dependencies(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
         dep = manager.create_task("Dependency")
@@ -139,6 +150,18 @@ class TestTaskManager:
             assert "unresolved dependencies" in str(exc)
         else:
             raise AssertionError("Expected claim_task to reject unresolved dependencies")
+
+    def test_update_rejects_dependency_cycles(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        first = manager.create_task("First")
+        second = manager.create_task("Second", dependencies=[first.id])
+
+        try:
+            manager.update_task(first.id, dependencies=[second.id])
+        except ValueError as exc:
+            assert "dependency cycle detected" in str(exc)
+        else:
+            raise AssertionError("Expected update_task to reject dependency cycles")
 
 
 class TestTaskTool:
@@ -196,10 +219,14 @@ class TestTaskTool:
         released = json.loads(
             task(operation="release", task_id=blocked["task"]["id"], agent_id="agent-1")
         )
+        reset_priority = json.loads(
+            task(operation="update", task_id=blocked["task"]["id"], priority=0)
+        )
 
         assert claimed["task"]["assigned_agent"] == "agent-1"
         assert claimed["task"]["status"] == "in_progress"
         assert released["task"]["status"] == "pending"
+        assert reset_priority["task"]["priority"] == 0
 
     def test_task_tool_validates_inputs(self, tmp_path, monkeypatch):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")

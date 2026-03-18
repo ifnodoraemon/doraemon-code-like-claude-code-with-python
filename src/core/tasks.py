@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from src.core.paths import tasks_path, workspaces_dir
+from src.core.paths import tasks_path
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +252,8 @@ class TaskManager:
         task = self.get_task(task_id)
         if task is None:
             raise TaskClaimError(f"task not found: {task_id}")
+        if task.assigned_agent == agent_id and task.status == TaskStatus.IN_PROGRESS:
+            return task
         if task.status != TaskStatus.PENDING:
             raise TaskClaimError(f"task {task_id} is not pending")
         if not self.are_dependencies_satisfied(task_id):
@@ -331,9 +333,29 @@ class TaskManager:
                 continue
             if dependency_id not in self._tasks and dependency_id != task_id:
                 raise ValueError(f"unknown dependency: {dependency_id}")
+            if self._has_dependency_path(dependency_id, task_id):
+                raise ValueError(f"dependency cycle detected: {task_id} -> {dependency_id}")
             if dependency_id not in normalized:
                 normalized.append(dependency_id)
         return normalized
+
+    def _has_dependency_path(self, start_id: str, target_id: str) -> bool:
+        if start_id == target_id:
+            return True
+
+        stack = [start_id]
+        seen: set[str] = set()
+        while stack:
+            current_id = stack.pop()
+            if current_id in seen:
+                continue
+            seen.add(current_id)
+            if current_id == target_id:
+                return True
+            current = self._tasks.get(current_id)
+            if current:
+                stack.extend(current.dependencies)
+        return False
 
     def _build_workspace_metadata(
         self,
@@ -342,10 +364,7 @@ class TaskManager:
         workspace_id: str | None = None,
     ) -> dict[str, str]:
         workspace_value = workspace_id or f"task-{task_id}"
-        if self.storage_path.name == "tasks.json":
-            workspace_root = self.storage_path.parent / "workspaces"
-        else:
-            workspace_root = workspaces_dir()
+        workspace_root = self.storage_path.parent / "workspaces"
         workspace_path = workspace_root / workspace_value
         workspace_path.mkdir(parents=True, exist_ok=True)
         return {

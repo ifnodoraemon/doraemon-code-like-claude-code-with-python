@@ -43,7 +43,7 @@ def task(
     parent_id: str | None = None,
     dependencies: str | None = None,
     agent_id: str | None = None,
-    priority: int = 0,
+    priority: int | None = None,
     workspace_id: str | None = None,
     delete_subtasks: bool = False,
 ) -> str:
@@ -73,7 +73,7 @@ def task(
                 description=description or "",
                 parent_id=parent_id,
                 dependencies=parsed_dependencies,
-                priority=priority,
+                priority=priority or 0,
                 workspace_id=workspace_id,
             )
         except ValueError as exc:
@@ -110,7 +110,7 @@ def task(
         update_kwargs = {
             "status": parsed_status,
             "dependencies": parsed_dependencies,
-            "priority": priority if priority != 0 else None,
+            "priority": priority,
             "workspace_id": workspace_id,
         }
         if agent_id is not None:
