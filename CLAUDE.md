@@ -239,7 +239,7 @@ python -m src.gateway.server
 
 ### Key Components
 
-**1. ModelClient** (`src/core/model_client.py`)
+**1. ModelClient** (`src/core/llm/model_client.py`)
 - Unified interface for all LLM providers
 - Supports two modes:
   - **Gateway mode**: Routes through unified API server
@@ -247,9 +247,9 @@ python -m src.gateway.server
 - Auto-detects mode from environment (AGENT_GATEWAY_URL vs API keys)
 - Always use this for LLM calls, never call providers directly
 
-**2. ContextManager** (`src/core/context_manager.py`)
+**2. AgentState** (`src/agent/state.py`)
 - Manages conversation history with automatic summarization
-- Summarizes at 70% of context window to prevent overflow
+- Replaces the old ContextManager with a cleaner interface
 - Persists to `.agent/conversations/`
 - Keeps recent messages always to maintain context
 
@@ -275,7 +275,7 @@ python -m src.gateway.server
 ```
 User Input
     ↓
-CommandHandler (slash commands) or ContextManager
+AgentSession or main.py
     ↓
 ModelClient (unified interface)
     ↓
@@ -455,7 +455,10 @@ AGENT_LOG_LEVEL=INFO
 src/
 ├── core/              # Core infrastructure
 │   ├── model_client.py      # Unified LLM interface
-│   ├── context_manager.py   # Conversation management
+│   ├── agent/                # Agent abstraction layer
+│   │   ├── state.py          # AgentState (replaces ContextManager)
+│   │   ├── react.py          # ReActAgent implementation
+│   │   └── doraemon.py       # DoraemonAgent (production agent)
 │   ├── tool_selector.py     # Mode-based tool allocation
 │   ├── checkpoint.py        # File snapshots & rollback
 │   ├── session.py           # Session persistence

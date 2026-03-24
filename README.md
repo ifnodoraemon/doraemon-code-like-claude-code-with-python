@@ -629,22 +629,24 @@ doraemon-code/
 │   │   ├── hooks.py               # 事件钩子
 │   │   ├── rules.py               # 规则加载
 │   │   ├── tool_selector.py       # 模式工具选择
-│   │   └── cost_tracker.py        # 成本追踪
+│   │   └── llm/                    # LLM 客户端模块
+│   │       ├── model_client.py    # 统一 LLM 接口
+│   │       └── ...
+│   │
+│   ├── agent/                      # Agent 抽象层
+│   │   ├── state.py               # AgentState 状态管理
+│   │   ├── react.py               # ReActAgent 实现
+│   │   └── doraemon.py            # DoraemonAgent 生产代理
 │   │
 │   ├── host/                      # CLI 实现
 │   │   ├── cli/
-│   │   │   ├── main.py            # 入口 + CLI 参数
-│   │   │   ├── chat_loop.py       # 主循环 + 流式输出
-│   │   │   ├── commands_core.py   # 核心 Slash 命令
-│   │   │   ├── commands_session.py# 会话命令
-│   │   │   ├── tool_execution.py  # 工具执行 + HITL
-│   │   │   └── initialization.py  # 管理器初始化
+│   │   │   └── main.py            # 入口 + 主循环
 │   │   └── tools.py               # 工具注册表
 │   │
 │   ├── servers/                   # 工具模块 (默认直调, 保持 MCP 兼容)
-│   │   ├── filesystem_unified.py  # read/write/search
-│   │   ├── run_unified.py         # run + 兼容别名
-│   │   ├── shell.py               # Shell + 安全实现
+│   │   ├── filesystem.py          # read/write/search
+│   │   ├── run.py                 # run + 兼容别名
+│   │   ├── _services/             # 内部服务模块
 │   │   ├── lsp.py                 # 语言服务
 │   │   ├── lint.py                # 代码检查
 │   │   ├── web.py                 # 网络请求

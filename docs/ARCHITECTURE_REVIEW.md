@@ -4,7 +4,7 @@
 
 ### 1.1 没有统一的 Agent 抽象
 
-**当前状态**：`chat_loop.py` (1209 行) 包含所有逻辑
+**当前状态**：`main.py` (1209 行) 包含所有逻辑
 
 ```
 当前流程（自定义流程）:
@@ -41,10 +41,10 @@ managers = {
     "registry": registry,               # 工具注册
     "tool_selector": tool_selector,     # 工具选择
     "ctx": ctx,                         # 上下文管理
-    "skill_mgr": skill_mgr,             # Skills
-    "checkpoint_mgr": checkpoint_mgr,   # 检查点
+    "skills": skills,             # Skills
+    "checkpoints": checkpoints,   # 检查点
     "task_mgr": task_mgr,               # 后台任务
-    "hook_mgr": hook_mgr,               # Hooks
+    "hooks": hooks,               # Hooks
     "cost_tracker": cost_tracker,       # 成本追踪
     "cmd_history": cmd_history,         # 命令历史
     "bash_executor": bash_executor,     # Bash 执行
@@ -182,7 +182,7 @@ class BaseAgent(ABC):
 **当前**:
 ```
 src/host/cli/
-├── chat_loop.py        # 1209 行，所有逻辑
+├── main.py        # 1209 行，所有逻辑
 ├── main.py             # 396 行，CLI 入口
 ├── commands.py         # 命令处理
 ├── commands_core.py    # 更多命令
@@ -298,7 +298,7 @@ async def test_chat():
     model_client = await initialize_model_client()
     registry = initialize_registry()
     ctx = initialize_context_manager("test")
-    skill_mgr = initialize_skill_manager()
+    skills = initialize_skill_manager()
     # ... 初始化 10+ 个组件
     
     # 然后才能测试

@@ -638,7 +638,7 @@ Location: `.agent/config.json`
   "mcpServers": {
     "filesystem": {
       "command": "python3",
-      "args": ["src/servers/filesystem_unified.py"],
+      "args": ["src/servers/filesystem.py"],
       "env": {}
     },
     "memory": {
@@ -653,7 +653,7 @@ Location: `.agent/config.json`
     },
     "run": {
       "command": "python3",
-      "args": ["src/servers/run_unified.py"],
+      "args": ["src/servers/run.py"],
       "env": {}
     },
     "task": {

@@ -116,7 +116,7 @@ async def _read_responses(self):
 
 ### BUG-003: 重试逻辑可能抛出 RuntimeError
 
-**文件**: `src/core/model_client_direct.py:65-82`  
+**文件**: `src/core/llm/model_client_direct.py:65-82`  
 **严重程度**: 🔴 Critical
 
 **问题描述**:
@@ -446,7 +446,7 @@ def _save_index(self):
 
 ### BUG-009: Gateway 客户端冗余检查
 
-**文件**: `src/core/model_client_gateway.py:92-97, 203-206`  
+**文件**: `src/core/llm/model_client_gateway.py:92-97, 203-206`  
 **严重程度**: 🟠 High
 
 **问题描述**:
@@ -501,7 +501,7 @@ MAX_TOOL_STEPS = int(os.getenv("AGENT_MAX_TOOL_STEPS", "50"))
 
 ### BUG-011: 多行编辑回滚可能写入损坏内容
 
-**文件**: `src/servers/filesystem_unified.py:475-510`  
+**文件**: `src/servers/filesystem.py:475-510`  
 **严重程度**: 🟡 Medium
 
 **问题描述**:
@@ -664,7 +664,7 @@ if not has_content and not has_tool_calls:
 
 ### BUG-015: Provider 检测可能匹配错误
 
-**文件**: `src/core/model_client_direct.py:155-175`  
+**文件**: `src/core/llm/model_client_direct.py:155-175`  
 **严重程度**: 🟡 Medium
 
 **问题描述**:
@@ -706,7 +706,7 @@ PROVIDER_PATTERNS = {
 日志级别使用不一致，某些重要的错误使用 `logger.warning()` 而非 `logger.error()`。
 
 **示例**:
-- `src/core/config.py:55`: 配置加载失败使用 `logger.warning()`
+- `src/core/config/config.py:55`: 配置加载失败使用 `logger.warning()`
 - `src/servers/shell.py:48`: 危险命令阻止使用 `logger.warning()`
 
 **修复建议**:
@@ -730,8 +730,8 @@ PROVIDER_PATTERNS = {
 # src/host/cli/tool_processor.py
 class ToolCallContext:
     registry: Any  # 应该是 ToolRegistry
-    checkpoint_mgr: Any  # 应该是 CheckpointManager
-    hook_mgr: HookManager  # 这个有类型
+    checkpoints: Any  # 应该是 CheckpointManager
+    hooks: HookManager  # 这个有类型
 ```
 
 **修复建议**:
@@ -748,7 +748,7 @@ class ToolCallContext:
 代码中存在多处魔法数字。
 
 **示例**:
-- `src/host/cli/chat_loop.py:26`: `MAX_INLINE_FILE_CHARS = 50_000`
+- `src/host/cli/main.py:26`: `MAX_INLINE_FILE_CHARS = 50_000`
 - `src/servers/browser.py:52`: `text[:10000]` 硬编码
 
 **修复建议**:
