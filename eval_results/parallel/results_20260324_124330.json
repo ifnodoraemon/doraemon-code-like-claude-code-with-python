@@ -1,0 +1,172 @@
+[
+  {
+    "task_id": "file-001",
+    "task_name": "file-001",
+    "difficulty": "easy",
+    "category": "file_operations",
+    "success": true,
+    "execution_time": 0.46096158027648926,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "file-002",
+    "task_name": "file-002",
+    "difficulty": "easy",
+    "category": "file_operations",
+    "success": true,
+    "execution_time": 0.19675421714782715,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "file-003",
+    "task_name": "file-003",
+    "difficulty": "easy",
+    "category": "file_operations",
+    "success": true,
+    "execution_time": 0.20296859741210938,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "code-001",
+    "task_name": "code-001",
+    "difficulty": "easy",
+    "category": "code_writing",
+    "success": true,
+    "execution_time": 0.2763078212738037,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "code-002",
+    "task_name": "code-002",
+    "difficulty": "medium",
+    "category": "code_writing",
+    "success": true,
+    "execution_time": 0.41126513481140137,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "code-003",
+    "task_name": "code-003",
+    "difficulty": "medium",
+    "category": "code_writing",
+    "success": true,
+    "execution_time": 0.19565129280090332,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "edit-001",
+    "task_name": "edit-001",
+    "difficulty": "medium",
+    "category": "code_editing",
+    "success": true,
+    "execution_time": 0.31730079650878906,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "edit-002",
+    "task_name": "edit-002",
+    "difficulty": "medium",
+    "category": "code_editing",
+    "success": true,
+    "execution_time": 0.4441869258880615,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "debug-001",
+    "task_name": "debug-001",
+    "difficulty": "hard",
+    "category": "debugging",
+    "success": true,
+    "execution_time": 0.2668426036834717,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  },
+  {
+    "task_id": "multi-001",
+    "task_name": "multi-001",
+    "difficulty": "hard",
+    "category": "multi_file",
+    "success": true,
+    "execution_time": 0.10620450973510742,
+    "tool_calls": [],
+    "errors": [],
+    "tool_usage": {
+      "expected_tools": [],
+      "actual_tools": [],
+      "tool_selection_accuracy": 1.0,
+      "tool_count": 0
+    },
+    "trial": 0
+  }
+]

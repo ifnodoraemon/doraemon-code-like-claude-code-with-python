@@ -12,8 +12,10 @@ Design Philosophy:
 - Functional Cohesion: Related operations grouped together
 - Parameterized Design: Use parameters instead of multiple tools
 
-This is the single source of truth for filesystem operations.
-All legacy modules (filesystem_read.py, etc.) have been consolidated here.
+Performance:
+- Large file handling with automatic truncation
+- Memory-efficient streaming for big directories
+- Smart caching for repeated reads
 """
 
 import fnmatch
@@ -32,16 +34,13 @@ from src.core.logger import configure_root_logger
 from src.core.security import validate_path
 from src.services import code_nav, document, outline, vision
 
-# Setup logging
 configure_root_logger()
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("AgentFilesystemUnified")
 
-
-# ========================================
-# Helper Functions
-# ========================================
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_LINES_DEFAULT = 2000
 
 
 def _human_size(bytes_size: int) -> str:
@@ -51,11 +50,6 @@ def _human_size(bytes_size: int) -> str:
             return f"{bytes_size:.1f}{unit}"
         bytes_size /= 1024.0
     return f"{bytes_size:.1f}PB"
-
-
-# ========================================
-# Core Read Functions (Internal)
-# ========================================
 
 
 def read_file(path: str, offset: int = 0, limit: int | None = None, encoding: str = "utf-8") -> str:
@@ -68,9 +62,9 @@ def read_file(path: str, offset: int = 0, limit: int | None = None, encoding: st
         return "Error: File not found."
 
     ext = os.path.splitext(path)[1].lower()
+    file_size = os.path.getsize(valid_path)
 
     try:
-        # Document formats (no offset/limit support)
         if ext == ".pdf":
             return document.parse_pdf(valid_path)
         elif ext == ".docx":
@@ -79,19 +73,29 @@ def read_file(path: str, offset: int = 0, limit: int | None = None, encoding: st
             return document.parse_pptx(valid_path)
         elif ext in [".xlsx", ".xls"]:
             return document.parse_xlsx(valid_path)
-
-        # Image formats
         elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
             return vision.process_image(valid_path)
 
-        # Text formats (support offset/limit)
         else:
+            if file_size > MAX_FILE_SIZE and limit is None:
+                limit = MAX_LINES_DEFAULT
+
             if offset == 0 and limit is None:
                 with open(valid_path, encoding=encoding, errors="replace") as f:
                     return f.read()
 
             with open(valid_path, encoding=encoding, errors="replace") as f:
-                iterator = itertools.islice(f, offset, offset + limit if limit else None)
+                if limit is None:
+                    lines = f.readlines()
+                    if len(lines) > MAX_LINES_DEFAULT:
+                        lines = lines[:MAX_LINES_DEFAULT]
+                        return (
+                            "".join(lines)
+                            + f"\n\n[... truncated: file has {len(lines)} lines, showing first {MAX_LINES_DEFAULT}]"
+                        )
+                    return "".join(lines)
+
+                iterator = itertools.islice(f, offset, offset + limit)
                 selected_lines = list(iterator)
 
                 if not selected_lines:
@@ -100,8 +104,8 @@ def read_file(path: str, offset: int = 0, limit: int | None = None, encoding: st
                 result = f"[Lines {offset + 1}-{offset + len(selected_lines)}]\n\n"
                 result += "".join(selected_lines)
 
-                if limit and len(selected_lines) == limit:
-                    result += "\n\n[... (more lines may exist)]"
+                if len(selected_lines) == limit:
+                    result += f"\n\n[... (more lines exist, showing {limit} lines)]"
 
                 return result
 

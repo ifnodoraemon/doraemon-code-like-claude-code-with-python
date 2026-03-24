@@ -345,6 +345,15 @@ class ToolRegistry:
         Raises:
             ValueError: If tool not found
         """
+        from src.core.tool_cache import ToolCache, should_cache_tool
+
+        cache = ToolCache.get_instance()
+
+        if should_cache_tool(name):
+            cached = cache.get(name, arguments)
+            if cached is not None:
+                return cached
+
         tool = self._tools.get(name)
         if not tool:
             available = ", ".join(self._tools.keys())
@@ -372,13 +381,15 @@ class ToolRegistry:
 
             result_str = str(result) if result is not None else "Success"
 
-            # Truncate oversized results to prevent context overflow
             if len(result_str) > self.MAX_RESULT_LENGTH:
                 truncated = result_str[: self.MAX_RESULT_LENGTH]
                 result_str = (
                     f"{truncated}\n\n... [Output truncated: {len(result_str):,} chars, "
                     f"showing first {self.MAX_RESULT_LENGTH:,}]"
                 )
+
+            if should_cache_tool(name) and not result_str.startswith("Error"):
+                cache.set(name, arguments, result_str)
 
             return result_str
 
@@ -439,9 +450,11 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("src.servers.run_unified", "run", sensitive=True, timeout=300.0),
 
     # ── Memory ───────────────────────────────────────────────────────
-    ToolSpec("src.servers.memory", "note",         sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.memory", "get_note",     sensitive=False, timeout=60.0),
     ToolSpec("src.servers.memory", "save_note",    sensitive=True,  timeout=60.0),
     ToolSpec("src.servers.memory", "search_notes", sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.memory", "list_notes",   sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.memory", "delete_note",  sensitive=True,  timeout=30.0),
 
     # ── Web ──────────────────────────────────────────────────────────
     ToolSpec("src.servers.web", "fetch_page",      name="fetch_url",  sensitive=False, timeout=30.0),
@@ -449,9 +462,6 @@ TOOL_SPECS: list[ToolSpec] = [
 
     # ── Task ─────────────────────────────────────────────────────────
     ToolSpec("src.servers.task", "task", sensitive=False, timeout=60.0),
-
-    # ── LSP ──────────────────────────────────────────────────────────
-    ToolSpec("src.servers.lsp", "lsp",             sensitive=False, timeout=120.0),
     ToolSpec("src.servers.lsp", "lsp_diagnostics", sensitive=False, timeout=120.0),
     ToolSpec("src.servers.lsp", "lsp_completions", sensitive=False, timeout=30.0),
     ToolSpec("src.servers.lsp", "lsp_hover",       sensitive=False, timeout=30.0),
@@ -459,9 +469,9 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("src.servers.lsp", "lsp_rename",      sensitive=True,  timeout=60.0),
     ToolSpec("src.servers.lsp", "lsp_definition",  sensitive=False, timeout=30.0),
 
-    # ── Semantic Search ──────────────────────────────────────────────
-    ToolSpec("src.servers.semantic_search", "semantic_search", sensitive=False, timeout=120.0),
-    ToolSpec("src.servers.semantic_search", "index_codebase",  sensitive=False, timeout=300.0),
+    # ── Semantic Search (optional: requires chromadb+protobuf) ───────────
+    # ToolSpec("src.servers.semantic_search", "semantic_search", sensitive=False, timeout=120.0),
+    # ToolSpec("src.servers.semantic_search", "index_codebase",  sensitive=False, timeout=300.0),
 
     # ── Misc ─────────────────────────────────────────────────────────
     ToolSpec("src.servers.ask_user", "ask_user",      sensitive=False, timeout=300.0),

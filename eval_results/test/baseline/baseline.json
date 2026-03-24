@@ -1,0 +1,46 @@
+{
+  "summary": {
+    "timestamp": "2026-03-24T16:30:58.123175",
+    "total_tasks": 1,
+    "successful_tasks": 1,
+    "by_category": {
+      "test": {
+        "total": 1,
+        "success": 1
+      }
+    },
+    "by_difficulty": {
+      "1": {
+        "total": 1,
+        "success": 1
+      }
+    },
+    "success_rate": 1.0
+  },
+  "results": [
+    {
+      "task_id": "test-001",
+      "task_name": "\u6d4b\u8bd5\u4efb\u52a1",
+      "difficulty": 1,
+      "category": "test",
+      "success": true,
+      "execution_time": 0.3582630157470703,
+      "tool_calls": [],
+      "errors": [],
+      "tool_usage": {
+        "expected_tools": [],
+        "actual_tools": [],
+        "tool_selection_accuracy": 1.0,
+        "tool_count": 0
+      }
+    }
+  ],
+  "metrics": {
+    "success_rate": 1.0,
+    "avg_execution_time": 0.3582630157470703,
+    "avg_tool_calls": 0.0,
+    "success_by_difficulty": {
+      "1": 1.0
+    }
+  }
+}

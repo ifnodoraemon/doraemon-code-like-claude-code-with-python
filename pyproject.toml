@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "doraemon-code"
 version = "0.8.0"
-description = "Doraemon Code - Your AI Coding Assistant with Web UI"
+description = "Doraemon Code - Your AI Coding Assistant"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -23,51 +23,93 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-
+# Core dependencies only (~50MB)
 dependencies = [
     # MCP Protocol
     "mcp[cli]>=1.0.0",
     
-    # AI SDKs (official only)
-    "google-genai>=0.2.0",          # Google Gemini official SDK
-    "openai>=1.0.0",                # OpenAI official SDK
-    "anthropic>=0.18.0",            # Anthropic Claude official SDK
+    # AI SDKs (at least one required)
+    "google-genai>=1.0.0",
     
-    # Gateway Server
-    "fastapi>=0.100.0",             # API framework for Gateway
-    "uvicorn[standard]>=0.23.0",    # ASGI server
-    "httpx>=0.24.0",                # Async HTTP client
-    
-    # CLI & UI
+    # CLI
     "typer>=0.9.0",
-    "rich>=13.0.0",
-    "textual>=0.47.0",
+    "rich>=14.0.0",
     
-    # Data Processing
+    # Data
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
     
-    # File Processing
+    # HTTP
+    "httpx>=0.24.0",
+]
+
+[project.optional-dependencies]
+# OpenAI support
+openai = [
+    "openai>=1.0.0",
+]
+
+# Anthropic support
+anthropic = [
+    "anthropic>=0.18.0",
+]
+
+# All LLM providers
+llm = [
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+]
+
+# Browser automation (~100MB)
+browser = [
+    "playwright>=1.40.0",
+]
+
+# Semantic search (~200MB)
+search = [
+    "chromadb>=0.4.0",
+]
+
+# Database support (~20MB)
+database = [
+    "sqlalchemy>=2.0.0",
+]
+
+# File processing (~30MB)
+files = [
     "pillow>=10.0.0",
     "pdfplumber>=0.10.0",
     "python-docx>=1.0.0",
     "python-pptx>=0.6.0",
     "openpyxl>=3.1.0",
-    
-    # Web & Search
+]
+
+# Web scraping (~10MB)
+web = [
     "ddgs>=9.10.0",
     "trafilatura>=1.6.0",
     "requests>=2.31.0",
     "PyGithub>=2.1.1",
-
-    # File Watching
-    "watchdog>=3.0.0",              # File system monitoring
 ]
 
-[project.optional-dependencies]
-local-ai = [
-    "chromadb>=0.4.0",
+# Gateway server (~20MB)
+gateway = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
 ]
+
+# Web UI (~20MB)
+webui = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+]
+
+# File watching (~5MB)
+watch = [
+    "watchdog>=3.0.0",
+]
+
+# Development tools
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
@@ -76,13 +118,41 @@ dev = [
     "mypy>=1.0.0",
 ]
 
-browser = [
-    "playwright>=1.40.0",           # Browser automation
+# Textual TUI (~10MB)
+tui = [
+    "textual>=0.47.0",
 ]
 
+# All optional features
 all = [
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
     "playwright>=1.40.0",
     "chromadb>=0.4.0",
+    "sqlalchemy>=2.0.0",
+    "pillow>=10.0.0",
+    "pdfplumber>=0.10.0",
+    "python-docx>=1.0.0",
+    "python-pptx>=0.6.0",
+    "openpyxl>=3.1.0",
+    "ddgs>=9.10.0",
+    "trafilatura>=1.6.0",
+    "requests>=2.31.0",
+    "PyGithub>=2.1.1",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "watchdog>=3.0.0",
+    "textual>=0.47.0",
+]
+
+# Common setup (recommended)
+standard = [
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+    "playwright>=1.40.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "watchdog>=3.0.0",
 ]
 
 [project.scripts]
@@ -116,7 +186,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"__init__.py" = ["F401"]
 
 # Pytest configuration
 [tool.pytest.ini_options]
@@ -132,10 +202,9 @@ addopts = [
     "--ignore=tests/evals/fixtures",
 ]
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "slow: marks tests as slow",
     "integration: marks tests as integration tests",
     "benchmark: marks tests as benchmarks",
-    "security: marks tests as security tests",
 ]
 
 # Coverage configuration
@@ -160,30 +229,6 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
-disable_error_code = [
-    "abstract",
-    "arg-type",
-    "assignment",
-    "attr-defined",
-    "call-arg",
-    "dict-item",
-    "import-untyped",
-    "index",
-    "misc",
-    "no-any-return",
-    "no-redef",
-    "no-untyped-def",
-    "operator",
-    "return-value",
-    "union-attr",
-    "unreachable",
-    "var-annotated",
-]
-
-[[tool.mypy.overrides]]
-module = ["src.core.*", "src.gateway.*"]
-disallow_untyped_defs = false
-warn_unreachable = false
 
 # Setuptools configuration
 [tool.setuptools.packages.find]

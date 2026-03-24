@@ -1,44 +1,33 @@
 """
-Code Agent CLI - Main Entry Point
+Doraemon Code CLI - Simplified Entry Point
 
-Provides the primary interactive interface for the code agent.
-Features:
-- Multi-mode support (plan/build)
-- HITL (Human-in-the-loop) approval for sensitive operations
-- Rich terminal UI with markdown rendering
-- Vector memory (ChromaDB) for long-term recall
-- Direct tool calls (no subprocess overhead)
-- Automatic context summarization for unlimited conversation length
-- Checkpointing and rollback
-- Background tasks
-- Subagents
-- Hooks system
-- Session management
-- Cost tracking
-- Command history and Bash mode
+Uses the new Agent architecture for cleaner code.
 """
 
 import asyncio
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
-from rich.table import Table
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.prompt import Prompt
 
+from src.agent import (
+    AgentSession,
+    AgentState,
+    AgentTurnResult,
+    create_doraemon_agent_with_mcp,
+)
 from src.core.config import load_config
 from src.core.logger import configure_root_logger
-from src.core.paths import config_path
-from src.core.schema import get_default_config
-from src.core.session import SessionManager
-from src.host.cli.chat_loop import chat_loop
 
 logger = logging.getLogger(__name__)
+console = Console()
 
-# Fix encoding
 for stream in [sys.stdin, sys.stdout, sys.stderr]:
     if stream and hasattr(stream, "reconfigure"):
         stream.reconfigure(encoding="utf-8", errors="replace")
@@ -46,349 +35,181 @@ for stream in [sys.stdin, sys.stdout, sys.stderr]:
 load_dotenv()
 
 app = typer.Typer()
-console = Console()
 
 
-def interactive_session_picker(project: str = "default") -> str | None:
-    """
-    Show interactive session picker using Rich.
+async def run_chat_loop(
+    project: str,
+    mode: str,
+    max_turns: int,
+    headless: bool,
+    initial_prompt: str | None,
+):
+    """Main chat loop using Agent architecture."""
+    config_path = Path.cwd() / ".agent" / "config.json"
 
-    Returns:
-        Selected session ID or None if cancelled
-    """
-    from rich.prompt import Prompt
+    from src.core.model_client import ModelClient
+    from src.core.checkpoint import CheckpointManager
+    from src.core.skills import SkillManager
+    from src.core.hooks import HookManager
 
-    mgr = SessionManager()
-    sessions_list = mgr.list_sessions(project=project, limit=20)
+    model_client = await ModelClient.create()
+    checkpoint_mgr = CheckpointManager(project=project)
+    skill_mgr = SkillManager(project_dir=Path.cwd())
+    hook_mgr = HookManager(project_dir=Path.cwd())
 
-    if not sessions_list:
-        console.print("[yellow]No sessions found.[/yellow]")
-        return None
+    session = AgentSession(
+        model_client=model_client,
+        registry=None,
+        mode=mode,
+        hook_mgr=hook_mgr,
+        checkpoint_mgr=checkpoint_mgr,
+        skill_mgr=skill_mgr,
+        max_turns=max_turns,
+    )
+    await session.initialize()
 
-    # Display sessions
-    console.print("\n[bold cyan]Recent Sessions[/bold cyan]\n")
+    if initial_prompt:
+        result = await session.turn(initial_prompt)
+        if result.response:
+            console.print(Markdown(result.response))
+        if headless:
+            return
 
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("#", style="dim", width=3)
-    table.add_column("ID", style="cyan", width=10)
-    table.add_column("Name/Description", style="green")
-    table.add_column("Messages", style="yellow", width=8)
-    table.add_column("Updated", style="dim")
-    table.add_column("Project", style="dim")
+    while True:
+        try:
+            user_input = await asyncio.to_thread(
+                Prompt.ask,
+                f"[bold {('green' if mode == 'build' else 'blue')}]doraemon[/bold {('green' if mode == 'build' else 'blue')}]",
+            )
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Goodbye![/yellow]")
+            break
 
-    for i, s in enumerate(sessions_list, 1):
-        updated = datetime.fromtimestamp(s.updated_at).strftime("%m-%d %H:%M")
-        name = s.name or s.description[:30] or f"Session {s.id[:8]}"
-        table.add_row(
-            str(i),
-            s.id[:8],
-            name[:40],
-            str(s.message_count),
-            updated,
-            s.project,
+        if not user_input.strip():
+            continue
+
+        if user_input.lower() in {"exit", "quit", "/exit", "/quit"}:
+            console.print("[yellow]Goodbye![/yellow]")
+            break
+
+        if user_input.startswith("/"):
+            result = await handle_command(user_input, session, mode)
+            if result == "exit":
+                break
+            continue
+
+        console.print()
+        result = await session.turn(user_input)
+
+        if result.response:
+            console.print(
+                Panel(
+                    Markdown(result.response),
+                    border_style="green" if result.success else "red",
+                    expand=False,
+                )
+            )
+
+        if result.error:
+            console.print(f"[red]Error: {result.error}[/red]")
+
+        console.print(
+            f"[dim]Turn {session._state.turn_count if session._state else 0}, Tools: {len(result.tool_calls)}[/dim]"
         )
-
-    console.print(table)
-    console.print()
-
-    # Get user selection
-    choice = Prompt.ask("Select session (number, ID, or 'q' to cancel)", default="1")
-
-    if choice.lower() in ("q", "quit", "cancel", ""):
-        return None
-
-    # Try as number
-    if choice.isdigit():
-        idx = int(choice) - 1
-        if 0 <= idx < len(sessions_list):
-            return sessions_list[idx].id
-
-    # Try as ID (partial match)
-    for s in sessions_list:
-        if s.id.startswith(choice) or (s.name and s.name == choice):
-            return s.id
-
-    console.print(f"[red]Session not found: {choice}[/red]")
-    return None
+        console.print()
 
 
-def get_most_recent_session(project: str = "default") -> str | None:
-    """Get the most recent session ID."""
-    mgr = SessionManager()
-    sessions_list = mgr.list_sessions(project=project, limit=1)
-    if sessions_list:
-        return sessions_list[0].id
+async def handle_command(cmd: str, session: AgentSession, mode: str) -> str | None:
+    """Handle slash commands."""
+    parts = cmd[1:].split()
+    command = parts[0].lower() if parts else ""
+    args = parts[1:] if len(parts) > 1 else []
+
+    if command in {"help", "h", "?"}:
+        console.print("""
+[bold]Commands:[/bold]
+  /help, /h, /?     Show this help
+  /mode <mode>      Switch mode (plan/build)
+  /clear            Clear conversation
+  /reset            Reset agent state
+  /exit, /quit      Exit the CLI
+
+[bold]Tips:[/bold]
+  Start with ! to run bash commands: !ls -la
+""")
+
+    elif command == "mode":
+        if args and args[0] in {"plan", "build"}:
+            new_mode = args[0]
+            session.set_mode(new_mode)
+            mode = new_mode
+            console.print(f"[green]Switched to {new_mode} mode[/green]")
+        else:
+            console.print(f"[yellow]Current mode: {mode}[/yellow]")
+            console.print("Usage: /mode plan | /mode build")
+
+    elif command == "clear":
+        session._state.messages.clear() if session._state else None
+        console.print("[green]Conversation cleared[/green]")
+
+    elif command == "reset":
+        session.reset()
+        console.print("[green]Agent reset[/green]")
+
+    elif command in {"exit", "quit"}:
+        return "exit"
+
+    else:
+        console.print(f"[red]Unknown command: /{command}[/red]")
+
     return None
 
 
 @app.command()
 def start(
     project: str = typer.Option("default", "--project", "-p", help="Project name"),
-    resume: str = typer.Option(
-        None, "--resume", "-r", help="Resume session (ID, name, or empty for picker)"
-    ),
-    continue_session: bool = typer.Option(
-        False, "--continue", "-c", help="Continue most recent session"
-    ),
-    name: str = typer.Option(None, "--name", "-n", help="Name for new session"),
+    mode: str = typer.Option("build", "--mode", "-m", help="Agent mode (plan/build)"),
     prompt: str = typer.Option(None, "--prompt", "-P", help="Initial prompt"),
-    print_mode: bool = typer.Option(
-        False, "--print", help="Print mode (non-interactive, exit after response)"
-    ),
-    max_turns: int = typer.Option(
-        0, "--max-turns", help="Maximum conversation turns (0 = unlimited)"
-    ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    print_mode: bool = typer.Option(False, "--print", help="Print mode (non-interactive)"),
+    max_turns: int = typer.Option(100, "--max-turns", help="Max turns per conversation"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
 ):
-    """Start the code agent CLI."""
-    # Setup logging
-    configure_root_logger(level="DEBUG" if verbose else None)
+    """Start Doraemon Code CLI."""
+    configure_root_logger(level="DEBUG" if verbose else "INFO")
 
-    # Handle --continue: use most recent session
-    if continue_session:
-        resume = get_most_recent_session(project)
-        if not resume:
-            console.print("[yellow]No previous session found. Starting new session.[/yellow]")
+    load_config()
 
-    # Handle --resume without ID: show interactive picker
-    # Note: typer passes empty string when flag is used without value
-    if resume == "":
-        resume = interactive_session_picker(project)
-        if not resume:
-            console.print("[dim]Starting new session.[/dim]")
+    headless = print_mode or bool(prompt)
 
-    asyncio.run(
-        chat_loop(
-            project=project,
-            resume_session=resume,
-            session_name=name,
-            prompt=prompt,
-            print_mode=print_mode,
-            max_turns=max_turns if max_turns > 0 else None,
+    if mode not in {"plan", "build"}:
+        console.print(f"[red]Invalid mode: {mode}. Use 'plan' or 'build'.[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[bold cyan]Doraemon Code[/bold cyan] - Mode: [bold]{mode}[/bold]")
+    console.print()
+
+    try:
+        asyncio.run(
+            run_chat_loop(
+                project=project,
+                mode=mode,
+                max_turns=max_turns,
+                headless=headless,
+                initial_prompt=prompt,
+            )
         )
-    )
-
-
-@app.command()
-def sessions(
-    project: str = typer.Option("default", "--project", "-p", help="Project name"),
-    limit: int = typer.Option(10, "--limit", "-l", help="Number of sessions to show"),
-    all_projects: bool = typer.Option(False, "--all", "-a", help="Show sessions from all projects"),
-):
-    """List recent sessions."""
-    mgr = SessionManager()
-
-    if all_projects:
-        sessions_list = mgr.list_sessions(limit=limit)
-    else:
-        sessions_list = mgr.list_sessions(project=project, limit=limit)
-
-    if sessions_list:
-        table = Table(title="Sessions")
-        table.add_column("ID", style="cyan")
-        table.add_column("Name", style="green")
-        table.add_column("Messages", style="yellow")
-        table.add_column("Project", style="dim")
-        table.add_column("Updated")
-
-        for s in sessions_list:
-            updated = datetime.fromtimestamp(s.updated_at).strftime("%Y-%m-%d %H:%M")
-            table.add_row(s.id[:8], s.name or "-", str(s.message_count), s.project, updated)
-
-        console.print(table)
-    else:
-        console.print("[dim]No sessions found[/dim]")
-
-
-@app.command()
-def config(
-    action: str = typer.Argument(None, help="Action: set, get, add, remove, list"),
-    key: str = typer.Argument(None, help="Configuration key"),
-    value: str = typer.Argument(None, help="Configuration value"),
-):
-    """Manage configuration settings."""
-    config_file = config_path()
-    config_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Load existing config
-    if config_file.exists():
-        import json
-
-        config_data = json.loads(config_file.read_text())
-    else:
-        config_data = get_default_config()
-
-    if action is None or action == "list":
-        # List all config
-        if config_data:
-            table = Table(title="Configuration")
-            table.add_column("Key", style="cyan")
-            table.add_column("Value", style="green")
-            for k, v in config_data.items():
-                table.add_row(k, str(v))
-            console.print(table)
-        else:
-            console.print("[dim]No configuration set[/dim]")
-        return
-
-    if action == "get":
-        if key and key in config_data:
-            console.print(f"{key} = {config_data[key]}")
-        else:
-            console.print(f"[yellow]Key not found: {key}[/yellow]")
-        return
-
-    if action == "set":
-        if key and value:
-            config_data[key] = value
-            import json
-
-            config_file.write_text(json.dumps(config_data, indent=2))
-            console.print(f"[green]Set {key} = {value}[/green]")
-        else:
-            console.print("[red]Usage: doraemon config set <key> <value>[/red]")
-        return
-
-    if action == "add":
-        if key and value:
-            if key not in config_data:
-                config_data[key] = []
-            if isinstance(config_data[key], list):
-                config_data[key].append(value)
-                import json
-
-                config_file.write_text(json.dumps(config_data, indent=2))
-                console.print(f"[green]Added {value} to {key}[/green]")
-            else:
-                console.print(f"[red]{key} is not a list[/red]")
-        return
-
-    if action == "remove":
-        if key and value:
-            if key in config_data and isinstance(config_data[key], list):
-                if value in config_data[key]:
-                    config_data[key].remove(value)
-                    import json
-
-                    config_file.write_text(json.dumps(config_data, indent=2))
-                    console.print(f"[green]Removed {value} from {key}[/green]")
-                else:
-                    console.print(f"[yellow]{value} not in {key}[/yellow]")
-        return
-
-    console.print(f"[red]Unknown action: {action}[/red]")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted[/yellow]")
 
 
 @app.command()
 def version():
-    """Show version information."""
-    console.print("[bold]🤖 Code Agent v0.9.0[/bold]")
-    console.print(
-        "[dim]Features: Web UI, Gateway, checkpointing, subagents, hooks, cost tracking[/dim]"
-    )
-    gateway_url = load_config(validate=False).get("gateway_url")
-    if gateway_url:
-        console.print(f"[cyan]Mode: Gateway ({gateway_url})[/cyan]")
-    else:
-        console.print("[green]Mode: Direct (using config file credentials)[/green]")
-
-
-@app.command()
-def doctor():
-    """Run diagnostic checks."""
-    console.print("[bold]🔍 Agent Diagnostics[/bold]\n")
-
-    checks = []
-
-    # Check Python version
-    py_version = sys.version_info
-    py_ok = py_version >= (3, 10)
-    checks.append(
-        ("Python version", f"{py_version.major}.{py_version.minor}.{py_version.micro}", py_ok)
-    )
-
-    config_data = load_config(validate=False)
-    model = config_data.get("model")
-    google_key = bool(config_data.get("google_api_key"))
-    openai_key = bool(config_data.get("openai_api_key"))
-    anthropic_key = bool(config_data.get("anthropic_api_key"))
-    gateway_url = config_data.get("gateway_url")
-
-    checks.append(("Model", model or "✗ Not set", bool(model)))
-
-    if gateway_url:
-        checks.append(("Gateway URL", gateway_url, True))
-    else:
-        checks.append(("google_api_key", "✓ Set" if google_key else "✗ Not set", google_key))
-        checks.append(("openai_api_key", "✓ Set" if openai_key else "✗ Not set", openai_key))
-        checks.append(
-            ("anthropic_api_key", "✓ Set" if anthropic_key else "✗ Not set", anthropic_key)
-        )
-
-        if not any([google_key, openai_key, anthropic_key]):
-            checks.append(("API Keys", "⚠ No API keys configured in .agent/config.json", False))
-
-    # Check directories
-    agent_dir = Path(".agent")
-    checks.append(
-        (".agent directory", "✓ Exists" if agent_dir.exists() else "Will be created", True)
-    )
-
-    agents_md = Path("AGENTS.md")
-    checks.append(
-        (
-            "AGENTS.md",
-            "✓ Found" if agents_md.exists() else "Not found (use /init)",
-            agents_md.exists(),
-        )
-    )
-
-    # Check git
-    import subprocess
-
-    try:
-        result = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
-        git_ok = result.returncode == 0
-        git_version = result.stdout.strip() if git_ok else "Not found"
-    except Exception:
-        git_ok = False
-        git_version = "Not found"
-    checks.append(("Git", git_version, git_ok))
-
-    # Check gh CLI
-    try:
-        result = subprocess.run(["gh", "--version"], capture_output=True, text=True, timeout=5)
-        gh_ok = result.returncode == 0
-        gh_version = result.stdout.split("\n")[0] if gh_ok else "Not found"
-    except Exception:
-        gh_ok = False
-        gh_version = "Not found (optional)"
-    checks.append(("GitHub CLI", gh_version, True))  # Optional, so always "ok"
-
-    # Display results
-    table = Table(show_header=True)
-    table.add_column("Check", style="cyan")
-    table.add_column("Status")
-    table.add_column("", width=3)
-
-    all_ok = True
-    for name, status, ok in checks:
-        icon = "✅" if ok else "❌"
-        style = "green" if ok else "red"
-        table.add_row(name, f"[{style}]{status}[/{style}]", icon)
-        if not ok:
-            all_ok = False
-
-    console.print(table)
-
-    if all_ok:
-        console.print("\n[green]All checks passed! ✨[/green]")
-    else:
-        console.print("\n[yellow]Some checks failed. Please review the issues above.[/yellow]")
+    """Show version."""
+    console.print("[bold cyan]Doraemon Code[/bold cyan] v0.1.0")
 
 
 def entry_point():
-    """Entry point for the CLI."""
+    """Entry point for package script."""
     app()
 
 

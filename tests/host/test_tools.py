@@ -79,11 +79,11 @@ class TestTypeExtraction:
         registry.register(typed_func)
         tools = registry.get_genai_tools()
 
-        props = tools[0].parameters.properties
-        assert props["s"].type.name == "STRING"
-        assert props["i"].type.name == "INTEGER"
-        assert props["f"].type.name == "NUMBER"
-        assert props["b"].type.name == "BOOLEAN"
+        props = tools[0].parameters["properties"]
+        assert props["s"]["type"] == "string"
+        assert props["i"]["type"] == "integer"
+        assert props["f"]["type"] == "number"
+        assert props["b"]["type"] == "boolean"
 
     def test_optional_type(self):
         """Test extraction of optional types (int | None)."""
@@ -96,9 +96,8 @@ class TestTypeExtraction:
         registry.register(optional_func)
         tools = registry.get_genai_tools()
 
-        props = tools[0].parameters.properties
-        # Optional int should still be INTEGER
-        assert props["optional"].type.name == "INTEGER"
+        props = tools[0].parameters["properties"]
+        assert props["optional"]["type"] == "integer"
 
     def test_required_params(self):
         """Test required parameter detection."""
@@ -111,7 +110,7 @@ class TestTypeExtraction:
         registry.register(mixed_func)
         tools = registry.get_genai_tools()
 
-        required = tools[0].parameters.required
+        required = tools[0].parameters["required"]
         assert "required" in required
         assert "optional" not in required
 
@@ -131,10 +130,10 @@ class TestTypeExtraction:
         registry.register(literal_func)
         tools = registry.get_genai_tools()
 
-        props = tools[0].parameters.properties
-        assert props["mode"].type.name == "STRING"
-        assert list(props["mode"].enum) == ["read", "write"]
-        assert "Execution mode." in props["mode"].description
+        props = tools[0].parameters["properties"]
+        assert props["mode"]["type"] == "string"
+        assert props["mode"]["enum"] == ["read", "write"]
+        assert "Execution mode." in props["mode"]["description"]
 
 
 class TestToolCalling:
@@ -197,7 +196,6 @@ class TestDefaultRegistry:
         registry = get_default_registry()
         tools = registry.get_tool_names()
 
-        # Should have at least some basic tools
         assert len(tools) > 0
         assert "read" in tools
         assert "write" in tools
@@ -208,10 +206,7 @@ class TestDefaultRegistry:
         registry = get_default_registry()
         sensitive = registry.get_sensitive_tools()
 
-        # write should be sensitive
         assert "write" in sensitive
-
-        # read should not be sensitive
         assert "read" not in sensitive
 
     def test_default_registry_singleton(self):

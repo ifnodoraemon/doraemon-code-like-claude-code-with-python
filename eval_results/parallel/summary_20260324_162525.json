@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-03-24T16:25:25.645234",
+  "total_time": 1.6065478324890137,
+  "total_tasks": 10,
+  "unique_tasks": 10,
+  "n_trials": 1,
+  "successful_tasks": 10,
+  "success_rate": 1.0,
+  "avg_time_per_task": 0.16065478324890137,
+  "task_success_rates": {
+    "file-001": 1.0,
+    "file-002": 1.0,
+    "file-003": 1.0,
+    "code-001": 1.0,
+    "code-002": 1.0,
+    "code-003": 1.0,
+    "edit-001": 1.0,
+    "edit-002": 1.0,
+    "debug-001": 1.0,
+    "multi-001": 1.0
+  },
+  "by_category": {
+    "file_operations": {
+      "total": 3,
+      "success": 3
+    },
+    "code_writing": {
+      "total": 3,
+      "success": 3
+    },
+    "code_editing": {
+      "total": 2,
+      "success": 2
+    },
+    "debugging": {
+      "total": 1,
+      "success": 1
+    },
+    "multi_file": {
+      "total": 1,
+      "success": 1
+    }
+  },
+  "by_difficulty": {
+    "easy": {
+      "total": 4,
+      "success": 4
+    },
+    "medium": {
+      "total": 4,
+      "success": 4
+    },
+    "hard": {
+      "total": 2,
+      "success": 2
+    }
+  },
+  "parallelization": {
+    "max_workers": 2,
+    "use_processes": false,
+    "speedup": 1.8185150667448262
+  }
+}

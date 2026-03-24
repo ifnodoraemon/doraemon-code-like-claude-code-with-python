@@ -10,12 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from src.core.context_manager import ContextManager
+from src.agent import AgentState
 from src.core.model_client_base import BaseModelClient
 from src.host.tools import ToolRegistry
 from tests.utils.factories import (
     create_mock_model_client,
-    create_test_context_manager,
     create_test_tool_registry,
 )
 
@@ -27,9 +26,9 @@ def mock_model_client() -> BaseModelClient:
 
 
 @pytest.fixture
-def test_context_manager() -> ContextManager:
-    """Fixture for a test context manager."""
-    return create_test_context_manager()
+def test_agent_state() -> AgentState:
+    """Fixture for a test agent state."""
+    return AgentState(mode="build")
 
 
 @pytest.fixture
@@ -96,12 +95,10 @@ def reset_singletons():
 
     This ensures tests don't interfere with each other.
     """
-    # Reset tool registry singleton
     import src.host.tools as tools_module
 
     tools_module._default_registry = None
 
     yield
 
-    # Cleanup after test
     tools_module._default_registry = None

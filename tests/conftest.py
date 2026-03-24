@@ -12,6 +12,6 @@ from tests.utils.fixtures import (  # noqa: F401
     sample_tools,
     temp_config_file,
     temp_dir,
-    test_context_manager,
+    test_agent_state,
     test_tool_registry,
 )

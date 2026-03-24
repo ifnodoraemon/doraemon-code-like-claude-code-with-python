@@ -7,7 +7,7 @@ Provides factory functions for creating test objects and mocks.
 from typing import Any
 from unittest.mock import AsyncMock
 
-from src.core.context_manager import ContextConfig, ContextManager
+from src.agent import AgentState
 from src.core.model_utils import (
     ChatResponse,
     ClientConfig,
@@ -54,29 +54,21 @@ def create_mock_model_client(responses: list[str | ChatResponse]) -> AsyncMock:
     return client
 
 
-def create_test_context_manager(
-    max_tokens: int = 1000,
-    summarize_threshold: float = 0.7,
-    keep_recent: int = 6,
-) -> ContextManager:
+def create_test_agent_state(
+    mode: str = "build",
+    max_turns: int = 100,
+) -> AgentState:
     """
-    Create a ContextManager for testing.
+    Create an AgentState for testing.
 
     Args:
-        max_tokens: Maximum context tokens
-        summarize_threshold: Threshold for triggering summarization
-        keep_recent: Number of recent messages to keep
+        mode: Agent mode (plan/build)
+        max_turns: Maximum turns
 
     Returns:
-        Configured ContextManager instance
+        Configured AgentState instance
     """
-    config = ContextConfig(
-        max_context_tokens=max_tokens,
-        summarize_threshold=summarize_threshold,
-        keep_recent_messages=keep_recent,
-        auto_save=False,  # Disable auto-save in tests
-    )
-    return ContextManager(project="test", config=config)
+    return AgentState(mode=mode, max_turns=max_turns)
 
 
 def create_test_tool_registry() -> ToolRegistry:
