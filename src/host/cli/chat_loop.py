@@ -23,8 +23,6 @@ from src.core.context_manager import ConversationSummary
 from src.core.hooks import HookEvent
 from src.core.logger import configure_root_logger
 from src.core.model_utils import ChatResponse, ClientMode, Message, ToolDefinition
-from src.core.parallel_executor import DependencyAnalyzer
-from src.core.parallel_executor import ToolCall as PToolCall
 from src.core.prompts import get_system_prompt
 from src.core.rules import (
     format_instructions_for_prompt,
@@ -35,20 +33,16 @@ from src.core.rules import (
 from src.host.cli.commands import CommandHandler
 from src.host.cli.commands_core import MODE_COLORS
 from src.host.cli.initialization import initialize_all_managers
-from src.host.cli.tool_execution import (
-    detect_tool_loop,
-    execute_tool,
-    get_modified_paths,
-    parse_tool_arguments,
+from src.host.cli.tool_processor import (
+    ToolCallContext,
+    process_tool_calls as process_tool_calls_refactored,
 )
 
 logger = logging.getLogger(__name__)
 console = Console()
 
-MAX_TOOL_STEPS = 15  # Prevent infinite tool loops
 MAX_INLINE_FILE_CHARS = 50_000
 MAX_INLINE_DIR_ENTRIES = 100
-_DEPENDENCY_ANALYZER = DependencyAnalyzer()
 _REFERENCE_PATTERN = r"@(\.?/?[\w\-./]+)"
 
 
@@ -495,7 +489,9 @@ async def execute_agent_turn(
     """Execute one non-command agent turn and persist resulting session state."""
     user_input, image_paths = resolve_input_references(user_input)
     if image_paths:
-        console.print(f"[dim cyan]Images: {', '.join(Path(p).name for p in image_paths)}[/dim cyan]")
+        console.print(
+            f"[dim cyan]Images: {', '.join(Path(p).name for p in image_paths)}[/dim cyan]"
+        )
     hook_result = await hook_mgr.trigger(
         HookEvent.USER_PROMPT_SUBMIT,
         user_prompt=user_input,
@@ -538,8 +534,7 @@ async def execute_agent_turn(
     if response is None:
         return None
 
-    accumulated_text, files_modified = await process_tool_calls(
-        response=response,
+    tool_context = ToolCallContext(
         project=project,
         registry=registry,
         sensitive_tools=sensitive_tools,
@@ -555,6 +550,12 @@ async def execute_agent_turn(
         system_prompt=state.system_prompt,
         permission_mgr=permission_mgr,
     )
+    process_result = await process_tool_calls_refactored(
+        response=response,
+        context=tool_context,
+    )
+    accumulated_text = process_result.accumulated_text
+    files_modified = process_result.files_modified
 
     finalization = await finalize_turn(
         accumulated_text=accumulated_text,
@@ -637,7 +638,9 @@ def validate_client_mode(model_client) -> bool:
             console.print(
                 "[dim]Set at least one of: google_api_key, openai_api_key, anthropic_api_key in .agent/config.json[/dim]"
             )
-            console.print("[dim]Or configure Gateway mode with gateway_url in .agent/config.json[/dim]")
+            console.print(
+                "[dim]Or configure Gateway mode with gateway_url in .agent/config.json[/dim]"
+            )
             return False
 
     return True
@@ -1010,230 +1013,6 @@ async def stream_model_response(
     )
 
 
-async def process_tool_calls(
-    response,
-    registry,
-    sensitive_tools: set,
-    checkpoint_mgr,
-    hook_mgr,
-    ctx,
-    headless: bool,
-    model_name: str,
-    cost_tracker,
-    model_client=None,
-    conversation_history: list[Message] | None = None,
-    tool_definitions=None,
-    system_prompt: str = "",
-    permission_mgr=None,
-    project: str | None = None,
-) -> tuple[str, list[str]]:
-    """
-    Process tool calls from model response with agentic loop.
-
-    After executing tools, sends results back to the model for follow-up
-    reasoning. Continues until the model responds with text only (no tool calls).
-
-    Returns:
-        tuple of (accumulated_text, files_modified)
-    """
-    project = project or Path.cwd().name
-    accumulated_text = ""
-    files_modified = []
-    tool_steps = 0
-    previous_tool_calls = []
-    last_usage = response.usage
-    while True:
-        if tool_steps >= MAX_TOOL_STEPS:
-            console.print(
-                f"[red]⚠️ Max tool steps ({MAX_TOOL_STEPS}) reached. Stopping to prevent infinite loop.[/red]"
-            )
-            ctx.add_system_message(
-                f"System: Execution stopped because maximum tool steps ({MAX_TOOL_STEPS}) were exceeded."
-            )
-            break
-
-        tool_steps += 1
-
-        # Debug: Log response state
-        logger.debug(
-            f"Tool step {tool_steps}: content={bool(response.content)}, tool_calls={bool(response.tool_calls)}, thought={bool(response.thought)}"
-        )
-
-        if not response.content and not response.tool_calls:
-            if tool_steps == 1:
-                console.print("[red]Empty response[/red]")
-                logger.warning(
-                    f"Empty response received. Raw: {response.raw if hasattr(response, 'raw') else 'N/A'}"
-                )
-            break
-
-        has_tool_call = response.has_tool_calls
-        tool_results = []
-        # Thought display
-        if response.thought:
-            console.print(
-                Panel(
-                    Markdown(response.thought),
-                    title="[bold dim]Thinking[/bold dim]",
-                    border_style="dim white",
-                    expand=False,
-                )
-            )
-
-        # Text response
-        if response.content:
-            accumulated_text += response.content
-            console.print(
-                Panel(
-                    Markdown(response.content),
-                    title="[bold purple]Response[/bold purple]",
-                    border_style="purple",
-                    expand=False,
-                )
-            )
-
-        # Tool calls
-        if response.tool_calls:
-            # Pre-process: parse args and check loops
-            pending_calls = []
-            for tc in response.tool_calls:
-                func = tc.get("function", {})
-                tool_name = func.get("name", "")
-                tool_call_id = tc.get("id", "")
-
-                args_raw = func.get("arguments", {})
-                args = parse_tool_arguments(args_raw)
-
-                # Loop Detection
-                is_loop, loop_msg = detect_tool_loop(tool_name, args, previous_tool_calls)
-                if is_loop:
-                    console.print(f"[red]⚠️ {loop_msg}[/red]")
-                    tool_results.append(
-                        {
-                            "tool_call_id": tool_call_id,
-                            "name": tool_name,
-                            "result": f"Error: {loop_msg}",
-                        }
-                    )
-                    continue
-
-
-                pending_calls.append((tool_name, args, tool_call_id))
-
-            # Execute tools: parallel for multiple independent calls, sequential for single/sensitive
-            if len(pending_calls) > 1:
-                pending_call_map = {tc_id: (tn, args) for tn, args, tc_id in pending_calls}
-                p_calls = [
-                    PToolCall(id=tc_id, name=tn, arguments=a) for tn, a, tc_id in pending_calls
-                ]
-                stages = _DEPENDENCY_ANALYZER.analyze(p_calls)
-
-                for stage in stages:
-                    if len(stage) == 1:
-                        pc = stage[0]
-                        _, matched_args = pending_call_map[pc.id]
-                        r = await execute_tool(
-                            tool_name=pc.name,
-                            args=matched_args,
-                            tool_call_id=pc.id,
-                            project=project,
-                            registry=registry,
-                            sensitive_tools=sensitive_tools,
-                            checkpoint_mgr=checkpoint_mgr,
-                            hook_mgr=hook_mgr,
-                            headless=headless,
-                            permission_mgr=permission_mgr,
-                        )
-                        tool_results.append(r)
-                    else:
-                        # Parallel execution of independent tools in this stage
-                        async def _run_tool(pc, a):
-                            return await execute_tool(
-                                tool_name=pc.name,
-                                args=a,
-                                tool_call_id=pc.id,
-                                project=project,
-                                registry=registry,
-                                sensitive_tools=sensitive_tools,
-                                checkpoint_mgr=checkpoint_mgr,
-                                hook_mgr=hook_mgr,
-                                headless=headless,
-                                permission_mgr=permission_mgr,
-                            )
-
-                        tasks = []
-                        for pc in stage:
-                            _, matched_args = pending_call_map[pc.id]
-                            tasks.append(_run_tool(pc, matched_args))
-                        stage_results = await asyncio.gather(*tasks)
-                        tool_results.extend(stage_results)
-            else:
-                # Single tool call - execute directly
-                for tool_name, args, tool_call_id in pending_calls:
-                    tool_result_dict = await execute_tool(
-                        tool_name=tool_name,
-                        args=args,
-                        tool_call_id=tool_call_id,
-                        project=project,
-                        registry=registry,
-                        sensitive_tools=sensitive_tools,
-                        checkpoint_mgr=checkpoint_mgr,
-                        hook_mgr=hook_mgr,
-                        headless=headless,
-                        permission_mgr=permission_mgr,
-                    )
-                    tool_results.append(tool_result_dict)
-
-            # Post-process: track modifications
-            for tool_name, args, _tool_call_id in pending_calls:
-                modified_paths = get_modified_paths(tool_name, args)
-                files_modified.extend(modified_paths)
-        # No more tool calls - done with this turn
-        if not has_tool_call:
-            logger.info(
-                f"Turn complete: accumulated_text={len(accumulated_text)} chars, content={bool(response.content)}"
-            )
-            if not accumulated_text and not response.content:
-                console.print("[yellow]⚠️ No text response generated.[/yellow]")
-
-            # Track usage and costs
-            if last_usage:
-                cost_tracker.track(
-                    model=model_name,
-                    input_tokens=last_usage.get("prompt_tokens", 0),
-                    output_tokens=last_usage.get("completion_tokens", 0),
-                    session_id=ctx.session_id,
-                )
-
-            break
-
-        # Re-query model with tool results
-        if model_client and conversation_history is not None and tool_definitions is not None:
-            try:
-                response = await request_tool_follow_up(
-                    model_client=model_client,
-                    conversation_history=conversation_history,
-                    tool_results=tool_results,
-                    response=response,
-                    ctx=ctx,
-                    tool_definitions=tool_definitions,
-                    model_name=model_name,
-                    system_prompt=system_prompt,
-                )
-                last_usage = response.usage
-            except Exception as error:
-                console.print(f"[red]API Error during tool loop: {error}[/red]")
-                break
-        else:
-            # Fallback: no model_client provided, break after first round
-            logger.warning(
-                "No model_client provided to process_tool_calls, cannot send tool results back to model"
-            )
-            break
-
-    return accumulated_text, files_modified
-
-
 async def dispatch_user_input(
     *,
     user_input: str,
@@ -1344,9 +1123,16 @@ async def chat_loop(
 
     # Setup tab completion for slash commands
     slash_commands = [
-        "help", "init", "mode",
-        "clear", "compact", "reset", "memory",
-        "commit", "review", "exit",
+        "help",
+        "init",
+        "mode",
+        "clear",
+        "compact",
+        "reset",
+        "memory",
+        "commit",
+        "review",
+        "exit",
     ]
     runtime.cmd_history.setup_completer(slash_commands)
 

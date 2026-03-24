@@ -77,6 +77,43 @@ class RateLimitError(AgentError):
         self.retry_after = retry_after
 
 
+class ToolExecutionError(AgentError):
+    """Errors during tool execution"""
+
+    def __init__(self, tool_name: str, message: str, context: dict | None = None):
+        super().__init__(f"Tool '{tool_name}' failed: {message}", ErrorCategory.TRANSIENT, context)
+        self.tool_name = tool_name
+
+
+class FileAccessError(AgentError):
+    """File access errors"""
+
+    def __init__(self, path: str, message: str, context: dict | None = None):
+        super().__init__(f"File access error '{path}': {message}", ErrorCategory.PERMANENT, context)
+        self.path = path
+
+
+class NetworkError(AgentError):
+    """Network-related errors"""
+
+    def __init__(self, message: str, context: dict | None = None):
+        super().__init__(message, ErrorCategory.NETWORK, context)
+
+
+class AuthenticationError(AgentError):
+    """Authentication errors"""
+
+    def __init__(self, message: str, context: dict | None = None):
+        super().__init__(message, ErrorCategory.AUTHENTICATION, context)
+
+
+class ValidationError(AgentError):
+    """Input validation errors"""
+
+    def __init__(self, message: str, context: dict | None = None):
+        super().__init__(message, ErrorCategory.PERMANENT, context)
+
+
 @dataclass
 class RetryConfig:
     """Configuration for retry logic"""
@@ -281,8 +318,7 @@ class CircuitBreaker:
                         else self.config.timeout
                     )
                     raise CircuitBreakerOpenError(
-                        f"Circuit breaker is OPEN. "
-                        f"Try again in {remaining:.1f}s"
+                        f"Circuit breaker is OPEN. Try again in {remaining:.1f}s"
                     )
             current_state = self.state
 
@@ -335,8 +371,7 @@ class CircuitBreaker:
                         else self.config.timeout
                     )
                     raise CircuitBreakerOpenError(
-                        f"Circuit breaker is OPEN. "
-                        f"Try again in {remaining:.1f}s"
+                        f"Circuit breaker is OPEN. Try again in {remaining:.1f}s"
                     )
             current_state = self.state
 
@@ -352,9 +387,11 @@ class CircuitBreaker:
         """Decorator for circuit breaker protection"""
 
         if asyncio.iscoroutinefunction(func):
+
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 return await self.call_async(func, *args, **kwargs)
+
             return async_wrapper
 
         @wraps(func)

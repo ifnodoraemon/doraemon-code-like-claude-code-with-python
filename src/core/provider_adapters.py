@@ -6,6 +6,7 @@ from DirectModelClient into reusable adapter classes. This eliminates
 duplication between _chat_xxx and _stream_xxx methods.
 """
 
+import base64
 import json
 import logging
 import uuid
@@ -18,6 +19,79 @@ from src.core.model_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ========================================
+# Content Part Builders
+# ========================================
+
+
+def build_google_content_parts(content: Any, types_module: Any) -> list[Any]:
+    """Convert content (str or multimodal list) to Google GenAI Parts."""
+    if isinstance(content, str):
+        return [types_module.Part(text=content)]
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if part.get("type") == "text":
+                parts.append(types_module.Part(text=part["text"]))
+            elif part.get("type") == "image":
+                source = part["source"]
+                parts.append(
+                    types_module.Part.from_bytes(
+                        data=base64.b64decode(source["data"]),
+                        mime_type=source["media_type"],
+                    )
+                )
+        return parts
+    return []
+
+
+def build_openai_content_parts(content: Any) -> Any:
+    """Convert content (str or multimodal list) to OpenAI content format."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if part.get("type") == "text":
+                parts.append({"type": "text", "text": part["text"]})
+            elif part.get("type") == "image":
+                source = part["source"]
+                data_url = f"data:{source['media_type']};base64,{source['data']}"
+                parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": data_url},
+                    }
+                )
+        return parts
+    return content or ""
+
+
+def build_anthropic_content_parts(content: Any) -> list[dict[str, Any]]:
+    """Convert content (str or multimodal list) to Anthropic content format."""
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if part.get("type") == "text":
+                parts.append({"type": "text", "text": part["text"]})
+            elif part.get("type") == "image":
+                source = part["source"]
+                parts.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": source["media_type"],
+                            "data": source["data"],
+                        },
+                    }
+                )
+        return parts
+    return [{"type": "text", "text": str(content or "")}]
 
 
 # ========================================
@@ -45,8 +119,6 @@ class GoogleAdapter:
         Returns:
             Tuple of (system_instruction, contents list)
         """
-        from src.core.model_client_direct import _build_google_content_parts
-
         contents = []
         system_instruction = system_prompt
 
@@ -62,7 +134,7 @@ class GoogleAdapter:
             parts = []
 
             if msg.get("content"):
-                parts.extend(_build_google_content_parts(msg["content"], types_module))
+                parts.extend(build_google_content_parts(msg["content"], types_module))
 
             if msg.get("thought"):
                 parts.append(types_module.Part(thought=msg["thought"]))
@@ -212,13 +284,11 @@ class OpenAIAdapter:
     @staticmethod
     def convert_messages(messages: Sequence[Any]) -> list[dict]:
         """Convert unified messages to OpenAI format."""
-        from src.core.model_client_direct import _build_openai_content_parts
-
         msg_list = []
         for m in messages:
             msg = m if isinstance(m, dict) else m.to_dict()
             if isinstance(msg.get("content"), list):
-                msg = {**msg, "content": _build_openai_content_parts(msg["content"])}
+                msg = {**msg, "content": build_openai_content_parts(msg["content"])}
             msg_list.append(msg)
         return msg_list
 
@@ -267,8 +337,6 @@ class AnthropicAdapter:
         Returns:
             Tuple of (system_text, msg_list)
         """
-        from src.core.model_client_direct import _build_anthropic_content_parts
-
         system = system_prompt
         msg_list = []
 
@@ -296,7 +364,7 @@ class AnthropicAdapter:
             else:
                 content = []
                 if msg.get("content"):
-                    content.extend(_build_anthropic_content_parts(msg["content"]))
+                    content.extend(build_anthropic_content_parts(msg["content"]))
                 if msg.get("tool_calls"):
                     for tc in msg["tool_calls"]:
                         func = tc.get("function", {})
