@@ -1,21 +1,20 @@
 """Comprehensive tests for notifications.py"""
-import logging
+
 import subprocess
 import time
-from unittest.mock import Mock, patch, MagicMock, call
-import pytest
+from unittest.mock import MagicMock, Mock, patch
 
 from src.core.notifications import (
-    NotificationLevel,
-    NotificationChannel,
-    Notification,
-    NotificationConfig,
     DesktopNotifier,
+    Notification,
+    NotificationChannel,
+    NotificationConfig,
+    NotificationLevel,
     NotificationManager,
     get_notification_manager,
     notify,
-    notify_success,
     notify_error,
+    notify_success,
 )
 
 

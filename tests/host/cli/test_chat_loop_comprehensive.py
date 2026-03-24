@@ -33,14 +33,17 @@ from src.host.cli.chat_loop import (
 # SECTION 1: System Prompt Building Tests (7 tests)
 # ============================================================================
 
+
 class TestBuildSystemPrompt:
     """Test system prompt construction."""
 
-    @patch('src.host.cli.chat_loop.load_config')
-    @patch('src.host.cli.chat_loop.get_system_prompt')
-    @patch('src.host.cli.chat_loop.load_all_instructions')
-    @patch('src.host.cli.chat_loop.format_instructions_for_prompt')
-    def test_build_system_prompt_basic(self, mock_format, mock_load_instr, mock_get_prompt, mock_config):
+    @patch("src.host.cli.chat_loop.load_config")
+    @patch("src.host.cli.chat_loop.get_system_prompt")
+    @patch("src.host.cli.chat_loop.load_all_instructions")
+    @patch("src.host.cli.chat_loop.format_instructions_for_prompt")
+    def test_build_system_prompt_basic(
+        self, mock_format, mock_load_instr, mock_get_prompt, mock_config
+    ):
         """Test basic system prompt building."""
         mock_config.return_value = {"persona": {"name": "TestBot"}}
         mock_get_prompt.return_value = "Base prompt"
@@ -52,11 +55,13 @@ class TestBuildSystemPrompt:
         assert "Base prompt" in result
         mock_get_prompt.assert_called_once_with("build", {"name": "TestBot"})
 
-    @patch('src.host.cli.chat_loop.load_config')
-    @patch('src.host.cli.chat_loop.get_system_prompt')
-    @patch('src.host.cli.chat_loop.load_all_instructions')
-    @patch('src.host.cli.chat_loop.format_instructions_for_prompt')
-    def test_build_system_prompt_with_instructions(self, mock_format, mock_load_instr, mock_get_prompt, mock_config):
+    @patch("src.host.cli.chat_loop.load_config")
+    @patch("src.host.cli.chat_loop.get_system_prompt")
+    @patch("src.host.cli.chat_loop.load_all_instructions")
+    @patch("src.host.cli.chat_loop.format_instructions_for_prompt")
+    def test_build_system_prompt_with_instructions(
+        self, mock_format, mock_load_instr, mock_get_prompt, mock_config
+    ):
         """Test system prompt with instructions."""
         mock_config.return_value = {"persona": {}}
         mock_get_prompt.return_value = "Base"
@@ -68,11 +73,13 @@ class TestBuildSystemPrompt:
         assert "Base" in result
         assert "Formatted instructions" in result
 
-    @patch('src.host.cli.chat_loop.load_config')
-    @patch('src.host.cli.chat_loop.get_system_prompt')
-    @patch('src.host.cli.chat_loop.load_all_instructions')
-    @patch('src.host.cli.chat_loop.format_instructions_for_prompt')
-    def test_build_system_prompt_with_skills(self, mock_format, mock_load_instr, mock_get_prompt, mock_config):
+    @patch("src.host.cli.chat_loop.load_config")
+    @patch("src.host.cli.chat_loop.get_system_prompt")
+    @patch("src.host.cli.chat_loop.load_all_instructions")
+    @patch("src.host.cli.chat_loop.format_instructions_for_prompt")
+    def test_build_system_prompt_with_skills(
+        self, mock_format, mock_load_instr, mock_get_prompt, mock_config
+    ):
         """Test system prompt with skills content."""
         mock_config.return_value = {"persona": {}}
         mock_get_prompt.return_value = "Base"
@@ -84,11 +91,13 @@ class TestBuildSystemPrompt:
         assert "Base" in result
         assert "Skill: test_skill" in result
 
-    @patch('src.host.cli.chat_loop.load_config')
-    @patch('src.host.cli.chat_loop.get_system_prompt')
-    @patch('src.host.cli.chat_loop.load_all_instructions')
-    @patch('src.host.cli.chat_loop.format_instructions_for_prompt')
-    def test_build_system_prompt_plan_mode(self, mock_format, mock_load_instr, mock_get_prompt, mock_config):
+    @patch("src.host.cli.chat_loop.load_config")
+    @patch("src.host.cli.chat_loop.get_system_prompt")
+    @patch("src.host.cli.chat_loop.load_all_instructions")
+    @patch("src.host.cli.chat_loop.format_instructions_for_prompt")
+    def test_build_system_prompt_plan_mode(
+        self, mock_format, mock_load_instr, mock_get_prompt, mock_config
+    ):
         """Test system prompt for plan mode."""
         mock_config.return_value = {"persona": {"role": "Planner"}}
         mock_get_prompt.return_value = "Plan mode prompt"
@@ -100,11 +109,13 @@ class TestBuildSystemPrompt:
         mock_get_prompt.assert_called_once_with("plan", {"role": "Planner"})
         assert "Plan mode prompt" in result
 
-    @patch('src.host.cli.chat_loop.load_config')
-    @patch('src.host.cli.chat_loop.get_system_prompt')
-    @patch('src.host.cli.chat_loop.load_all_instructions')
-    @patch('src.host.cli.chat_loop.format_instructions_for_prompt')
-    def test_build_system_prompt_build_mode(self, mock_format, mock_load_instr, mock_get_prompt, mock_config):
+    @patch("src.host.cli.chat_loop.load_config")
+    @patch("src.host.cli.chat_loop.get_system_prompt")
+    @patch("src.host.cli.chat_loop.load_all_instructions")
+    @patch("src.host.cli.chat_loop.format_instructions_for_prompt")
+    def test_build_system_prompt_build_mode(
+        self, mock_format, mock_load_instr, mock_get_prompt, mock_config
+    ):
         """Test system prompt for build mode."""
         mock_config.return_value = {"persona": {"role": "Builder"}}
         mock_get_prompt.return_value = "Build mode prompt"
@@ -116,11 +127,13 @@ class TestBuildSystemPrompt:
         mock_get_prompt.assert_called_once_with("build", {"role": "Builder"})
         assert "Build mode prompt" in result
 
-    @patch('src.host.cli.chat_loop.load_config')
-    @patch('src.host.cli.chat_loop.get_system_prompt')
-    @patch('src.host.cli.chat_loop.load_all_instructions')
-    @patch('src.host.cli.chat_loop.format_instructions_for_prompt')
-    def test_build_system_prompt_empty_persona(self, mock_format, mock_load_instr, mock_get_prompt, mock_config):
+    @patch("src.host.cli.chat_loop.load_config")
+    @patch("src.host.cli.chat_loop.get_system_prompt")
+    @patch("src.host.cli.chat_loop.load_all_instructions")
+    @patch("src.host.cli.chat_loop.format_instructions_for_prompt")
+    def test_build_system_prompt_empty_persona(
+        self, mock_format, mock_load_instr, mock_get_prompt, mock_config
+    ):
         """Test system prompt with empty persona."""
         mock_config.return_value = {}
         mock_get_prompt.return_value = "Default prompt"
@@ -132,11 +145,13 @@ class TestBuildSystemPrompt:
         mock_get_prompt.assert_called_once_with("build", {})
         assert "Default prompt" in result
 
-    @patch('src.host.cli.chat_loop.load_config')
-    @patch('src.host.cli.chat_loop.get_system_prompt')
-    @patch('src.host.cli.chat_loop.load_all_instructions')
-    @patch('src.host.cli.chat_loop.format_instructions_for_prompt')
-    def test_build_system_prompt_all_components(self, mock_format, mock_load_instr, mock_get_prompt, mock_config):
+    @patch("src.host.cli.chat_loop.load_config")
+    @patch("src.host.cli.chat_loop.get_system_prompt")
+    @patch("src.host.cli.chat_loop.load_all_instructions")
+    @patch("src.host.cli.chat_loop.format_instructions_for_prompt")
+    def test_build_system_prompt_all_components(
+        self, mock_format, mock_load_instr, mock_get_prompt, mock_config
+    ):
         """Test system prompt with all components."""
         mock_config.return_value = {"persona": {"name": "Bot"}}
         mock_get_prompt.return_value = "Base"
@@ -153,6 +168,7 @@ class TestBuildSystemPrompt:
 # ============================================================================
 # SECTION 2: Tool Definition Conversion Tests (3 tests)
 # ============================================================================
+
 
 class TestConvertToolsToDefinitions:
     """Test tool conversion to ToolDefinition format."""
@@ -176,7 +192,7 @@ class TestConvertToolsToDefinitions:
         tool_dict = {
             "name": "dict_tool",
             "description": "Dict tool description",
-            "parameters": {"type": "object", "properties": {}}
+            "parameters": {"type": "object", "properties": {}},
         }
 
         result = convert_tools_to_definitions([tool_dict])
@@ -192,11 +208,7 @@ class TestConvertToolsToDefinitions:
         mock_tool.description = "Attr tool"
         mock_tool.parameters = {}
 
-        dict_tool = {
-            "name": "dict_tool",
-            "description": "Dict tool",
-            "parameters": {}
-        }
+        dict_tool = {"name": "dict_tool", "description": "Dict tool", "parameters": {}}
 
         result = convert_tools_to_definitions([mock_tool, dict_tool])
 
@@ -209,12 +221,13 @@ class TestConvertToolsToDefinitions:
 # SECTION 3: Piped Input Detection Tests (3 tests)
 # ============================================================================
 
+
 class TestCheckPipedInput:
     """Test piped input detection."""
 
     def test_check_piped_input_no_pipe(self):
         """Test when stdin is a TTY (no pipe)."""
-        with patch('sys.stdin.isatty', return_value=True):
+        with patch("sys.stdin.isatty", return_value=True):
             piped_input, is_headless = check_piped_input()
 
             assert piped_input is None
@@ -222,8 +235,8 @@ class TestCheckPipedInput:
 
     def test_check_piped_input_with_pipe(self):
         """Test when stdin has piped input."""
-        with patch('sys.stdin.isatty', return_value=False):
-            with patch('sys.stdin.read', return_value="test input\n"):
+        with patch("sys.stdin.isatty", return_value=False):
+            with patch("sys.stdin.read", return_value="test input\n"):
                 piped_input, is_headless = check_piped_input()
 
                 assert piped_input == "test input"
@@ -231,8 +244,8 @@ class TestCheckPipedInput:
 
     def test_check_piped_input_exception(self):
         """Test exception handling during pipe read."""
-        with patch('sys.stdin.isatty', return_value=False):
-            with patch('sys.stdin.read', side_effect=Exception("Read error")):
+        with patch("sys.stdin.isatty", return_value=False):
+            with patch("sys.stdin.read", side_effect=Exception("Read error")):
                 piped_input, is_headless = check_piped_input()
 
                 assert piped_input is None
@@ -266,6 +279,7 @@ class TestResolveInputReferences:
 # SECTION 4: Client Mode Validation Tests (4 tests)
 # ============================================================================
 
+
 class TestValidateClientMode:
     """Test client mode validation."""
 
@@ -285,7 +299,7 @@ class TestValidateClientMode:
         mock_client.get_mode.return_value = ClientMode.GATEWAY
         mock_client.get_mode_info.return_value = {"gateway_url": None}
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             result = validate_client_mode(mock_client)
 
         assert result is False
@@ -294,9 +308,7 @@ class TestValidateClientMode:
         """Test valid direct mode with providers."""
         mock_client = MagicMock()
         mock_client.get_mode.return_value = ClientMode.DIRECT
-        mock_client.get_mode_info.return_value = {
-            "providers": {"google": True, "openai": False}
-        }
+        mock_client.get_mode_info.return_value = {"providers": {"google": True, "openai": False}}
 
         result = validate_client_mode(mock_client)
 
@@ -306,11 +318,9 @@ class TestValidateClientMode:
         """Test direct mode without providers."""
         mock_client = MagicMock()
         mock_client.get_mode.return_value = ClientMode.DIRECT
-        mock_client.get_mode_info.return_value = {
-            "providers": {"google": False, "openai": False}
-        }
+        mock_client.get_mode_info.return_value = {"providers": {"google": False, "openai": False}}
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             result = validate_client_mode(mock_client)
 
         assert result is False
@@ -319,6 +329,7 @@ class TestValidateClientMode:
 # ============================================================================
 # SECTION 5: Session History Restoration Tests (3 tests)
 # ============================================================================
+
 
 class TestRestoreSessionHistory:
     """Test session history restoration."""
@@ -341,11 +352,11 @@ class TestRestoreSessionHistory:
         session_data.metadata.get_display_name.return_value = "Test Session"
         session_data.messages = [
             {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi"}
+            {"role": "assistant", "content": "Hi"},
         ]
         session_mgr.resume_session.return_value = session_data
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             restore_session_history(session_mgr, ctx, "session_123")
 
         assert ctx.add_user_message.called
@@ -357,7 +368,7 @@ class TestRestoreSessionHistory:
         ctx = MagicMock()
         session_mgr.resume_session.return_value = None
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             restore_session_history(session_mgr, ctx, "nonexistent")
 
         session_mgr.resume_session.assert_called_once_with("nonexistent")
@@ -366,6 +377,7 @@ class TestRestoreSessionHistory:
 # ============================================================================
 # SECTION 6: Conversation History Restoration Tests (2 tests)
 # ============================================================================
+
 
 class TestRestoreConversationHistory:
     """Test conversation history restoration."""
@@ -410,6 +422,7 @@ class TestRestoreConversationHistory:
 # SECTION 8: Bash Mode Handling Tests (5 tests)
 # ============================================================================
 
+
 @pytest.mark.asyncio
 class TestHandleBashMode:
     """Test bash mode (! prefix) input handling."""
@@ -422,7 +435,7 @@ class TestHandleBashMode:
         ctx = MagicMock()
         cmd_history = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             await handle_bash_mode("!ls -la", bash_executor, ctx, cmd_history)
 
         bash_executor.execute.assert_called_once_with("ls -la")
@@ -437,7 +450,7 @@ class TestHandleBashMode:
         ctx = MagicMock()
         cmd_history = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             await handle_bash_mode("!invalid_cmd", bash_executor, ctx, cmd_history)
 
         bash_executor.execute.assert_called_once()
@@ -449,7 +462,7 @@ class TestHandleBashMode:
         ctx = MagicMock()
         cmd_history = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             await handle_bash_mode("!", bash_executor, ctx, cmd_history)
 
         bash_executor.execute.assert_not_called()
@@ -462,7 +475,7 @@ class TestHandleBashMode:
         ctx = MagicMock()
         cmd_history = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             await handle_bash_mode("!ls", bash_executor, ctx, cmd_history)
 
         bash_executor.execute.assert_called_once_with("ls")
@@ -476,7 +489,7 @@ class TestHandleBashMode:
         ctx = MagicMock()
         cmd_history = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             await handle_bash_mode("!  pwd  ", bash_executor, ctx, cmd_history)
 
         bash_executor.execute.assert_called_once_with("pwd")
@@ -485,6 +498,7 @@ class TestHandleBashMode:
 # ============================================================================
 # SECTION 9: Tool Execution Flow Tests (8 tests)
 # ============================================================================
+
 
 @pytest.mark.asyncio
 class TestProcessToolCalls:
@@ -505,7 +519,7 @@ class TestProcessToolCalls:
         ctx = MagicMock()
         cost_tracker = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
@@ -536,7 +550,7 @@ class TestProcessToolCalls:
         ctx = MagicMock()
         cost_tracker = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
@@ -566,7 +580,7 @@ class TestProcessToolCalls:
         ctx = MagicMock()
         cost_tracker = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
@@ -598,7 +612,7 @@ class TestProcessToolCalls:
         cost_tracker = MagicMock()
 
         # Mock execute_tool to always return a response with tool calls
-        with patch('src.host.cli.chat_loop.execute_tool', new_callable=AsyncMock) as mock_exec:
+        with patch("src.host.cli.chat_loop.execute_tool", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = {"tool_call_id": "1", "name": "test", "result": "ok"}
 
             # Create a response that will trigger max steps
@@ -612,7 +626,7 @@ class TestProcessToolCalls:
                 r.usage = None
                 responses.append(r)
 
-            with patch('src.host.cli.chat_loop.console'):
+            with patch("src.host.cli.chat_loop.console"):
                 # This should stop at MAX_TOOL_STEPS
                 text, files = await process_tool_calls(
                     response=responses[0],
@@ -641,7 +655,7 @@ class TestProcessToolCalls:
         ctx = MagicMock()
         cost_tracker = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
@@ -672,7 +686,7 @@ class TestProcessToolCalls:
         ctx.session_id = "test-session"
         cost_tracker = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
@@ -702,7 +716,7 @@ class TestProcessToolCalls:
         ctx = MagicMock()
         cost_tracker = MagicMock()
 
-        with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.console"):
             text, files = await process_tool_calls(
                 response=response,
                 registry=registry,
@@ -718,10 +732,10 @@ class TestProcessToolCalls:
         assert text == "Headless response"
 
 
-
 # ============================================================================
 # SECTION 10: User Input Handling Tests (8 tests)
 # ============================================================================
+
 
 @pytest.mark.asyncio
 class TestUserInputHandling:
@@ -775,6 +789,7 @@ class TestUserInputHandling:
 # SECTION 11: Error Handling and Recovery Tests (8 tests)
 # ============================================================================
 
+
 @pytest.mark.asyncio
 class TestErrorHandling:
     """Test error handling and recovery."""
@@ -802,7 +817,7 @@ class TestErrorHandling:
         """Test conversation history rollback on error."""
         conversation_history = [
             Message(role="user", content="Hello"),
-            Message(role="assistant", content="Hi")
+            Message(role="assistant", content="Hi"),
         ]
 
         # Simulate rollback
@@ -847,21 +862,22 @@ class TestErrorHandling:
 # SECTION 12: Chat Loop Main Function Tests (10 tests)
 # ============================================================================
 
+
 @pytest.mark.asyncio
 class TestChatLoopMainFunction:
     """Test main chat_loop function."""
 
     async def test_chat_loop_initialization(self):
         """Test chat loop initialization."""
-        with patch('src.host.cli.chat_loop.check_piped_input', return_value=(None, False)):
-            with patch('src.host.cli.chat_loop.validate_client_mode', return_value=False):
-                with patch('src.host.cli.chat_loop.console'):
+        with patch("src.host.cli.chat_loop.check_piped_input", return_value=(None, False)):
+            with patch("src.host.cli.chat_loop.validate_client_mode", return_value=False):
+                with patch("src.host.cli.chat_loop.console"):
                     # Should return early due to validation failure
                     pass
 
     async def test_chat_loop_headless_mode_detection(self):
         """Test headless mode detection."""
-        with patch('src.host.cli.chat_loop.check_piped_input', return_value=("test prompt", True)):
+        with patch("src.host.cli.chat_loop.check_piped_input", return_value=("test prompt", True)):
             # Headless mode should be True when prompt is provided
             _, is_headless = ("test prompt", True)
             assert is_headless is True
@@ -897,11 +913,7 @@ class TestChatLoopMainFunction:
     async def test_chat_loop_context_stats(self):
         """Test context statistics."""
         ctx = MagicMock()
-        ctx.get_context_stats.return_value = {
-            "messages": 10,
-            "summaries": 1,
-            "usage_percent": 45
-        }
+        ctx.get_context_stats.return_value = {"messages": 10, "summaries": 1, "usage_percent": 45}
 
         stats = ctx.get_context_stats()
         assert stats["messages"] == 10
@@ -916,10 +928,7 @@ class TestChatLoopMainFunction:
     async def test_chat_loop_budget_checking(self):
         """Test budget checking."""
         cost_tracker = MagicMock()
-        cost_tracker.check_budget.return_value = {
-            "warning": None,
-            "remaining": 5.0
-        }
+        cost_tracker.check_budget.return_value = {"warning": None, "remaining": 5.0}
 
         budget_status = cost_tracker.check_budget()
         assert budget_status["remaining"] == 5.0
@@ -928,6 +937,7 @@ class TestChatLoopMainFunction:
 # ============================================================================
 # SECTION 13: Integration Tests (5 tests)
 # ============================================================================
+
 
 @pytest.mark.asyncio
 class TestChatLoopIntegration:
@@ -946,9 +956,7 @@ class TestChatLoopIntegration:
     async def test_integration_tool_definition_flow(self):
         """Test tool definition flow."""
         tool_def = ToolDefinition(
-            name="test_tool",
-            description="Test tool",
-            parameters={"type": "object"}
+            name="test_tool", description="Test tool", parameters={"type": "object"}
         )
 
         assert tool_def.name == "test_tool"
@@ -992,6 +1000,7 @@ class TestChatLoopIntegration:
 # SECTION 14: Edge Cases and Boundary Tests (5 tests)
 # ============================================================================
 
+
 @pytest.mark.asyncio
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
@@ -1018,6 +1027,7 @@ class TestEdgeCases:
 
     async def test_edge_case_concurrent_operations(self):
         """Test concurrent operations."""
+
         async def dummy_task():
             return "done"
 

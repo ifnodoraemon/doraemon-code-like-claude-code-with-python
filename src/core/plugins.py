@@ -363,9 +363,7 @@ class PluginManager:
             "installed_at": time.time(),
             "source": str(source_path),
         }
-        (target_path / ".state.json").write_text(
-            json.dumps(state, indent=2), encoding="utf-8"
-        )
+        (target_path / ".state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
 
         # Load plugin
         scope = self._get_scope_for_path(target_base)
@@ -452,9 +450,7 @@ class PluginManager:
             del self._plugins[name]
 
             # Remove commands
-            self._commands = {
-                k: v for k, v in self._commands.items() if v.plugin_name != name
-            }
+            self._commands = {k: v for k, v in self._commands.items() if v.plugin_name != name}
 
             logger.info(f"Uninstalled plugin: {name}")
             return True
@@ -484,9 +480,7 @@ class PluginManager:
         self._save_plugin_state(plugin)
 
         # Remove commands
-        self._commands = {
-            k: v for k, v in self._commands.items() if v.plugin_name != name
-        }
+        self._commands = {k: v for k, v in self._commands.items() if v.plugin_name != name}
 
         return True
 

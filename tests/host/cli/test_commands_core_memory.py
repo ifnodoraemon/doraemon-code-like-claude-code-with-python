@@ -50,7 +50,9 @@ class TestMemoryCommand:
         handler = _make_handler()
 
         with (
-            patch("src.host.cli.commands_core.update_user_persona", return_value="ok") as mock_update,
+            patch(
+                "src.host.cli.commands_core.update_user_persona", return_value="ok"
+            ) as mock_update,
             patch("src.host.cli.commands_core.console") as mock_console,
         ):
             await handler._handle_memory(["persona", "set", "role", "staff", "engineer"])
@@ -75,7 +77,9 @@ class TestMemoryCommand:
         export_path = tmp_path / "notes.json"
 
         with (
-            patch("src.host.cli.commands_core.export_notes", return_value='[{"title":"x"}]') as mock_export,
+            patch(
+                "src.host.cli.commands_core.export_notes", return_value='[{"title":"x"}]'
+            ) as mock_export,
             patch("src.host.cli.commands_core.console") as mock_console,
         ):
             await handler._handle_memory(["export", str(export_path)])

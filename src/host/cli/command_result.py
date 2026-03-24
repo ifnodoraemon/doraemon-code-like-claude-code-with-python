@@ -1,7 +1,6 @@
 """Shared command result type for CLI command handlers."""
 
 from dataclasses import dataclass
-from typing import Self
 
 
 @dataclass
@@ -26,7 +25,7 @@ class CommandResult:
         tool_definitions: list,
         active_skills_content: str,
         conversation_history: list,
-    ) -> Self:
+    ) -> "CommandResult":
         """Build the default command result for the current loop state."""
         return cls(
             mode=mode,

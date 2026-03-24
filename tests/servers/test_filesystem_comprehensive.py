@@ -9,29 +9,28 @@ Includes 50+ tests covering success cases, error cases, and edge cases.
 
 import os
 import tempfile
-from unittest.mock import MagicMock, Mock, patch, mock_open, call
+from unittest.mock import mock_open, patch
+
 import pytest
 
-from src.core.security import validate_path
 from src.servers.filesystem_unified import (
-    read_file,
-    write_file,
-    list_directory,
-    list_directory_tree,
-    read_file_outline,
-    glob_files,
-    grep_search,
-    find_symbol,
+    _human_size,
+    copy_file,
+    create_directory,
+    delete_file,
     edit_file,
     edit_file_multiline,
+    find_symbol,
+    glob_files,
+    grep_search,
+    list_directory,
+    list_directory_tree,
     move_file,
-    copy_file,
-    delete_file,
+    read_file,
+    read_file_outline,
     rename_file,
-    create_directory,
-    _human_size,
+    write_file,
 )
-
 
 # ========================================
 # Fixtures
@@ -177,7 +176,7 @@ class TestReadFile:
         result = read_file("test.txt")
         assert "test content" in result
 
-    @patch("builtins.open", side_effect=IOError("Permission denied"))
+    @patch("builtins.open", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
     def test_read_file_permission_error(self, mock_exists, mock_file):
         """Test read_file with permission error."""
@@ -222,7 +221,7 @@ class TestWriteFile:
         result = write_file("empty.txt", "")
         assert "Successfully wrote" in result
 
-    @patch("builtins.open", side_effect=IOError("Disk full"))
+    @patch("builtins.open", side_effect=OSError("Disk full"))
     @patch("os.makedirs")
     def test_write_file_io_error(self, mock_makedirs, mock_file):
         """Test write_file with IO error."""
@@ -349,7 +348,7 @@ class TestEditFile:
         result = edit_file("test.txt", "Line", "Modified", count=3)
         assert "Successfully edited" in result
 
-    @patch("builtins.open", side_effect=IOError("Permission denied"))
+    @patch("builtins.open", side_effect=OSError("Permission denied"))
     def test_edit_file_io_error(self, mock_file):
         """Test edit_file with IO error."""
         result = edit_file("test.txt", "old", "new")
@@ -442,7 +441,7 @@ class TestMoveFile:
         result = move_file("test.txt", "new_dir/test.txt")
         assert "Successfully moved" in result
 
-    @patch("shutil.move", side_effect=IOError("Permission denied"))
+    @patch("shutil.move", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
     @patch("os.makedirs")
     def test_move_file_io_error(self, mock_makedirs, mock_exists, mock_move):
@@ -493,7 +492,7 @@ class TestCopyFile:
         assert "Successfully copied" in result
         assert os.path.exists(os.path.join(temp_dir, "subdir_copy"))
 
-    @patch("shutil.copy2", side_effect=IOError("Permission denied"))
+    @patch("shutil.copy2", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
     @patch("os.path.isdir")
     @patch("os.makedirs")
@@ -539,7 +538,7 @@ class TestDeleteFile:
         result = delete_file("nonexistent.txt")
         assert "Error" in result or "not found" in result.lower()
 
-    @patch("os.remove", side_effect=IOError("Permission denied"))
+    @patch("os.remove", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
     @patch("os.path.isdir")
     def test_delete_file_io_error(self, mock_isdir, mock_exists, mock_remove):
@@ -578,7 +577,7 @@ class TestRenameFile:
         result = rename_file("test.txt", "test_module.py")
         assert "Error" in result or "already exists" in result.lower()
 
-    @patch("os.rename", side_effect=IOError("Permission denied"))
+    @patch("os.rename", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
     def test_rename_file_io_error(self, mock_exists, mock_rename):
         """Test rename_file with IO error."""
@@ -615,7 +614,7 @@ class TestCreateDirectory:
         result = create_directory("subdir")
         assert "Successfully created" in result
 
-    @patch("os.makedirs", side_effect=IOError("Permission denied"))
+    @patch("os.makedirs", side_effect=OSError("Permission denied"))
     def test_create_directory_io_error(self, mock_makedirs):
         """Test create_directory with IO error."""
         result = create_directory("test_dir")

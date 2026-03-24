@@ -5,9 +5,8 @@ LLM-as-Judge 评估器
 """
 
 import json
-from pathlib import Path
-from typing import Dict, List
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -22,9 +21,7 @@ class LLMJudgeEvaluator:
         self.model = model
         self.client = ModelClient.create()
 
-    def evaluate_response(
-        self, task: Dict, agent_response: str, agent_actions: List[str]
-    ) -> Dict:
+    def evaluate_response(self, task: dict, agent_response: str, agent_actions: list[str]) -> dict:
         """评估 Agent 的响应"""
 
         judge_prompt = self._create_judge_prompt(task, agent_response, agent_actions)
@@ -39,7 +36,7 @@ class LLMJudgeEvaluator:
         return scores
 
     def _create_judge_prompt(
-        self, task: Dict, agent_response: str, agent_actions: List[str]
+        self, task: dict, agent_response: str, agent_actions: list[str]
     ) -> str:
         """创建评判提示"""
 
@@ -47,10 +44,10 @@ class LLMJudgeEvaluator:
 你是一个专业的 AI Agent 评估专家。请评估以下 Agent 对任务的完成情况。
 
 ## 任务信息
-**任务**: {task['prompt']}
-**难度**: {task['difficulty']}/10
-**类别**: {task['category']}
-**期望工具**: {', '.join(task.get('expected_tools', []))}
+**任务**: {task["prompt"]}
+**难度**: {task["difficulty"]}/10
+**类别**: {task["category"]}
+**期望工具**: {", ".join(task.get("expected_tools", []))}
 
 ## Agent 响应
 {agent_response}
@@ -140,7 +137,7 @@ class LLMJudgeEvaluator:
 """
         return prompt
 
-    def _parse_scores(self, response_content: str) -> Dict:
+    def _parse_scores(self, response_content: str) -> dict:
         """解析 LLM 返回的评分"""
         try:
             # 提取 JSON 部分
@@ -159,7 +156,7 @@ class LLMJudgeEvaluator:
             print(f"解析评分失败: {e}")
             return self._default_scores()
 
-    def _default_scores(self) -> Dict:
+    def _default_scores(self) -> dict:
         """默认评分"""
         return {
             "task_completion": {"score": 5, "reasoning": "无法评估"},
@@ -175,7 +172,7 @@ class LLMJudgeEvaluator:
             "suggestions": [],
         }
 
-    def batch_evaluate(self, results: List[Dict]) -> List[Dict]:
+    def batch_evaluate(self, results: list[dict]) -> list[dict]:
         """批量评估多个任务结果"""
         evaluated_results = []
 
@@ -193,7 +190,7 @@ class LLMJudgeEvaluator:
 
         return evaluated_results
 
-    def generate_summary_report(self, evaluated_results: List[Dict]) -> Dict:
+    def generate_summary_report(self, evaluated_results: list[dict]) -> dict:
         """生成汇总报告"""
         total_tasks = len(evaluated_results)
         evaluated_tasks = [r for r in evaluated_results if "llm_evaluation" in r]

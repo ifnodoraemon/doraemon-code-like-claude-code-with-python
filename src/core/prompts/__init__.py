@@ -33,6 +33,7 @@ DEFAULT_MODE = "build"
 
 # ─── Public API ──────────────────────────────────────────────────────
 
+
 def get_system_prompt(
     mode: str = DEFAULT_MODE,
     persona_config: dict | None = None,

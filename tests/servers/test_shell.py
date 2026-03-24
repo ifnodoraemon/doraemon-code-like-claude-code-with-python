@@ -6,19 +6,16 @@ Includes 40+ tests with extensive mocking of subprocess operations.
 """
 
 import os
-import queue
 import shutil
 import subprocess
-import threading
 import time
-from unittest import mock
-from unittest.mock import MagicMock, Mock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.servers.shell import (
-    BackgroundProcess,
     DEFAULT_CONFIG,
+    BackgroundProcess,
     ShellConfig,
     _background_processes,
     _cleanup_finished_processes,
@@ -33,7 +30,6 @@ from src.servers.shell import (
     list_background_processes,
     stop_background_process,
 )
-
 
 # ========================================
 # Fixtures
@@ -335,8 +331,7 @@ class TestExecuteCommand:
         """Test that dangerous environment variables are filtered."""
         # This should not crash or allow LD_PRELOAD injection
         result = execute_command(
-            "echo test",
-            env={"LD_PRELOAD": "/tmp/malicious.so", "SAFE_VAR": "safe"}
+            "echo test", env={"LD_PRELOAD": "/tmp/malicious.so", "SAFE_VAR": "safe"}
         )
         assert isinstance(result, str)
 
@@ -350,7 +345,7 @@ class TestExecuteCommand:
         result = execute_command("echo test", timeout=10000)
         assert isinstance(result, str)
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_execute_command_with_mock_popen(self, mock_popen):
         """Test execute_command with mocked Popen."""
         # Setup mock
@@ -364,14 +359,14 @@ class TestExecuteCommand:
         assert isinstance(result, str)
         mock_popen.assert_called_once()
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_execute_command_exception_handling(self, mock_popen):
         """Test exception handling in execute_command."""
         mock_popen.side_effect = OSError("Process creation failed")
         result = execute_command("echo test")
         assert "error" in result.lower()
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_execute_command_timeout_exceeded(self, mock_popen):
         """Test command timeout when no output is produced."""
         mock_process = MagicMock()
@@ -383,7 +378,7 @@ class TestExecuteCommand:
         # Use a large number of time values to avoid StopIteration
         time_values = [0] * 100  # Initial time
         time_values.extend([31] * 100)  # Simulate timeout after 31 seconds
-        with patch('time.time', side_effect=time_values):
+        with patch("time.time", side_effect=time_values):
             result = execute_command("sleep 100", timeout=30)
             assert "timed out" in result.lower()
 
@@ -444,23 +439,23 @@ class TestBackgroundProcesses:
     def test_execute_command_background_with_env(self, clean_background_processes, temp_dir):
         """Test background command with environment variables."""
         result = execute_command_background(
-            "echo test",
-            working_directory=temp_dir,
-            env={"TEST_VAR": "value"}
+            "echo test", working_directory=temp_dir, env={"TEST_VAR": "value"}
         )
         assert "Started background process" in result or "error" in result.lower()
 
-    def test_execute_command_background_filters_dangerous_env(self, clean_background_processes, temp_dir):
+    def test_execute_command_background_filters_dangerous_env(
+        self, clean_background_processes, temp_dir
+    ):
         """Test that dangerous env vars are filtered in background."""
         result = execute_command_background(
-            "echo test",
-            working_directory=temp_dir,
-            env={"LD_PRELOAD": "/tmp/bad.so", "SAFE": "ok"}
+            "echo test", working_directory=temp_dir, env={"LD_PRELOAD": "/tmp/bad.so", "SAFE": "ok"}
         )
         assert isinstance(result, str)
 
-    @patch('subprocess.Popen')
-    def test_execute_command_background_with_mock(self, mock_popen, clean_background_processes, temp_dir):
+    @patch("subprocess.Popen")
+    def test_execute_command_background_with_mock(
+        self, mock_popen, clean_background_processes, temp_dir
+    ):
         """Test background command with mocked Popen."""
         mock_process = MagicMock()
         mock_process.pid = 54321
@@ -471,7 +466,7 @@ class TestBackgroundProcesses:
         assert "Started background process" in result
         assert "54321" in result
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_execute_command_background_exception(self, mock_popen, clean_background_processes):
         """Test exception handling in background command."""
         mock_popen.side_effect = OSError("Failed to start process")
@@ -758,11 +753,7 @@ class TestShellConfig:
 
     def test_custom_config_creation(self):
         """Test creating custom shell configuration."""
-        config = ShellConfig(
-            default_timeout=60,
-            max_timeout=1200,
-            max_output_size=200_000
-        )
+        config = ShellConfig(default_timeout=60, max_timeout=1200, max_output_size=200_000)
         assert config.default_timeout == 60
         assert config.max_timeout == 1200
         assert config.max_output_size == 200_000
@@ -784,7 +775,7 @@ class TestBackgroundProcessDataStructure:
             command="test command",
             start_time=time.time(),
             working_dir="/tmp",
-            process=mock_process
+            process=mock_process,
         )
 
         assert bp.pid == 123
@@ -797,11 +788,7 @@ class TestBackgroundProcessDataStructure:
         mock_process = MagicMock()
         start = time.time()
         bp = BackgroundProcess(
-            pid=123,
-            command="test",
-            start_time=start,
-            working_dir="/tmp",
-            process=mock_process
+            pid=123, command="test", start_time=start, working_dir="/tmp", process=mock_process
         )
 
         assert bp.start_time == start
@@ -838,9 +825,7 @@ class TestIntegration:
     def test_environment_variables_in_execution(self, temp_dir):
         """Test that environment variables are properly set."""
         result = execute_command(
-            "echo $CUSTOM_VAR",
-            working_directory=temp_dir,
-            env={"CUSTOM_VAR": "custom_value"}
+            "echo $CUSTOM_VAR", working_directory=temp_dir, env={"CUSTOM_VAR": "custom_value"}
         )
         assert "custom_value" in result
 

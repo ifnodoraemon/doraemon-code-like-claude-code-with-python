@@ -30,10 +30,7 @@ async def list_sessions(project: str = "default", limit: int = 50):
 
     return [
         SessionResponse(
-            id=s.id,
-            name=s.name,
-            message_count=s.message_count,
-            updated_at=s.updated_at
+            id=s.id, name=s.name, message_count=s.message_count, updated_at=s.updated_at
         )
         for s in sessions
     ]
@@ -43,7 +40,7 @@ async def list_sessions(project: str = "default", limit: int = 50):
 async def get_session(session_id: str):
     """Get session details."""
     # Validate session_id format to prevent IDOR
-    if not re.match(r'^[a-zA-Z0-9_-]+$', session_id):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
     mgr = SessionManager()
@@ -54,5 +51,5 @@ async def get_session(session_id: str):
     return {
         "id": session.metadata.id,
         "name": session.metadata.name,
-        "messages": list(session.messages)
+        "messages": list(session.messages),
     }

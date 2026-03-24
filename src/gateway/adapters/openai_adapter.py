@@ -131,9 +131,7 @@ class OpenAIAdapter(BaseAdapter):
         response = await self._client.chat.completions.create(**kwargs)
         return self._convert_response(response)
 
-    async def chat_stream(
-        self, request: ChatRequest
-    ) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[StreamChunk]:
         """Stream chat response from OpenAI."""
         messages = [self._convert_message(m) for m in request.messages]
 

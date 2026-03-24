@@ -24,14 +24,18 @@ async def list_tools(mode: str = "build"):
     tools = []
     for tool in genai_tools:
         if hasattr(tool, "name"):
-            tools.append({
-                "name": tool.name,
-                "description": getattr(tool, "description", ""),
-            })
+            tools.append(
+                {
+                    "name": tool.name,
+                    "description": getattr(tool, "description", ""),
+                }
+            )
         elif isinstance(tool, dict):
-            tools.append({
-                "name": tool.get("name", ""),
-                "description": tool.get("description", ""),
-            })
+            tools.append(
+                {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                }
+            )
 
     return {"tools": tools}

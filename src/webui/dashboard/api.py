@@ -67,7 +67,7 @@ class EvaluationRequest(BaseModel):
     @classmethod
     def validate_model(cls, v: str | None) -> str | None:
         if v is not None:
-            if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$', v):
+            if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$", v):
                 raise ValueError("Invalid model name format")
             if len(v) > 128:
                 raise ValueError("Model name too long")
@@ -127,17 +127,19 @@ def list_evaluation_files() -> list[dict[str, Any]]:
                 # Find corresponding results file
                 results_file = subdir / f"results_{timestamp_str}.json"
 
-                evaluations.append({
-                    "id": f"{subdir.name}_{timestamp_str}",
-                    "name": subdir.name,
-                    "timestamp": summary.get("timestamp", timestamp_str),
-                    "total_tasks": summary.get("total_tasks", 0),
-                    "success_rate": summary.get("success_rate", 0),
-                    "total_time": summary.get("total_time", 0),
-                    "summary_file": str(summary_file),
-                    "results_file": str(results_file) if results_file.exists() else None,
-                    "category": subdir.name,
-                })
+                evaluations.append(
+                    {
+                        "id": f"{subdir.name}_{timestamp_str}",
+                        "name": subdir.name,
+                        "timestamp": summary.get("timestamp", timestamp_str),
+                        "total_tasks": summary.get("total_tasks", 0),
+                        "success_rate": summary.get("success_rate", 0),
+                        "total_time": summary.get("total_time", 0),
+                        "summary_file": str(summary_file),
+                        "results_file": str(results_file) if results_file.exists() else None,
+                        "category": subdir.name,
+                    }
+                )
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read {summary_file}: {e}")
                 continue
@@ -165,7 +167,7 @@ def load_evaluation_details(eval_id: str) -> dict[str, Any]:
     timestamp = f"{parts[1]}_{parts[2]}"
 
     # Validate category to prevent path traversal
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', category):
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", category):
         raise ValueError(f"Invalid category in evaluation ID: {category}")
     if ".." in category or "/" in category:
         raise ValueError("Invalid characters in evaluation ID")
@@ -238,25 +240,31 @@ def calculate_trends() -> dict[str, Any]:
         except (ValueError, TypeError):
             label = timestamp[:10] if timestamp else "Unknown"
 
-        success_rate_trend.append({
-            "label": label,
-            "value": success_rate * 100,  # Convert to percentage
-            "category": eval_data.get("category", "unknown"),
-        })
+        success_rate_trend.append(
+            {
+                "label": label,
+                "value": success_rate * 100,  # Convert to percentage
+                "category": eval_data.get("category", "unknown"),
+            }
+        )
 
         if total_tasks > 0:
             avg_latency = total_time / total_tasks
-            latency_trend.append({
-                "label": label,
-                "value": avg_latency,
-                "category": eval_data.get("category", "unknown"),
-            })
+            latency_trend.append(
+                {
+                    "label": label,
+                    "value": avg_latency,
+                    "category": eval_data.get("category", "unknown"),
+                }
+            )
 
-        task_count_trend.append({
-            "label": label,
-            "value": total_tasks,
-            "category": eval_data.get("category", "unknown"),
-        })
+        task_count_trend.append(
+            {
+                "label": label,
+                "value": total_tasks,
+                "category": eval_data.get("category", "unknown"),
+            }
+        )
 
     return {
         "success_rate_trend": success_rate_trend,
@@ -355,10 +363,15 @@ async def run_evaluation_async(
     try:
         # Build command
         cmd = [
-            "python", "-m", "tests.evals.parallel_runner",
-            "--output-dir", str(EVAL_RESULTS_DIR / "dashboard"),
-            "--n-trials", str(n_trials),
-            "--max-workers", str(max_workers),
+            "python",
+            "-m",
+            "tests.evals.parallel_runner",
+            "--output-dir",
+            str(EVAL_RESULTS_DIR / "dashboard"),
+            "--n-trials",
+            str(n_trials),
+            "--max-workers",
+            str(max_workers),
         ]
 
         if model:
@@ -582,10 +595,12 @@ async def get_categories() -> dict[str, Any]:
                 # Count evaluations in this category
                 count = len(list(subdir.glob("summary_*.json")))
                 if count > 0:
-                    categories.append({
-                        "name": subdir.name,
-                        "count": count,
-                    })
+                    categories.append(
+                        {
+                            "name": subdir.name,
+                            "count": count,
+                        }
+                    )
 
     return {"categories": categories}
 
@@ -604,7 +619,9 @@ async def compare_models() -> dict[str, Any]:
     for eval_data in evaluations:
         try:
             details = load_evaluation_details(eval_data["id"])
-            summary = details.get("summary", )
+            summary = details.get(
+                "summary",
+            )
 
             # Try to extract model name from summary or category
             model_name = summary.get("model_name", eval_data.get("category", "unknown"))

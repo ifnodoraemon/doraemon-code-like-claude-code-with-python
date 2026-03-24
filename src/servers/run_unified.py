@@ -27,6 +27,8 @@ from src.core.logger import configure_root_logger
 from src.core.security import validate_path
 from src.core.shell_security import (
     DEFAULT_CONFIG as DEFAULT_SHELL_CONFIG,
+)
+from src.core.shell_security import (
     check_git_safety,
     is_command_blocked,
     register_background_process,

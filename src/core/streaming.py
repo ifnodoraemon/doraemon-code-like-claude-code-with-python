@@ -181,9 +181,7 @@ class StreamManager:
         self._stats = StreamStats()
         self._cancel_event.clear()
 
-    async def stream(
-        self, response_iterator: AsyncIterator[Any]
-    ) -> AsyncIterator[StreamChunk]:
+    async def stream(self, response_iterator: AsyncIterator[Any]) -> AsyncIterator[StreamChunk]:
         """
         Stream responses from an async iterator.
 
@@ -334,10 +332,7 @@ class StreamingChat:
                     yield text
 
             # Add assistant response to history
-            self._history.append({
-                "role": "model",
-                "parts": [{"text": full_response}]
-            })
+            self._history.append({"role": "model", "parts": [{"text": full_response}]})
 
         except Exception as e:
             logger.error(f"Streaming error: {e}")
@@ -362,6 +357,7 @@ def create_streaming_printer(console) -> Callable[[str], None]:
     Returns:
         Callback function for printing chunks
     """
+
     def printer(text: str):
         console.print(text, end="", highlight=False)
 

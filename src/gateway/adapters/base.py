@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AdapterConfig:
     """Configuration for an adapter."""
+
     api_key: str | None = None
     api_base: str | None = None
     timeout: float = 60.0
@@ -70,9 +71,7 @@ class BaseAdapter(ABC):
         pass
 
     @abstractmethod
-    async def chat_stream(
-        self, request: ChatRequest
-    ) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[StreamChunk]:
         """
         Send a chat request and stream the response.
 

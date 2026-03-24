@@ -243,7 +243,7 @@ class ToolHistoryManager:
 
         # Trim if too large
         if len(self._entries) > self._max_entries:
-            self._entries = self._entries[-self._max_entries // 2:]
+            self._entries = self._entries[-self._max_entries // 2 :]
 
         # Persist
         if self._persist_path:
@@ -430,9 +430,7 @@ class ToolHistoryManager:
             data = {
                 "entries": [e.to_dict() for e in self._entries[-1000:]],
             }
-            self._persist_path.write_text(
-                json.dumps(data), encoding="utf-8"
-            )
+            self._persist_path.write_text(json.dumps(data), encoding="utf-8")
         except Exception as e:
             logger.warning(f"Failed to save history: {e}")
 
@@ -470,9 +468,7 @@ class ExecutionRecorder:
         self._error: str | None = None
 
     def __enter__(self) -> "ExecutionRecorder":
-        self._exec_id = self._manager.start(
-            self._tool, self._arguments, self._parent_id
-        )
+        self._exec_id = self._manager.start(self._tool, self._arguments, self._parent_id)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

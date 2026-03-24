@@ -10,15 +10,13 @@ Tests cover:
 """
 
 import os
-import pytest
-from unittest.mock import Mock, patch, MagicMock, call
-from urllib.parse import urlparse
+from unittest.mock import MagicMock, patch
 
 from src.core.proxy import (
-    ProxyType,
     ProxyConfig,
-    ProxyRule,
     ProxyManager,
+    ProxyRule,
+    ProxyType,
     get_proxy_manager,
 )
 
@@ -48,7 +46,13 @@ class TestProxyType:
 
     def test_proxy_type_enum_members(self):
         """Test all proxy type enum members exist."""
-        types = [ProxyType.HTTP, ProxyType.HTTPS, ProxyType.SOCKS4, ProxyType.SOCKS5, ProxyType.DIRECT]
+        types = [
+            ProxyType.HTTP,
+            ProxyType.HTTPS,
+            ProxyType.SOCKS4,
+            ProxyType.SOCKS5,
+            ProxyType.DIRECT,
+        ]
         assert len(types) == 5
 
 
@@ -66,31 +70,18 @@ class TestProxyConfig:
 
     def test_proxy_config_with_auth(self):
         """Test proxy config with authentication."""
-        config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            username="user",
-            password="pass"
-        )
+        config = ProxyConfig(host="proxy.example.com", port=8080, username="user", password="pass")
         assert config.username == "user"
         assert config.password == "pass"
 
     def test_proxy_config_with_name(self):
         """Test proxy config with friendly name."""
-        config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            name="corporate"
-        )
+        config = ProxyConfig(host="proxy.example.com", port=8080, name="corporate")
         assert config.name == "corporate"
 
     def test_proxy_config_socks5(self):
         """Test SOCKS5 proxy config."""
-        config = ProxyConfig(
-            host="socks.example.com",
-            port=1080,
-            proxy_type=ProxyType.SOCKS5
-        )
+        config = ProxyConfig(host="socks.example.com", port=1080, proxy_type=ProxyType.SOCKS5)
         assert config.proxy_type == ProxyType.SOCKS5
 
     def test_proxy_config_to_url_http(self):
@@ -101,52 +92,31 @@ class TestProxyConfig:
 
     def test_proxy_config_to_url_https(self):
         """Test converting HTTPS proxy config to URL."""
-        config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            proxy_type=ProxyType.HTTPS
-        )
+        config = ProxyConfig(host="proxy.example.com", port=8080, proxy_type=ProxyType.HTTPS)
         url = config.to_url()
         assert url == "https://proxy.example.com:8080"
 
     def test_proxy_config_to_url_socks5(self):
         """Test converting SOCKS5 proxy config to URL."""
-        config = ProxyConfig(
-            host="socks.example.com",
-            port=1080,
-            proxy_type=ProxyType.SOCKS5
-        )
+        config = ProxyConfig(host="socks.example.com", port=1080, proxy_type=ProxyType.SOCKS5)
         url = config.to_url()
         assert url == "socks5://socks.example.com:1080"
 
     def test_proxy_config_to_url_with_auth(self):
         """Test converting proxy config with auth to URL."""
-        config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            username="user",
-            password="pass"
-        )
+        config = ProxyConfig(host="proxy.example.com", port=8080, username="user", password="pass")
         url = config.to_url()
         assert url == "http://user:pass@proxy.example.com:8080"
 
     def test_proxy_config_to_url_with_username_only(self):
         """Test converting proxy config with username only to URL."""
-        config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            username="user"
-        )
+        config = ProxyConfig(host="proxy.example.com", port=8080, username="user")
         url = config.to_url()
         assert url == "http://user@proxy.example.com:8080"
 
     def test_proxy_config_to_url_direct(self):
         """Test converting DIRECT proxy config to URL."""
-        config = ProxyConfig(
-            host="localhost",
-            port=0,
-            proxy_type=ProxyType.DIRECT
-        )
+        config = ProxyConfig(host="localhost", port=0, proxy_type=ProxyType.DIRECT)
         url = config.to_url()
         assert url == ""
 
@@ -203,12 +173,7 @@ class TestProxyConfig:
 
     def test_proxy_config_to_dict(self):
         """Test converting proxy config to dictionary."""
-        config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            username="user",
-            name="corporate"
-        )
+        config = ProxyConfig(host="proxy.example.com", port=8080, username="user", name="corporate")
         d = config.to_dict()
         assert d["host"] == "proxy.example.com"
         assert d["port"] == 8080
@@ -250,11 +215,7 @@ class TestProxyRule:
 
     def test_proxy_rule_complete(self):
         """Test complete proxy rule."""
-        rule = ProxyRule(
-            domains=["*.internal.com"],
-            proxy_name="internal_proxy",
-            bypass=False
-        )
+        rule = ProxyRule(domains=["*.internal.com"], proxy_name="internal_proxy", bypass=False)
         assert rule.domains == ["*.internal.com"]
         assert rule.proxy_name == "internal_proxy"
         assert rule.bypass is False
@@ -538,11 +499,7 @@ class TestProxyManager:
         """Test getting Playwright proxy when configured."""
         manager = ProxyManager()
         config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            name="test",
-            username="user",
-            password="pass"
+            host="proxy.example.com", port=8080, name="test", username="user", password="pass"
         )
         manager.add_proxy(config)
         manager.set_default("test")
@@ -721,10 +678,7 @@ class TestProxyIntegration:
     def test_proxy_with_special_characters(self):
         """Test proxy with special characters in password."""
         config = ProxyConfig(
-            host="proxy.example.com",
-            port=8080,
-            username="user",
-            password="p@ss:word"
+            host="proxy.example.com", port=8080, username="user", password="p@ss:word"
         )
         url = config.to_url()
         assert "p@ss:word" in url

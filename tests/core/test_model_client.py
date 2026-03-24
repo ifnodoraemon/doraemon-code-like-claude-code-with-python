@@ -4,10 +4,11 @@ Unit tests for model_client.py
 Tests the unified model client interface, retry logic, and error handling.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.core.errors import ConfigurationError, RateLimitError, TransientError
+import pytest
+
+from src.core.errors import ConfigurationError, TransientError
 from src.core.model_client import (
     DirectModelClient,
     GatewayModelClient,
@@ -56,7 +57,7 @@ class TestGatewayModelClient:
         client._client = mock_client
 
         # First call returns 429, second succeeds
-        from httpx import Response, HTTPStatusError, Request
+        from httpx import HTTPStatusError, Request, Response
 
         rate_limit_response = Response(
             status_code=429,
@@ -103,7 +104,7 @@ class TestGatewayModelClient:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, HTTPStatusError, Request
+        from httpx import HTTPStatusError, Request, Response
 
         server_error_response = Response(
             status_code=503,
@@ -149,7 +150,8 @@ class TestGatewayModelClient:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, HTTPStatusError, Request
+        from httpx import HTTPStatusError, Request, Response
+
         from src.core.errors import AgentError
 
         client_error_response = Response(
@@ -265,10 +267,13 @@ class TestModelClient:
 
     def test_get_mode_detects_gateway(self):
         """Test that get_mode detects gateway mode from config."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gpt-4o",
-            "gateway_url": "http://test.com",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gpt-4o",
+                "gateway_url": "http://test.com",
+            },
+        ):
             mode = ModelClient.get_mode()
             assert mode == ClientMode.GATEWAY
 
@@ -365,7 +370,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, HTTPStatusError, Request
+        from httpx import HTTPStatusError, Request, Response
 
         server_error_response = Response(
             status_code=503,
@@ -394,7 +399,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, HTTPStatusError, Request
+        from httpx import HTTPStatusError, Request, Response
 
         rate_limit_response = Response(
             status_code=429,
@@ -437,7 +442,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, Request
+        from httpx import Request, Response
 
         response_obj = Response(
             status_code=200,
@@ -466,7 +471,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, Request
+        from httpx import Request, Response
 
         response_obj = Response(
             status_code=200,
@@ -488,7 +493,7 @@ class TestGatewayModelClientErrorHandling:
         ]
 
         messages = [Message(role="user", content="Test")]
-        response = await client.chat(messages, tools=tools)
+        await client.chat(messages, tools=tools)
 
         # Verify tools were included in the request
         call_args = mock_client.post.call_args
@@ -509,7 +514,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, Request
+        from httpx import Request, Response
 
         response_obj = Response(
             status_code=200,
@@ -538,7 +543,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, Request
+        from httpx import Request, Response
 
         response_obj = Response(
             status_code=200,
@@ -550,7 +555,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client.post.return_value = response_obj
 
         messages = [Message(role="user", content="Test")]
-        response = await client.chat(messages, temperature=0.9)
+        await client.chat(messages, temperature=0.9)
 
         call_args = mock_client.post.call_args
         payload = call_args.kwargs.get("json", {})
@@ -569,7 +574,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, Request
+        from httpx import Request, Response
 
         response_obj = Response(
             status_code=200,
@@ -581,7 +586,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client.post.return_value = response_obj
 
         messages = [Message(role="user", content="Test")]
-        response = await client.chat(messages)
+        await client.chat(messages)
 
         call_args = mock_client.post.call_args
         payload = call_args.kwargs.get("json", {})
@@ -599,7 +604,7 @@ class TestGatewayModelClientErrorHandling:
         mock_client = AsyncMock()
         client._client = mock_client
 
-        from httpx import Response, Request
+        from httpx import Request, Response
 
         response_obj = Response(
             status_code=200,
@@ -849,11 +854,14 @@ class TestClientConfiguration:
 
     def test_config_from_env_gateway_mode(self):
         """Test loading config from project config in gateway mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "test-model",
-            "gateway_url": "http://gateway.test.com",
-            "gateway_key": "test-key",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "test-model",
+                "gateway_url": "http://gateway.test.com",
+                "gateway_key": "test-key",
+            },
+        ):
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.GATEWAY
             assert config.gateway_url == "http://gateway.test.com"
@@ -862,11 +870,14 @@ class TestClientConfiguration:
 
     def test_config_from_env_direct_mode(self):
         """Test loading config from project config in direct mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gemini-2.5-flash",
-            "google_api_key": "google-key",
-            "openai_api_key": "openai-key",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gemini-2.5-flash",
+                "google_api_key": "google-key",
+                "openai_api_key": "openai-key",
+            },
+        ):
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.DIRECT
             assert config.google_api_key == "google-key"
@@ -1060,10 +1071,13 @@ class TestModelClientFactory:
 
     def test_get_mode_info_gateway(self):
         """Test get_mode_info returns gateway info."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "test-model",
-            "gateway_url": "http://test.com",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "test-model",
+                "gateway_url": "http://test.com",
+            },
+        ):
             info = ModelClient.get_mode_info()
             assert info["mode"] == "gateway"
             assert info["gateway_url"] == "http://test.com"
@@ -1079,10 +1093,13 @@ class TestModelClientFactory:
     async def test_create_with_default_config(self):
         """Test creating client from config file settings."""
         with patch("google.genai.Client"):
-            with patch("src.core.config.load_config", return_value={
-                "model": "gemini-test",
-                "google_api_key": "google-key",
-            }):
+            with patch(
+                "src.core.config.load_config",
+                return_value={
+                    "model": "gemini-test",
+                    "google_api_key": "google-key",
+                },
+            ):
                 client = await ModelClient.create()
                 assert isinstance(client, DirectModelClient)
 
@@ -1090,9 +1107,12 @@ class TestModelClientFactory:
     async def test_create_loads_config_from_env(self):
         """Test that create loads config from the project config file."""
         with patch("httpx.AsyncClient"):
-            with patch("src.core.config.load_config", return_value={
-                "model": "test-model",
-                "gateway_url": "http://test.com",
-            }):
+            with patch(
+                "src.core.config.load_config",
+                return_value={
+                    "model": "test-model",
+                    "gateway_url": "http://test.com",
+                },
+            ):
                 client = await ModelClient.create()
                 assert isinstance(client, GatewayModelClient)

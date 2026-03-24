@@ -11,7 +11,7 @@ Tests cover:
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -198,7 +198,12 @@ class TestDependencyAnalyzer:
         analyzer = DependencyAnalyzer()
         calls = [
             ToolCall(id="call_1", name="file_read", arguments={"path": "/file.txt"}),
-            ToolCall(id="call_2", name="file_write", arguments={"path": "/file.txt", "content": "data"}, depends_on=["call_1"]),
+            ToolCall(
+                id="call_2",
+                name="file_write",
+                arguments={"path": "/file.txt", "content": "data"},
+                depends_on=["call_1"],
+            ),
         ]
         stages = analyzer.analyze(calls)
         # Should be in separate stages due to explicit dependency
@@ -401,6 +406,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_execute_timeout(self):
         """Test execution timeout."""
+
         async def slow_handler(name, args):
             await asyncio.sleep(1.0)
             return "result"
@@ -416,6 +422,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_execute_with_sync_handler(self):
         """Test execution with synchronous handler."""
+
         def sync_handler(name, args):
             return f"result_{name}"
 
@@ -458,10 +465,7 @@ class TestParallelExecutor:
             return "result"
 
         executor = ParallelExecutor(handler, max_parallel=2)
-        calls = [
-            ToolCall(id=f"call_{i}", name=f"tool_{i}", arguments={})
-            for i in range(5)
-        ]
+        calls = [ToolCall(id=f"call_{i}", name=f"tool_{i}", arguments={}) for i in range(5)]
         results = await executor.execute(calls, strategy=ExecutionStrategy.PARALLEL)
 
         assert len(results) == 5
@@ -470,6 +474,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_execute_single_with_timing(self):
         """Test that timing information is captured."""
+
         async def handler(name, args):
             await asyncio.sleep(0.05)
             return "result"
@@ -721,10 +726,7 @@ class TestParallelExecutor:
         """Test executing large batch of calls."""
         async_handler = AsyncMock(return_value="result")
         executor = ParallelExecutor(async_handler, max_parallel=10)
-        calls = [
-            ToolCall(id=f"call_{i}", name=f"tool_{i}", arguments={})
-            for i in range(50)
-        ]
+        calls = [ToolCall(id=f"call_{i}", name=f"tool_{i}", arguments={}) for i in range(50)]
         results = await executor.execute(calls, strategy=ExecutionStrategy.PARALLEL)
 
         assert len(results) == 50
@@ -738,8 +740,12 @@ class TestParallelExecutor:
         calls = [
             ToolCall(id="call_1", name="file_read", arguments={"path": "/file1.txt"}),
             ToolCall(id="call_2", name="file_read", arguments={"path": "/file2.txt"}),
-            ToolCall(id="call_3", name="file_write", arguments={"path": "/file3.txt", "content": "data"}),
-            ToolCall(id="call_4", name="file_write", arguments={"path": "/file4.txt", "content": "data"}),
+            ToolCall(
+                id="call_3", name="file_write", arguments={"path": "/file3.txt", "content": "data"}
+            ),
+            ToolCall(
+                id="call_4", name="file_write", arguments={"path": "/file4.txt", "content": "data"}
+            ),
         ]
         results = await executor.execute(calls, strategy=ExecutionStrategy.SMART)
 
@@ -749,6 +755,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_exception_types_preserved(self):
         """Test that exception types are preserved in error messages."""
+
         async def handler(name, args):
             if name == "tool_1":
                 raise RuntimeError("Runtime error")
@@ -797,6 +804,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_concurrent_execution_timing(self):
         """Test that concurrent execution is faster than sequential."""
+
         async def handler(name, args):
             await asyncio.sleep(0.05)
             return "result"
@@ -849,6 +857,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_execute_with_different_timeout_values(self):
         """Test execution with different timeout values."""
+
         async def handler(name, args):
             await asyncio.sleep(0.01)
             return "result"
@@ -912,6 +921,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_execute_single_with_exception_timing(self):
         """Test that timing is captured even on exception."""
+
         async def handler(name, args):
             await asyncio.sleep(0.02)
             raise RuntimeError("Test error")
@@ -942,6 +952,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_execute_with_none_output(self):
         """Test execution with None output."""
+
         async def handler(name, args):
             return None
 
@@ -955,6 +966,7 @@ class TestParallelExecutor:
     @pytest.mark.asyncio
     async def test_execute_with_complex_output_types(self):
         """Test execution with various output types."""
+
         async def handler(name, args):
             if name == "tool_1":
                 return {"key": "value", "nested": {"data": [1, 2, 3]}}

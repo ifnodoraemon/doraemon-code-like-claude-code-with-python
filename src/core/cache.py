@@ -247,10 +247,7 @@ class ToolCache:
 
     def invalidate_tool(self, tool: str):
         """Invalidate all entries for a tool."""
-        keys_to_remove = [
-            k for k, v in self._cache.items()
-            if v.tool_name == tool
-        ]
+        keys_to_remove = [k for k, v in self._cache.items() if v.tool_name == tool]
         for key in keys_to_remove:
             self._remove(key)
             self._stats["invalidations"] += 1
@@ -366,9 +363,7 @@ class ToolCache:
     def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         total_requests = self._stats["hits"] + self._stats["misses"]
-        hit_rate = (
-            self._stats["hits"] / total_requests if total_requests > 0 else 0
-        )
+        hit_rate = self._stats["hits"] / total_requests if total_requests > 0 else 0
 
         return {
             "entries": len(self._cache),

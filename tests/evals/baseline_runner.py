@@ -5,11 +5,9 @@
 """
 
 import json
-import time
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
-import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -22,7 +20,7 @@ class BaselineRunner:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.baseline_file = self.output_dir / "baseline.json"
 
-    def run_baseline_evaluation(self, agent, task_files: list) -> Dict:
+    def run_baseline_evaluation(self, agent, task_files: list) -> dict:
         """运行基线评估"""
         from tests.evals.agent_evaluator import AgentEvaluator
 
@@ -79,7 +77,7 @@ class BaselineRunner:
 
         return summary
 
-    def save_baseline(self, summary: Dict, results: list):
+    def save_baseline(self, summary: dict, results: list):
         """保存基线结果"""
         baseline_data = {
             "summary": summary,
@@ -92,7 +90,7 @@ class BaselineRunner:
 
         print(f"\n基线已保存到: {self.baseline_file}")
 
-    def calculate_metrics(self, results: list) -> Dict:
+    def calculate_metrics(self, results: list) -> dict:
         """计算关键指标"""
         if not results:
             return {}
@@ -101,10 +99,8 @@ class BaselineRunner:
 
         metrics = {
             "success_rate": len(successful) / len(results),
-            "avg_execution_time": sum(r["execution_time"] for r in results)
-            / len(results),
-            "avg_tool_calls": sum(len(r.get("tool_calls", [])) for r in results)
-            / len(results),
+            "avg_execution_time": sum(r["execution_time"] for r in results) / len(results),
+            "avg_tool_calls": sum(len(r.get("tool_calls", [])) for r in results) / len(results),
         }
 
         # 按难度的成功率
@@ -118,13 +114,12 @@ class BaselineRunner:
                 by_difficulty[diff]["success"] += 1
 
         metrics["success_by_difficulty"] = {
-            diff: stats["success"] / stats["total"]
-            for diff, stats in by_difficulty.items()
+            diff: stats["success"] / stats["total"] for diff, stats in by_difficulty.items()
         }
 
         return metrics
 
-    def load_baseline(self) -> Dict:
+    def load_baseline(self) -> dict:
         """加载基线数据"""
         if not self.baseline_file.exists():
             return None
@@ -132,7 +127,7 @@ class BaselineRunner:
         with open(self.baseline_file) as f:
             return json.load(f)
 
-    def compare_with_baseline(self, current_results: Dict) -> Dict:
+    def compare_with_baseline(self, current_results: dict) -> dict:
         """与基线对比"""
         baseline = self.load_baseline()
         if not baseline:
@@ -161,7 +156,7 @@ class BaselineRunner:
 
         return comparison
 
-    def print_baseline_report(self, summary: Dict):
+    def print_baseline_report(self, summary: dict):
         """打印基线报告"""
         print("\n" + "=" * 60)
         print("基线评估报告")
@@ -170,14 +165,14 @@ class BaselineRunner:
         print(f"\n评估时间: {summary['timestamp']}")
         print(f"总任务数: {summary['total_tasks']}")
         print(f"成功任务: {summary['successful_tasks']}")
-        print(f"成功率: {summary['success_rate']*100:.1f}%")
+        print(f"成功率: {summary['success_rate'] * 100:.1f}%")
 
-        print(f"\n按类别统计:")
+        print("\n按类别统计:")
         for category, stats in summary["by_category"].items():
             rate = stats["success"] / stats["total"] * 100
             print(f"  {category}: {stats['success']}/{stats['total']} ({rate:.1f}%)")
 
-        print(f"\n按难度统计:")
+        print("\n按难度统计:")
         for difficulty, stats in sorted(summary["by_difficulty"].items()):
             rate = stats["success"] / stats["total"] * 100
             print(f"  难度 {difficulty}: {stats['success']}/{stats['total']} ({rate:.1f}%)")

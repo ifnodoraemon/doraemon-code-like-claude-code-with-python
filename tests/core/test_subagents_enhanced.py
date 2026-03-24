@@ -11,14 +11,14 @@ Tests cover:
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.core.subagents import (
     AgentMessage,
-    AgentMetrics,
     AgentMessageQueue,
+    AgentMetrics,
     AgentState,
     AgentStateManager,
     SubagentConfig,
@@ -27,7 +27,6 @@ from src.core.subagents import (
     SubagentResult,
     _aggregate_results,
     _create_agent_id,
-    _execute_agent_task,
     _get_model_name,
 )
 
@@ -178,7 +177,7 @@ class TestAgentMessageQueue:
         )
 
         await queue.send(msg)
-        received = await queue.receive(timeout=1.0)
+        received = await queue.receive(agent_id="agent_2", timeout=1.0)
 
         assert received is not None
         assert received.sender_id == "agent_1"
@@ -188,7 +187,14 @@ class TestAgentMessageQueue:
     async def test_message_queue_timeout(self):
         """Test message queue timeout."""
         queue = AgentMessageQueue()
-        received = await queue.receive(timeout=0.1)
+        received = await queue.receive(agent_id="missing-agent", timeout=0.1)
+        assert received is None
+
+    @pytest.mark.asyncio
+    async def test_message_queue_legacy_timeout_signature(self):
+        """Test legacy receive(timeout) calls still work."""
+        queue = AgentMessageQueue()
+        received = await queue.receive(0.1)
         assert received is None
 
     @pytest.mark.asyncio
@@ -238,6 +244,24 @@ class TestAgentMessageQueue:
         assert len(messages_1) == 1
         assert len(messages_2) == 1
 
+    @pytest.mark.asyncio
+    async def test_message_queue_persists_mailbox_entries(self, tmp_path):
+        """Test durable mailbox append logs."""
+        queue = AgentMessageQueue(storage_dir=tmp_path / "mailboxes")
+        msg = AgentMessage(
+            sender_id="agent_1",
+            recipient_id="agent_2",
+            message_type="request",
+            content="Persist me",
+        )
+
+        await queue.send(msg)
+        persisted = queue.get_mailbox_messages("agent_2")
+
+        assert len(persisted) == 1
+        assert persisted[0].content == "Persist me"
+        assert queue.get_mailbox_messages("agent_2", limit=0) == []
+
 
 class TestAgentStateManager:
     """Tests for AgentStateManager."""
@@ -283,9 +307,7 @@ class TestAgentStateManager:
         manager = AgentStateManager()
 
         await manager.create_metrics("agent_1", "test")
-        await manager.update_metrics(
-            "agent_1", turns_used=5, tokens_used=200, tool_calls=3
-        )
+        await manager.update_metrics("agent_1", turns_used=5, tokens_used=200, tool_calls=3)
 
         metrics = await manager.get_metrics("agent_1")
         assert metrics.turns_used == 5
@@ -578,6 +600,23 @@ class TestSubagentManager:
         assert received.content == "Test"
 
     @pytest.mark.asyncio
+    async def test_manager_get_mailbox_messages(self, manager, tmp_path):
+        """Test reading durable mailbox messages via manager."""
+        manager._message_queue = AgentMessageQueue(storage_dir=tmp_path / "mailboxes")
+        msg = AgentMessage(
+            sender_id="agent_1",
+            recipient_id="agent_2",
+            message_type="request",
+            content="Stored",
+        )
+
+        await manager.send_message(msg)
+        persisted = manager.get_mailbox_messages("agent_2")
+
+        assert len(persisted) == 1
+        assert persisted[0].content == "Stored"
+
+    @pytest.mark.asyncio
     async def test_manager_subscribe_to_messages(self, manager):
         """Test subscribing to messages."""
         received_messages = []
@@ -622,9 +661,7 @@ class TestSubagentManager:
 
         # This will fail because we don't have a real client, but we can verify
         # the timeout parameter is used
-        result = await manager.spawn_with_timeout(
-            "test-agent", "Do something", timeout=5.0
-        )
+        result = await manager.spawn_with_timeout("test-agent", "Do something", timeout=5.0)
 
         # Result will be failed due to mock, but we're testing the interface
         assert result.agent_name == "test-agent"
@@ -702,7 +739,7 @@ class TestIntegration:
     async def test_agent_communication_flow(self):
         """Test agent communication flow."""
         queue = AgentMessageQueue()
-        manager = AgentStateManager()
+        AgentStateManager()
 
         # Simulate agent 1 sending a request
         msg1 = AgentMessage(
@@ -715,7 +752,7 @@ class TestIntegration:
         await queue.send(msg1)
 
         # Simulate agent 2 receiving and responding
-        received = await queue.receive(timeout=1.0)
+        received = await queue.receive(agent_id="agent_2", timeout=1.0)
         assert received.sender_id == "agent_1"
 
         # Agent 2 sends response
@@ -729,7 +766,7 @@ class TestIntegration:
         await queue.send(msg2)
 
         # Agent 1 receives response
-        response = await queue.receive(timeout=1.0)
+        response = await queue.receive(agent_id="agent_1", timeout=1.0)
         assert response.content == "Code looks good"
 
     @pytest.mark.asyncio

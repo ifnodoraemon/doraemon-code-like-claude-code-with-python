@@ -215,18 +215,21 @@ def _validate_package_name(name: str) -> tuple[bool, str]:
         return False, "Package name cannot be empty"
 
     # Check for path traversal or shell injection attempts
-    dangerous_patterns = ['..', '/', '\\', ';', '|', '&', '$', '`', '>', '<', '(', ')']
+    dangerous_patterns = ["..", "/", "\\", ";", "|", "&", "$", "`", ">", "<", "(", ")"]
     for pattern in dangerous_patterns:
         if pattern in name:
             return False, f"Package name contains invalid character: {pattern}"
 
     # Valid PyPI package name pattern (PEP 508)
     # Allows letters, numbers, underscores, hyphens, dots
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$', name):
-        return False, "Package name must start with alphanumeric and contain only letters, numbers, dots, underscores, and hyphens"
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$", name):
+        return (
+            False,
+            "Package name must start with alphanumeric and contain only letters, numbers, dots, underscores, and hyphens",
+        )
 
     # Check for suspicious patterns (potential typosquatting indicators)
-    suspicious_patterns = ['eval', 'exec', 'system', 'subprocess']
+    suspicious_patterns = ["eval", "exec", "system", "subprocess"]
     name_lower = name.lower()
     for pattern in suspicious_patterns:
         if pattern in name_lower and name_lower != pattern:
@@ -361,13 +364,17 @@ def execute_python(
             result = subprocess.run([sys.executable, script_path], **subprocess_kwargs)
         except OSError as e:
             if sandbox and e.errno == EAGAIN and "preexec_fn" in subprocess_kwargs:
-                logger.warning("Sandbox preexec failed with EAGAIN; retrying without resource preexec")
+                logger.warning(
+                    "Sandbox preexec failed with EAGAIN; retrying without resource preexec"
+                )
                 subprocess_kwargs.pop("preexec_fn", None)
                 try:
                     result = subprocess.run([sys.executable, script_path], **subprocess_kwargs)
                 except OSError as retry_error:
                     if retry_error.errno == EAGAIN:
-                        logger.warning("Subprocess execution still failed with EAGAIN; falling back to in-process execution")
+                        logger.warning(
+                            "Subprocess execution still failed with EAGAIN; falling back to in-process execution"
+                        )
                         returncode, stdout, stderr = _execute_python_inprocess(wrapped_code)
                         result = subprocess.CompletedProcess(
                             args=[sys.executable, script_path],
@@ -378,7 +385,9 @@ def execute_python(
                     else:
                         raise
             elif e.errno == EAGAIN:
-                logger.warning("Subprocess execution failed with EAGAIN; falling back to in-process execution")
+                logger.warning(
+                    "Subprocess execution failed with EAGAIN; falling back to in-process execution"
+                )
                 returncode, stdout, stderr = _execute_python_inprocess(wrapped_code)
                 result = subprocess.CompletedProcess(
                     args=[sys.executable, script_path],

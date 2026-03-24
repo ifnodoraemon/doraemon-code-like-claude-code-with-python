@@ -4,12 +4,10 @@
 整合所有评估组件，提供统一的评估入口
 """
 
-import asyncio
 import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -43,28 +41,22 @@ class ComprehensiveEvaluator:
         self.use_llm_judge = use_llm_judge
 
         # 初始化组件
+        from tests.evals.baseline_runner import BaselineRunner
         from tests.evals.metrics_collector import MetricsCollector
         from tests.evals.parallel_evaluator import ParallelEvaluator
-        from tests.evals.baseline_runner import BaselineRunner
 
-        self.metrics_collector = MetricsCollector(
-            output_dir=str(self.output_dir / "metrics")
-        )
+        self.metrics_collector = MetricsCollector(output_dir=str(self.output_dir / "metrics"))
         self.parallel_evaluator = ParallelEvaluator(
             max_workers=max_workers, output_dir=str(self.output_dir / "parallel")
         )
-        self.baseline_runner = BaselineRunner(
-            output_dir=str(self.output_dir / "baseline")
-        )
+        self.baseline_runner = BaselineRunner(output_dir=str(self.output_dir / "baseline"))
 
         if use_llm_judge:
             from tests.evals.llm_judge_evaluator import LLMJudgeEvaluator
 
             self.llm_judge = LLMJudgeEvaluator()
 
-    def run_full_evaluation(
-        self, agent_factory, task_files: Optional[List[str]] = None
-    ) -> Dict:
+    def run_full_evaluation(self, agent_factory, task_files: list[str] | None = None) -> dict:
         """
         运行完整评估
 
@@ -83,7 +75,7 @@ class ComprehensiveEvaluator:
         if task_files is None:
             task_files = self._get_default_task_files()
 
-        print(f"\n评估配置:")
+        print("\n评估配置:")
         print(f"  任务文件: {len(task_files)} 个")
         print(f"  并行模式: {'是' if self.parallel else '否'}")
         print(f"  并行度: {self.max_workers}")
@@ -117,7 +109,7 @@ class ComprehensiveEvaluator:
 
         return report
 
-    def run_baseline_evaluation(self, agent_factory, task_files: Optional[List[str]] = None) -> Dict:
+    def run_baseline_evaluation(self, agent_factory, task_files: list[str] | None = None) -> dict:
         """
         运行基线评估并保存
 
@@ -137,7 +129,7 @@ class ComprehensiveEvaluator:
 
         return summary
 
-    def compare_with_baseline(self, current_results: Dict) -> Dict:
+    def compare_with_baseline(self, current_results: dict) -> dict:
         """
         与基线对比
 
@@ -150,8 +142,8 @@ class ComprehensiveEvaluator:
         return self.baseline_runner.compare_with_baseline(current_results)
 
     def run_model_comparison(
-        self, agent_factories: Dict[str, callable], task_files: Optional[List[str]] = None
-    ) -> Dict:
+        self, agent_factories: dict[str, callable], task_files: list[str] | None = None
+    ) -> dict:
         """
         运行多模型对比评估
 
@@ -167,9 +159,7 @@ class ComprehensiveEvaluator:
         if task_files is None:
             task_files = self._get_default_task_files()
 
-        comparator = MultiModelComparator(
-            output_dir=str(self.output_dir / "model_comparison")
-        )
+        comparator = MultiModelComparator(output_dir=str(self.output_dir / "model_comparison"))
 
         print("=" * 80)
         print("多模型对比评估")
@@ -194,7 +184,7 @@ class ComprehensiveEvaluator:
 
         return comparison_results
 
-    def _run_serial_evaluation(self, agent_factory, task_files: List[str]) -> Dict:
+    def _run_serial_evaluation(self, agent_factory, task_files: list[str]) -> dict:
         """串行评估"""
         from tests.evals.agent_evaluator import AgentEvaluator
 
@@ -205,7 +195,7 @@ class ComprehensiveEvaluator:
             evaluator = AgentEvaluator(task_file)
 
             agent = agent_factory()
-            report = evaluator.run_evaluation(agent)
+            evaluator.run_evaluation(agent)
 
             all_results.extend(evaluator.results)
 
@@ -223,7 +213,7 @@ class ComprehensiveEvaluator:
 
         return summary
 
-    def _generate_comprehensive_report(self, summary: Dict) -> Dict:
+    def _generate_comprehensive_report(self, summary: dict) -> dict:
         """生成完整报告"""
         # 计算指标
         metrics = self.metrics_collector.calculate_metrics()
@@ -251,7 +241,7 @@ class ComprehensiveEvaluator:
 
         return report
 
-    def _save_report(self, report: Dict):
+    def _save_report(self, report: dict):
         """保存报告"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -265,11 +255,11 @@ class ComprehensiveEvaluator:
         with open(md_file, "w") as f:
             f.write(self._generate_markdown_report(report))
 
-        print(f"\n报告已保存:")
+        print("\n报告已保存:")
         print(f"  JSON: {json_file}")
         print(f"  Markdown: {md_file}")
 
-    def _generate_markdown_report(self, report: Dict) -> str:
+    def _generate_markdown_report(self, report: dict) -> str:
         """生成 Markdown 格式报告"""
         lines = []
 
@@ -286,7 +276,7 @@ class ComprehensiveEvaluator:
             lines.append(f"- **总任务数**: {core['total_tasks']}\n")
             lines.append(f"- **成功任务**: {core['successful_tasks']}\n")
             lines.append(f"- **失败任务**: {core['failed_tasks']}\n")
-            lines.append(f"- **成功率**: {core['success_rate']*100:.1f}%\n")
+            lines.append(f"- **成功率**: {core['success_rate'] * 100:.1f}%\n")
             lines.append(f"- **平均耗时**: {core['avg_execution_time']:.2f}s\n")
             lines.append(f"- **总耗时**: {core['total_execution_time']:.2f}s\n")
 
@@ -296,11 +286,9 @@ class ComprehensiveEvaluator:
             lines.append("| 类别 | 成功率 | 平均耗时 |\n")
             lines.append("|------|--------|----------|\n")
 
-            for category, stats in report["metrics"]["category_metrics"][
-                "by_category"
-            ].items():
+            for category, stats in report["metrics"]["category_metrics"]["by_category"].items():
                 lines.append(
-                    f"| {category} | {stats['success_rate']*100:.1f}% | {stats['avg_execution_time']:.2f}s |\n"
+                    f"| {category} | {stats['success_rate'] * 100:.1f}% | {stats['avg_execution_time']:.2f}s |\n"
                 )
 
         # 按难度统计
@@ -313,7 +301,7 @@ class ComprehensiveEvaluator:
                 report["metrics"]["difficulty_metrics"]["by_difficulty"].items()
             ):
                 lines.append(
-                    f"| {difficulty} | {stats['success_rate']*100:.1f}% | {stats['avg_execution_time']:.2f}s |\n"
+                    f"| {difficulty} | {stats['success_rate'] * 100:.1f}% | {stats['avg_execution_time']:.2f}s |\n"
                 )
 
         # LLM 评估
@@ -339,7 +327,7 @@ class ComprehensiveEvaluator:
 
         return "".join(lines)
 
-    def _print_report_summary(self, report: Dict):
+    def _print_report_summary(self, report: dict):
         """打印报告摘要"""
         print("\n" + "=" * 80)
         print("评估完成")
@@ -351,13 +339,13 @@ class ComprehensiveEvaluator:
         # 打印 LLM 评估摘要
         if report.get("llm_evaluation"):
             llm = report["llm_evaluation"]
-            print(f"\nLLM 评估:")
+            print("\nLLM 评估:")
             print(f"  评估任务数: {llm['evaluated_tasks']}/{llm['total_tasks']}")
             if "average_scores" in llm:
                 scores = llm["average_scores"]
                 print(f"  总体评分: {scores['overall']:.2f}/10")
 
-    def _get_default_task_files(self) -> List[str]:
+    def _get_default_task_files(self) -> list[str]:
         """获取默认任务文件列表"""
         base_dir = Path(__file__).parent / "tasks"
 

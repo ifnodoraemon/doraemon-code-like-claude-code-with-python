@@ -35,6 +35,7 @@ mcp = FastMCP("AgentLSP")
 @dataclass
 class Position:
     """Line and column position in a file."""
+
     line: int  # 0-indexed
     character: int  # 0-indexed
 
@@ -42,6 +43,7 @@ class Position:
 @dataclass
 class Range:
     """Range in a file."""
+
     start: Position
     end: Position
 
@@ -49,6 +51,7 @@ class Range:
 @dataclass
 class Diagnostic:
     """A diagnostic message (error, warning, etc.)."""
+
     message: str
     severity: str  # "error", "warning", "info", "hint"
     range: Range
@@ -58,6 +61,7 @@ class Diagnostic:
 @dataclass
 class CompletionItem:
     """A code completion suggestion."""
+
     label: str
     kind: str  # "function", "class", "variable", etc.
     detail: str | None = None
@@ -196,14 +200,17 @@ class PylspClient:
 
         content = await loop.run_in_executor(None, _read_file)
 
-        await self._send_notification("textDocument/didOpen", {
-            "textDocument": {
-                "uri": uri,
-                "languageId": "python",
-                "version": 1,
-                "text": content,
-            }
-        })
+        await self._send_notification(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "python",
+                    "version": 1,
+                    "text": content,
+                }
+            },
+        )
 
         # Wait briefly for diagnostics
         await asyncio.sleep(0.5)
@@ -230,19 +237,25 @@ class PylspClient:
 
         content = await loop.run_in_executor(None, _read_file)
 
-        await self._send_notification("textDocument/didOpen", {
-            "textDocument": {
-                "uri": uri,
-                "languageId": "python",
-                "version": 1,
-                "text": content,
-            }
-        })
+        await self._send_notification(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "python",
+                    "version": 1,
+                    "text": content,
+                }
+            },
+        )
 
-        response = await self._send_request("textDocument/completion", {
-            "textDocument": {"uri": uri},
-            "position": {"line": line, "character": character},
-        })
+        response = await self._send_request(
+            "textDocument/completion",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": character},
+            },
+        )
 
         if not response or "result" not in response:
             return []
@@ -253,16 +266,25 @@ class PylspClient:
         completions = []
         for item in items[:20]:  # Limit results
             kind_map = {
-                1: "text", 2: "method", 3: "function", 4: "constructor",
-                5: "field", 6: "variable", 7: "class", 8: "interface",
-                9: "module", 10: "property",
+                1: "text",
+                2: "method",
+                3: "function",
+                4: "constructor",
+                5: "field",
+                6: "variable",
+                7: "class",
+                8: "interface",
+                9: "module",
+                10: "property",
             }
-            completions.append(CompletionItem(
-                label=item.get("label", ""),
-                kind=kind_map.get(item.get("kind", 1), "text"),
-                detail=item.get("detail"),
-                documentation=item.get("documentation"),
-            ))
+            completions.append(
+                CompletionItem(
+                    label=item.get("label", ""),
+                    kind=kind_map.get(item.get("kind", 1), "text"),
+                    detail=item.get("detail"),
+                    documentation=item.get("documentation"),
+                )
+            )
 
         return completions
 
@@ -282,19 +304,25 @@ class PylspClient:
 
         content = await loop.run_in_executor(None, _read_file)
 
-        await self._send_notification("textDocument/didOpen", {
-            "textDocument": {
-                "uri": uri,
-                "languageId": "python",
-                "version": 1,
-                "text": content,
-            }
-        })
+        await self._send_notification(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "python",
+                    "version": 1,
+                    "text": content,
+                }
+            },
+        )
 
-        response = await self._send_request("textDocument/hover", {
-            "textDocument": {"uri": uri},
-            "position": {"line": line, "character": character},
-        })
+        response = await self._send_request(
+            "textDocument/hover",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": character},
+            },
+        )
 
         if not response or "result" not in response:
             return None
@@ -308,8 +336,7 @@ class PylspClient:
             return contents.get("value", str(contents))
         elif isinstance(contents, list):
             return "\n".join(
-                c.get("value", str(c)) if isinstance(c, dict) else str(c)
-                for c in contents
+                c.get("value", str(c)) if isinstance(c, dict) else str(c) for c in contents
             )
         return str(contents)
 
@@ -339,6 +366,7 @@ def _run_ruff(file_path: str) -> list[dict]:
     """Run ruff for quick Python diagnostics, delegating to lint module."""
     try:
         from src.servers.lint import _run_command
+
         exit_code, stdout, stderr = _run_command(
             ["ruff", "check", "--output-format=json", file_path]
         )
@@ -353,6 +381,7 @@ def _run_mypy(file_path: str) -> list[dict]:
     """Run mypy for type checking, delegating to lint module."""
     try:
         from src.servers.lint import _run_command
+
         exit_code, stdout, stderr = _run_command(
             ["mypy", "--show-error-codes", "--no-error-summary", file_path],
             timeout=60,
@@ -363,12 +392,14 @@ def _run_mypy(file_path: str) -> list[dict]:
                 continue
             match = re.match(r"(.+):(\d+): (error|warning|note): (.+)", line)
             if match:
-                diagnostics.append({
-                    "file": match.group(1),
-                    "line": int(match.group(2)),
-                    "severity": match.group(3),
-                    "message": match.group(4),
-                })
+                diagnostics.append(
+                    {
+                        "file": match.group(1),
+                        "line": int(match.group(2)),
+                        "severity": match.group(3),
+                        "message": match.group(4),
+                    }
+                )
         return diagnostics
     except ImportError:
         pass
@@ -481,6 +512,7 @@ async def lsp_references(path: str, symbol: str) -> str:
 
     try:
         from src.servers.filesystem_unified import grep_search
+
         result = grep_search(pattern=symbol, include="*.py", path=valid_path)
         if not result or result.startswith("No matches"):
             return f"No references found for '{symbol}'"
@@ -493,7 +525,10 @@ async def lsp_references(path: str, symbol: str) -> str:
 
 @mcp.tool()
 async def lsp_rename(
-    path: str, old_name: str, new_name: str, preview: bool = True,
+    path: str,
+    old_name: str,
+    new_name: str,
+    preview: bool = True,
 ) -> str:
     """Rename a symbol across Python files (find-replace)."""
     try:
@@ -508,7 +543,9 @@ async def lsp_rename(
         if os.path.isdir(valid_path):
             result = subprocess.run(
                 ["grep", "-rln", "--include=*.py", old_name, valid_path],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             files = [f for f in result.stdout.strip().split("\n") if f]
         else:
@@ -537,7 +574,7 @@ async def lsp_rename(
                 with open(fp, encoding="utf-8") as f:
                     content = f.read()
                 with open(fp, "w", encoding="utf-8") as f:
-                    f.write(re.sub(r'\b' + re.escape(old_name) + r'\b', new_name, content))
+                    f.write(re.sub(r"\b" + re.escape(old_name) + r"\b", new_name, content))
                 applied += 1
             except Exception as e:
                 logger.warning(f"Failed to rename in {fp}: {e}")
@@ -560,6 +597,7 @@ async def lsp_definition(path: str, symbol: str) -> str:
     for pattern in [f"class {symbol}", f"def {symbol}", f"{symbol} = ", f"{symbol}:"]:
         try:
             from src.servers.filesystem_unified import grep_search
+
             result = grep_search(pattern=pattern, include="*.py", path=valid_path)
             if result and not result.startswith("No matches"):
                 first_line = result.strip().split("\n")[0]

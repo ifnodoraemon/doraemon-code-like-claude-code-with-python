@@ -5,9 +5,10 @@ These tests verify the system's resistance to various security attacks.
 Run with: pytest tests/security/ -v
 """
 
-import pytest
-from pathlib import Path
 import sys
+from pathlib import Path
+
+import pytest
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -55,9 +56,7 @@ class TestPathTraversalResistance:
         with pytest.raises(PermissionError) as excinfo:
             validate_path(attack_path)
 
-        assert "Access Denied" in str(excinfo.value) or "Permission denied" in str(
-            excinfo.value
-        )
+        assert "Access Denied" in str(excinfo.value) or "Permission denied" in str(excinfo.value)
 
     def test_safe_path_allowed(self):
         """System should allow safe paths"""

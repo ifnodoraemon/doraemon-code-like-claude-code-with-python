@@ -8,18 +8,8 @@ import asyncio
 import json
 import logging
 import random
-import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
-
-from src.core.provider_adapters import (
-    AnthropicAdapter,
-    GoogleAdapter,
-    OpenAIAdapter,
-    build_anthropic_content_parts,
-    build_google_content_parts,
-    build_openai_content_parts,
-)
 
 from src.core.model_client_base import BaseModelClient
 from src.core.model_utils import (
@@ -30,6 +20,14 @@ from src.core.model_utils import (
     StreamChunk,
     ToolDefinition,
     get_content_text,
+)
+from src.core.provider_adapters import (
+    AnthropicAdapter,
+    GoogleAdapter,
+    OpenAIAdapter,
+    build_anthropic_content_parts,
+    build_google_content_parts,
+    build_openai_content_parts,
 )
 
 logger = logging.getLogger(__name__)

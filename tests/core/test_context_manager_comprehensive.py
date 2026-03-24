@@ -1,10 +1,13 @@
 """Additional comprehensive tests for context_manager.py"""
-import pytest
-import time
-from pathlib import Path
+
 from src.core.context_manager import (
-    Message, ConversationSummary, ContextConfig, ContextManager,
-    DEFAULT_CONFIG, create_llm_summarizer, SUMMARIZE_PROMPT
+    DEFAULT_CONFIG,
+    SUMMARIZE_PROMPT,
+    ContextConfig,
+    ContextManager,
+    ConversationSummary,
+    Message,
+    create_llm_summarizer,
 )
 
 
@@ -47,7 +50,7 @@ class TestMessage:
             "content": "Response",
             "timestamp": 1234567890.0,
             "token_count": 25,
-            "metadata": {"key": "value"}
+            "metadata": {"key": "value"},
         }
         msg = Message.from_dict(data)
         assert msg.role == "assistant"
@@ -83,11 +86,7 @@ class TestConversationSummary:
 
     def test_creation(self):
         """Test creating a conversation summary."""
-        summary = ConversationSummary(
-            content="Summary text",
-            message_count=10,
-            token_count=500
-        )
+        summary = ConversationSummary(content="Summary text", message_count=10, token_count=500)
         assert summary.content == "Summary text"
         assert summary.message_count == 10
         assert summary.token_count == 500
@@ -95,20 +94,14 @@ class TestConversationSummary:
     def test_creation_with_key_points(self):
         """Test creating summary with key points."""
         summary = ConversationSummary(
-            content="Summary",
-            message_count=5,
-            token_count=200,
-            key_points=["Point 1", "Point 2"]
+            content="Summary", message_count=5, token_count=200, key_points=["Point 1", "Point 2"]
         )
         assert len(summary.key_points) == 2
 
     def test_to_dict(self):
         """Test converting summary to dictionary."""
         summary = ConversationSummary(
-            content="Test summary",
-            message_count=8,
-            token_count=400,
-            key_points=["Key point"]
+            content="Test summary", message_count=8, token_count=400, key_points=["Key point"]
         )
         data = summary.to_dict()
         assert data["content"] == "Test summary"
@@ -123,7 +116,7 @@ class TestConversationSummary:
             "message_count": 12,
             "token_count": 600,
             "created_at": 1234567890.0,
-            "key_points": ["Point A", "Point B"]
+            "key_points": ["Point A", "Point B"],
         }
         summary = ConversationSummary.from_dict(data)
         assert summary.content == "Summary from dict"
@@ -148,7 +141,7 @@ class TestContextConfig:
             max_context_tokens=50_000,
             summarize_threshold=0.8,
             keep_recent_messages=10,
-            auto_save=False
+            auto_save=False,
         )
         assert config.max_context_tokens == 50_000
         assert config.summarize_threshold == 0.8
@@ -218,9 +211,7 @@ class TestContextManagerBasic:
         """Test that summary is prepended to history."""
         manager = ContextManager(project="test", config=ContextConfig(auto_save=False))
         summary = ConversationSummary(
-            content="Previous conversation",
-            message_count=5,
-            token_count=200
+            content="Previous conversation", message_count=5, token_count=200
         )
         manager.summaries.append(summary)
         manager.add_user_message("New message")
@@ -308,11 +299,7 @@ class TestContextManagerSummarization:
     def test_format_summaries_for_context_with_summaries(self):
         """Test formatting summaries for context."""
         manager = ContextManager(project="test", config=ContextConfig(auto_save=False))
-        summary = ConversationSummary(
-            content="Summary content",
-            message_count=5,
-            token_count=200
-        )
+        summary = ConversationSummary(content="Summary content", message_count=5, token_count=200)
         manager.summaries.append(summary)
         formatted = manager._format_summaries_for_context()
         assert "Segment 1" in formatted
@@ -354,6 +341,7 @@ class TestLLMSummarizer:
 
     def test_create_llm_summarizer(self):
         """Test creating LLM summarizer."""
+
         def mock_chat(prompt):
             return "This is a summary"
 
@@ -362,6 +350,7 @@ class TestLLMSummarizer:
 
     def test_llm_summarizer_execution(self):
         """Test executing LLM summarizer."""
+
         def mock_chat(prompt):
             assert "summarize" in prompt.lower()
             return "Generated summary"

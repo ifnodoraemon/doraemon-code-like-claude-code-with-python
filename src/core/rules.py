@@ -227,7 +227,9 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
     instruction_signatures = tuple(
         (
             file_path,
-            _file_signature((project_dir / file_path) if not Path(file_path).is_absolute() else Path(file_path)),
+            _file_signature(
+                (project_dir / file_path) if not Path(file_path).is_absolute() else Path(file_path)
+            ),
         )
         for file_path in instruction_files
         if "*" not in file_path

@@ -3,7 +3,7 @@ Comprehensive test suite for src/core/checkpoint.py
 
 Tests cover:
 - FileSnapshot class
-- Checkpoint class  
+- Checkpoint class
 - CheckpointConfig class
 - CheckpointManager initialization
 - Checkpoint lifecycle (begin, snapshot, finalize)
@@ -11,12 +11,10 @@ Tests cover:
 - Cleanup and retention
 """
 
-import gzip
-import json
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -40,7 +38,7 @@ class TestFileSnapshot:
             size=14,
             mtime=1234567890.0,
         )
-        
+
         assert snapshot.path == "/path/to/file.py"
         assert snapshot.content == "print('hello')"
         assert snapshot.exists is True
@@ -56,7 +54,7 @@ class TestFileSnapshot:
             size=0,
             mtime=None,
         )
-        
+
         assert snapshot.path == "/path/to/new.py"
         assert snapshot.content is None
         assert snapshot.exists is False
@@ -72,9 +70,9 @@ class TestFileSnapshot:
             size=4,
             mtime=1000.0,
         )
-        
+
         result = snapshot.to_dict()
-        
+
         assert result == {
             "path": "/test.py",
             "content": "code",
@@ -92,9 +90,9 @@ class TestFileSnapshot:
             "size": 4,
             "mtime": 1000.0,
         }
-        
+
         snapshot = FileSnapshot.from_dict(data)
-        
+
         assert snapshot.path == "/test.py"
         assert snapshot.content == "code"
         assert snapshot.exists is True
@@ -106,9 +104,9 @@ class TestFileSnapshot:
         data = {
             "path": "/test.py",
         }
-        
+
         snapshot = FileSnapshot.from_dict(data)
-        
+
         assert snapshot.path == "/test.py"
         assert snapshot.content is None
         assert snapshot.exists is True  # Default
@@ -124,10 +122,10 @@ class TestFileSnapshot:
             size=4,
             mtime=2000.0,
         )
-        
+
         data = original.to_dict()
         restored = FileSnapshot.from_dict(data)
-        
+
         assert restored.path == original.path
         assert restored.content == original.content
         assert restored.exists == original.exists
@@ -145,7 +143,7 @@ class TestCheckpoint:
             created_at=1000.0,
             prompt="test prompt",
         )
-        
+
         assert checkpoint.id == "abc123"
         assert checkpoint.created_at == 1000.0
         assert checkpoint.prompt == "test prompt"
@@ -156,7 +154,7 @@ class TestCheckpoint:
     def test_checkpoint_creation_full(self):
         """Test creating checkpoint with all fields."""
         snapshot = FileSnapshot("/test.py", "code", True, 4, 1000.0)
-        
+
         checkpoint = Checkpoint(
             id="xyz789",
             created_at=2000.0,
@@ -165,7 +163,7 @@ class TestCheckpoint:
             message_count=5,
             description="Test checkpoint",
         )
-        
+
         assert checkpoint.id == "xyz789"
         assert checkpoint.created_at == 2000.0
         assert checkpoint.prompt == "full test"
@@ -185,9 +183,9 @@ class TestCheckpoint:
             message_count=3,
             description="desc",
         )
-        
+
         result = checkpoint.to_dict()
-        
+
         assert result["id"] == "test123"
         assert result["created_at"] == 3000.0
         assert result["prompt"] == "serialize test"
@@ -214,9 +212,9 @@ class TestCheckpoint:
             "message_count": 7,
             "description": "test desc",
         }
-        
+
         checkpoint = Checkpoint.from_dict(data)
-        
+
         assert checkpoint.id == "test456"
         assert checkpoint.created_at == 4000.0
         assert checkpoint.prompt == "deserialize test"
@@ -231,9 +229,9 @@ class TestCheckpoint:
             "id": "min123",
             "created_at": 5000.0,
         }
-        
+
         checkpoint = Checkpoint.from_dict(data)
-        
+
         assert checkpoint.id == "min123"
         assert checkpoint.created_at == 5000.0
         assert checkpoint.prompt == ""
@@ -245,7 +243,7 @@ class TestCheckpoint:
         """Test checkpoint serialization round-trip."""
         snapshot1 = FileSnapshot("/a.py", "a", True, 1, 100.0)
         snapshot2 = FileSnapshot("/b.py", "b", True, 1, 200.0)
-        
+
         original = Checkpoint(
             id="round123",
             created_at=6000.0,
@@ -254,10 +252,10 @@ class TestCheckpoint:
             message_count=10,
             description="test",
         )
-        
+
         data = original.to_dict()
         restored = Checkpoint.from_dict(data)
-        
+
         assert restored.id == original.id
         assert restored.created_at == original.created_at
         assert restored.prompt == original.prompt
@@ -272,7 +270,7 @@ class TestCheckpointConfig:
     def test_checkpoint_config_defaults(self):
         """Test default configuration values."""
         config = CheckpointConfig()
-        
+
         assert config.enabled is True
         assert config.save_directory == ".agent/checkpoints"
         assert config.max_file_size == 1024 * 1024
@@ -288,7 +286,7 @@ class TestCheckpointConfig:
             retention_days=7,
             compress=False,
         )
-        
+
         assert config.enabled is False
         assert config.save_directory == "/custom/path"
         assert config.max_file_size == 500000
@@ -301,7 +299,7 @@ class TestCheckpointConfig:
             retention_days=60,
             compress=False,
         )
-        
+
         assert config.enabled is True  # Default
         assert config.save_directory == ".agent/checkpoints"  # Default
         assert config.max_file_size == 1024 * 1024  # Default
@@ -317,7 +315,7 @@ class TestCheckpointManagerInit:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             assert manager.project == "test"
             assert manager.config == config
             assert manager.checkpoints == []
@@ -329,9 +327,9 @@ class TestCheckpointManagerInit:
         with tempfile.TemporaryDirectory() as tmpdir:
             save_dir = Path(tmpdir) / "checkpoints"
             config = CheckpointConfig(save_directory=str(save_dir))
-            
-            manager = CheckpointManager(project="test", config=config)
-            
+
+            CheckpointManager(project="test", config=config)
+
             expected_dir = save_dir / "test"
             assert expected_dir.exists()
             assert expected_dir.is_dir()
@@ -346,9 +344,9 @@ class TestCheckpointManagerInit:
                 retention_days=7,
                 compress=False,
             )
-            
+
             manager = CheckpointManager(project="custom", config=config)
-            
+
             assert manager.config.max_file_size == 500000
             assert manager.config.retention_days == 7
             assert manager.config.compress is False
@@ -358,7 +356,7 @@ class TestCheckpointManagerInit:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(config=config)
-            
+
             assert manager.project == "default"
 
     @patch("src.core.checkpoint.CheckpointManager._load_index")
@@ -367,8 +365,8 @@ class TestCheckpointManagerInit:
         """Test that manager calls load and cleanup on init."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
-            manager = CheckpointManager(project="test", config=config)
-            
+            CheckpointManager(project="test", config=config)
+
             mock_load.assert_called_once()
             mock_cleanup.assert_called_once()
 
@@ -381,9 +379,9 @@ class TestCheckpointLifecycle:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             checkpoint_id = manager.begin_checkpoint("test prompt", message_count=5)
-            
+
             assert checkpoint_id != ""
             assert manager._current is not None
             assert manager._current.id == checkpoint_id
@@ -396,10 +394,10 @@ class TestCheckpointLifecycle:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             long_prompt = "x" * 1000
             manager.begin_checkpoint(long_prompt, message_count=0)
-            
+
             assert len(manager._current.prompt) == 500
 
     def test_begin_checkpoint_when_disabled(self):
@@ -407,9 +405,9 @@ class TestCheckpointLifecycle:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(enabled=False, save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             checkpoint_id = manager.begin_checkpoint("test", message_count=0)
-            
+
             assert checkpoint_id == ""
             assert manager._current is None
 
@@ -418,18 +416,18 @@ class TestCheckpointLifecycle:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Create a test file
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("content")
-            
+
             # Begin checkpoint and snapshot file
             checkpoint_id = manager.begin_checkpoint("test", message_count=0)
             manager.snapshot_file(str(test_file))
-            
+
             # Finalize
             result_id = manager.finalize_checkpoint("test description")
-            
+
             assert result_id == checkpoint_id
             assert len(manager.checkpoints) == 1
             assert manager.checkpoints[0].id == checkpoint_id
@@ -442,10 +440,10 @@ class TestCheckpointLifecycle:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             manager.begin_checkpoint("test", message_count=0)
             result_id = manager.finalize_checkpoint()
-            
+
             assert result_id is None
             assert len(manager.checkpoints) == 0
             assert manager._current is None
@@ -455,9 +453,9 @@ class TestCheckpointLifecycle:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             result_id = manager.finalize_checkpoint()
-            
+
             assert result_id is None
 
     def test_discard_checkpoint(self):
@@ -465,17 +463,17 @@ class TestCheckpointLifecycle:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Create a test file
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=0)
             manager.snapshot_file(str(test_file))
-            
+
             # Discard
             manager.discard_checkpoint()
-            
+
             assert manager._current is None
             assert manager._pending_files == set()
             assert len(manager.checkpoints) == 0
@@ -489,17 +487,17 @@ class TestFileSnapshots:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Create test file
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("print('hello')")
-            
+
             manager.begin_checkpoint("test", message_count=0)
             result = manager.snapshot_file(str(test_file))
-            
+
             assert result is True
             assert len(manager._current.files) == 1
-            
+
             snapshot = manager._current.files[0]
             assert snapshot.path == str(test_file.resolve())
             assert snapshot.content == "print('hello')"
@@ -511,15 +509,15 @@ class TestFileSnapshots:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             nonexistent = Path(tmpdir) / "nonexistent.py"
-            
+
             manager.begin_checkpoint("test", message_count=0)
             result = manager.snapshot_file(str(nonexistent))
-            
+
             assert result is True
             assert len(manager._current.files) == 1
-            
+
             snapshot = manager._current.files[0]
             assert snapshot.path == str(nonexistent.resolve())
             assert snapshot.content is None
@@ -532,15 +530,15 @@ class TestFileSnapshots:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=0)
-            
+
             result1 = manager.snapshot_file(str(test_file))
             result2 = manager.snapshot_file(str(test_file))
-            
+
             assert result1 is True
             assert result2 is False
             assert len(manager._current.files) == 1
@@ -553,14 +551,14 @@ class TestFileSnapshots:
                 max_file_size=100,  # Small limit
             )
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Create large file
             test_file = Path(tmpdir) / "large.txt"
             test_file.write_text("x" * 200)
-            
+
             manager.begin_checkpoint("test", message_count=0)
             result = manager.snapshot_file(str(test_file))
-            
+
             assert result is True
             snapshot = manager._current.files[0]
             assert snapshot.content is None  # Content not saved
@@ -572,12 +570,12 @@ class TestFileSnapshots:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(enabled=False, save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("content")
-            
+
             result = manager.snapshot_file(str(test_file))
-            
+
             assert result is False
 
     def test_snapshot_when_no_current_checkpoint(self):
@@ -585,12 +583,12 @@ class TestFileSnapshots:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("content")
-            
+
             result = manager.snapshot_file(str(test_file))
-            
+
             assert result is False
 
     def test_snapshot_multiple_files(self):
@@ -598,16 +596,16 @@ class TestFileSnapshots:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             file1 = Path(tmpdir) / "file1.py"
             file2 = Path(tmpdir) / "file2.py"
             file1.write_text("content1")
             file2.write_text("content2")
-            
+
             manager.begin_checkpoint("test", message_count=0)
             manager.snapshot_file(str(file1))
             manager.snapshot_file(str(file2))
-            
+
             assert len(manager._current.files) == 2
             assert manager._current.files[0].content == "content1"
             assert manager._current.files[1].content == "content2"
@@ -621,21 +619,21 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Create and modify file
             test_file = Path(tmpdir) / "code.py"
             test_file.write_text("original")
-            
+
             manager.begin_checkpoint("checkpoint 1", message_count=5)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Modify file
             test_file.write_text("modified")
-            
+
             # Rewind
             result = manager.rewind(manager.checkpoints[0].id, mode="code")
-            
+
             assert test_file.read_text() == "original"
             assert len(result["restored_files"]) == 1
             assert result["message_count"] is None
@@ -646,20 +644,20 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("original")
-            
+
             manager.begin_checkpoint("checkpoint", message_count=10)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Modify file
             test_file.write_text("modified")
-            
+
             # Rewind conversation only
             result = manager.rewind(manager.checkpoints[0].id, mode="conversation")
-            
+
             # File should not be restored
             assert test_file.read_text() == "modified"
             assert len(result["restored_files"]) == 0
@@ -670,18 +668,18 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("original")
-            
+
             manager.begin_checkpoint("checkpoint", message_count=15)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             test_file.write_text("modified")
-            
+
             result = manager.rewind(manager.checkpoints[0].id, mode="both")
-            
+
             assert test_file.read_text() == "original"
             assert len(result["restored_files"]) == 1
             assert result["message_count"] == 15
@@ -691,7 +689,7 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             with pytest.raises(ValueError, match="Checkpoint not found"):
                 manager.rewind("nonexistent123")
 
@@ -700,30 +698,30 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("v1")
-            
+
             # Create 3 checkpoints
             manager.begin_checkpoint("cp1", message_count=1)
             manager.snapshot_file(str(test_file))
             cp1_id = manager.finalize_checkpoint()
-            
+
             test_file.write_text("v2")
             manager.begin_checkpoint("cp2", message_count=2)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             test_file.write_text("v3")
             manager.begin_checkpoint("cp3", message_count=3)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             assert len(manager.checkpoints) == 3
-            
+
             # Rewind to first checkpoint
             result = manager.rewind(cp1_id, mode="code")
-            
+
             assert len(manager.checkpoints) == 1
             assert result["checkpoints_removed"] == 2
             assert test_file.read_text() == "v1"
@@ -733,22 +731,22 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("v1")
-            
+
             manager.begin_checkpoint("cp1", message_count=1)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             test_file.write_text("v2")
             manager.begin_checkpoint("cp2", message_count=2)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Rewind to previous
             result = manager.rewind_last(mode="code")
-            
+
             assert result is not None
             assert test_file.read_text() == "v1"
             assert len(manager.checkpoints) == 1
@@ -758,9 +756,9 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             result = manager.rewind_last()
-            
+
             assert result is None
 
     def test_rewind_last_with_single_checkpoint(self):
@@ -768,16 +766,16 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("cp1", message_count=1)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             result = manager.rewind_last()
-            
+
             assert result is None
 
     def test_restore_deleted_file(self):
@@ -785,21 +783,21 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Snapshot non-existent file
             test_file = Path(tmpdir) / "new.py"
-            
+
             manager.begin_checkpoint("cp1", message_count=1)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Create the file
             test_file.write_text("new content")
             assert test_file.exists()
-            
+
             # Rewind should delete it
             manager.rewind(manager.checkpoints[0].id, mode="code")
-            
+
             assert not test_file.exists()
 
     def test_rewind_with_failed_file_restoration(self):
@@ -807,20 +805,20 @@ class TestRewindOperations:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("cp1", message_count=1)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Corrupt the snapshot
             manager.checkpoints[0].files[0].content = None
             manager.checkpoints[0].files[0].exists = True
-            
+
             result = manager.rewind(manager.checkpoints[0].id, mode="code")
-            
+
             assert len(result["failed_files"]) == 1
             assert len(result["restored_files"]) == 0
 
@@ -833,9 +831,9 @@ class TestCheckpointListing:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             result = manager.list_checkpoints()
-            
+
             assert result == []
 
     def test_list_checkpoints_single(self):
@@ -843,16 +841,16 @@ class TestCheckpointListing:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test prompt", message_count=5)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint("test description")
-            
+
             result = manager.list_checkpoints()
-            
+
             assert len(result) == 1
             assert "id" in result[0]
             assert "test prompt" in result[0]["prompt"]
@@ -865,20 +863,20 @@ class TestCheckpointListing:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("v1")
-            
+
             # Create 3 checkpoints
             for i in range(3):
                 manager.begin_checkpoint(f"prompt {i}", message_count=i)
                 manager.snapshot_file(str(test_file))
                 manager.finalize_checkpoint(f"desc {i}")
-                test_file.write_text(f"v{i+2}")
+                test_file.write_text(f"v{i + 2}")
                 time.sleep(0.01)  # Ensure different timestamps
-            
+
             result = manager.list_checkpoints()
-            
+
             assert len(result) == 3
             # Should be in reverse order (newest first)
             assert "prompt 2" in result[0]["prompt"]
@@ -889,19 +887,19 @@ class TestCheckpointListing:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             # Create 5 checkpoints
             for i in range(5):
                 manager.begin_checkpoint(f"prompt {i}", message_count=i)
                 manager.snapshot_file(str(test_file))
                 manager.finalize_checkpoint()
                 time.sleep(0.01)
-            
+
             result = manager.list_checkpoints(limit=3)
-            
+
             assert len(result) == 3
 
     def test_list_checkpoints_truncates_long_prompt(self):
@@ -909,17 +907,17 @@ class TestCheckpointListing:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             long_prompt = "x" * 200
             manager.begin_checkpoint(long_prompt, message_count=0)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             result = manager.list_checkpoints()
-            
+
             assert len(result[0]["prompt"]) <= 103  # 100 + "..."
 
     def test_get_checkpoint_by_id(self):
@@ -927,16 +925,16 @@ class TestCheckpointListing:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=5)
             manager.snapshot_file(str(test_file))
             cp_id = manager.finalize_checkpoint()
-            
+
             checkpoint = manager.get_checkpoint(cp_id)
-            
+
             assert checkpoint is not None
             assert checkpoint.id == cp_id
             assert checkpoint.prompt == "test"
@@ -947,9 +945,9 @@ class TestCheckpointListing:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             checkpoint = manager.get_checkpoint("nonexistent")
-            
+
             assert checkpoint is None
 
 
@@ -961,17 +959,17 @@ class TestPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=5)
             manager.snapshot_file(str(test_file))
             cp_id = manager.finalize_checkpoint("description")
-            
+
             # Load checkpoint
             loaded = manager._load_checkpoint(cp_id)
-            
+
             assert loaded is not None
             assert loaded.id == cp_id
             assert loaded.prompt == "test"
@@ -984,22 +982,22 @@ class TestPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=True)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=5)
             manager.snapshot_file(str(test_file))
             cp_id = manager.finalize_checkpoint()
-            
+
             # Verify compressed file exists
             cp_path = manager._get_checkpoint_path(cp_id)
             assert cp_path.suffix == ".gz"
             assert cp_path.exists()
-            
+
             # Load checkpoint
             loaded = manager._load_checkpoint(cp_id)
-            
+
             assert loaded is not None
             assert loaded.id == cp_id
 
@@ -1008,9 +1006,9 @@ class TestPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             loaded = manager._load_checkpoint("nonexistent")
-            
+
             assert loaded is None
 
     def test_save_and_load_index(self):
@@ -1018,22 +1016,22 @@ class TestPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             # Create checkpoints
             manager.begin_checkpoint("cp1", message_count=1)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             manager.begin_checkpoint("cp2", message_count=2)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Create new manager to load from index
             manager2 = CheckpointManager(project="test", config=config)
-            
+
             assert len(manager2.checkpoints) == 2
             assert manager2.checkpoints[0].prompt == "cp1"
             assert manager2.checkpoints[1].prompt == "cp2"
@@ -1043,21 +1041,21 @@ class TestPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=5)
             manager.snapshot_file(str(test_file))
             cp_id = manager.finalize_checkpoint()
-            
+
             # Delete checkpoint file but keep index
             cp_path = manager._get_checkpoint_path(cp_id)
             cp_path.unlink()
-            
+
             # Load should create minimal checkpoint from index
             manager2 = CheckpointManager(project="test", config=config)
-            
+
             assert len(manager2.checkpoints) == 1
             assert manager2.checkpoints[0].id == cp_id
             assert manager2.checkpoints[0].prompt == "test"
@@ -1067,19 +1065,19 @@ class TestPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=0)
             manager.snapshot_file(str(test_file))
             cp_id = manager.finalize_checkpoint()
-            
+
             cp_path = manager._get_checkpoint_path(cp_id)
             assert cp_path.exists()
-            
+
             manager._delete_checkpoint_file(cp_id)
-            
+
             assert not cp_path.exists()
 
     def test_delete_checkpoint_file_both_formats(self):
@@ -1087,20 +1085,20 @@ class TestPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=True)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=0)
             manager.snapshot_file(str(test_file))
             cp_id = manager.finalize_checkpoint()
-            
+
             # Should delete .json.gz file
             manager._delete_checkpoint_file(cp_id)
-            
+
             gz_path = manager._base_dir / f"{cp_id}.json.gz"
             json_path = manager._base_dir / f"{cp_id}.json"
-            
+
             assert not gz_path.exists()
             assert not json_path.exists()
 
@@ -1117,29 +1115,29 @@ class TestCleanup:
                 compress=False,
             )
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             # Create old checkpoint
             old_time = time.time() - (2 * 24 * 60 * 60)  # 2 days ago
             manager.begin_checkpoint("old", message_count=0)
             manager.snapshot_file(str(test_file))
             manager._current.created_at = old_time
             old_id = manager.finalize_checkpoint()
-            
+
             # Create recent checkpoint
             manager.begin_checkpoint("recent", message_count=0)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Manually trigger cleanup
             manager._cleanup_old_checkpoints()
-            
+
             # Old checkpoint should be removed
             assert len(manager.checkpoints) == 1
             assert manager.checkpoints[0].prompt == "recent"
-            
+
             # Old checkpoint file should be deleted
             old_path = manager._get_checkpoint_path(old_id)
             assert not old_path.exists()
@@ -1153,19 +1151,19 @@ class TestCleanup:
                 compress=False,
             )
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             # Create very old checkpoint
             old_time = time.time() - (365 * 24 * 60 * 60)  # 1 year ago
             manager.begin_checkpoint("old", message_count=0)
             manager.snapshot_file(str(test_file))
             manager._current.created_at = old_time
             manager.finalize_checkpoint()
-            
+
             manager._cleanup_old_checkpoints()
-            
+
             # Should not be removed
             assert len(manager.checkpoints) == 1
 
@@ -1178,19 +1176,19 @@ class TestCleanup:
                 compress=False,
             )
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             # Create recent checkpoints
             for i in range(3):
                 manager.begin_checkpoint(f"cp{i}", message_count=i)
                 manager.snapshot_file(str(test_file))
                 manager.finalize_checkpoint()
                 time.sleep(0.01)
-            
+
             manager._cleanup_old_checkpoints()
-            
+
             # All should be preserved
             assert len(manager.checkpoints) == 3
 
@@ -1203,13 +1201,13 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             ids = set()
             for _ in range(10):
                 id = manager._generate_id()
                 ids.add(id)
                 time.sleep(0.001)
-            
+
             assert len(ids) == 10
 
     def test_snapshot_file_with_unicode_content(self):
@@ -1217,13 +1215,13 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "unicode.py"
             test_file.write_text("# 中文注释\nprint('你好')", encoding="utf-8")
-            
+
             manager.begin_checkpoint("test", message_count=0)
             result = manager.snapshot_file(str(test_file))
-            
+
             assert result is True
             assert "中文" in manager._current.files[0].content
 
@@ -1232,25 +1230,25 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Create file in subdirectory
             subdir = Path(tmpdir) / "sub" / "dir"
             subdir.mkdir(parents=True)
             test_file = subdir / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("test", message_count=0)
             manager.snapshot_file(str(test_file))
             manager.finalize_checkpoint()
-            
+
             # Delete subdirectory
             test_file.unlink()
             subdir.rmdir()
             subdir.parent.rmdir()
-            
+
             # Restore should recreate directories
             manager.rewind(manager.checkpoints[0].id, mode="code")
-            
+
             assert test_file.exists()
             assert test_file.read_text() == "content"
 
@@ -1259,14 +1257,14 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             manager.begin_checkpoint("", message_count=0)
             manager.snapshot_file(str(test_file))
             cp_id = manager.finalize_checkpoint()
-            
+
             checkpoint = manager.get_checkpoint(cp_id)
             assert checkpoint.prompt == ""
 
@@ -1274,21 +1272,21 @@ class TestEdgeCases:
         """Test multiple managers for same project."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
-            
+
             manager1 = CheckpointManager(project="shared", config=config)
             manager2 = CheckpointManager(project="shared", config=config)
-            
+
             test_file = Path(tmpdir) / "test.py"
             test_file.write_text("content")
-            
+
             # Create checkpoint with manager1
             manager1.begin_checkpoint("test", message_count=0)
             manager1.snapshot_file(str(test_file))
             manager1.finalize_checkpoint()
-            
+
             # Manager2 should see it after reload
             manager2._load_index()
-            
+
             assert len(manager2.checkpoints) == 1
 
     def test_checkpoint_path_with_compression(self):
@@ -1296,9 +1294,9 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=True)
             manager = CheckpointManager(project="test", config=config)
-            
+
             path = manager._get_checkpoint_path("test123")
-            
+
             assert path.suffix == ".gz"
             assert "test123.json.gz" in str(path)
 
@@ -1307,9 +1305,9 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             path = manager._get_checkpoint_path("test123")
-            
+
             assert path.suffix == ".json"
             assert "test123.json" in str(path)
 
@@ -1319,12 +1317,12 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir)
             manager = CheckpointManager(project="test", config=config)
-            
+
             manager.begin_checkpoint("test", message_count=0)
-            
+
             # Try to snapshot a directory (should fail)
             result = manager.snapshot_file(tmpdir)
-            
+
             assert result is False
             mock_logger.error.assert_called()
 
@@ -1334,12 +1332,12 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = CheckpointConfig(save_directory=tmpdir, compress=False)
             manager = CheckpointManager(project="test", config=config)
-            
+
             # Create corrupted checkpoint file
             cp_path = manager._base_dir / "corrupt123.json"
             cp_path.write_text("invalid json{{{")
-            
+
             result = manager._load_checkpoint("corrupt123")
-            
+
             assert result is None
             mock_logger.error.assert_called()

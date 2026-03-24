@@ -4,11 +4,8 @@ Unit tests for the Computer (Code Execution) Server.
 Tests Python code execution with sandboxing and resource limits.
 """
 
-import os
 import platform
 import subprocess
-import sys
-import tempfile
 from unittest import mock
 
 import pytest
@@ -384,12 +381,12 @@ class TestPyPISuggestions:
         """Test getting PyPI suggestions successfully."""
         mock_response = mock.Mock()
         mock_response.status_code = 200
-        mock_response.text = '''
+        mock_response.text = """
         <span class="package-snippet__name">numpy</span>
         <p class="package-snippet__description">Numerical computing library</p>
         <span class="package-snippet__name">pandas</span>
         <p class="package-snippet__description">Data analysis library</p>
-        '''
+        """
         mock_get.return_value = mock_response
 
         result = _get_pypi_suggestions("num")
@@ -730,7 +727,7 @@ print("stderr message", file=sys.stderr)
                 mock_result.stderr = ""
                 mock_run.return_value = mock_result
 
-                result = execute_python("print('test')")
+                execute_python("print('test')")
                 mock_file.write.assert_called()
 
     def test_execute_cleans_up_temp_file(self):
@@ -746,7 +743,7 @@ print("stderr message", file=sys.stderr)
                     mock_result.stderr = ""
                     mock_run.return_value = mock_result
 
-                    result = execute_python("print('test')")
+                    execute_python("print('test')")
                     mock_remove.assert_called()
 
     def test_execute_with_large_code(self):

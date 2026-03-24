@@ -172,9 +172,7 @@ class HookManager:
         self.project_dir = str(Path(project_dir).resolve())
         self.session_id = session_id
         self.permission_mode = permission_mode
-        self._hooks: dict[HookEvent, list[HookDefinition]] = {
-            event: [] for event in HookEvent
-        }
+        self._hooks: dict[HookEvent, list[HookDefinition]] = {event: [] for event in HookEvent}
         self._env: dict[str, str] = {
             "CLAUDE_PROJECT_DIR": self.project_dir,
         }
@@ -214,9 +212,7 @@ class HookManager:
     def unregister(self, event: HookEvent, matcher: str | None = None):
         """Unregister hooks for an event."""
         if matcher:
-            self._hooks[event] = [
-                h for h in self._hooks[event] if h.matcher != matcher
-            ]
+            self._hooks[event] = [h for h in self._hooks[event] if h.matcher != matcher]
         else:
             self._hooks[event] = []
 
@@ -273,9 +269,7 @@ class HookManager:
         # Aggregate results
         return self._aggregate_results(results)
 
-    def _get_matching_hooks(
-        self, event: HookEvent, tool_name: str | None
-    ) -> list[HookDefinition]:
+    def _get_matching_hooks(self, event: HookEvent, tool_name: str | None) -> list[HookDefinition]:
         """Get hooks that match the event and tool name."""
         import re
 
@@ -303,9 +297,7 @@ class HookManager:
 
         return matching
 
-    async def _run_hook(
-        self, hook: HookDefinition, context: HookContext
-    ) -> HookResult:
+    async def _run_hook(self, hook: HookDefinition, context: HookContext) -> HookResult:
         """Run a single hook."""
         start_time = time.time()
 
@@ -406,9 +398,7 @@ class HookManager:
                     output_data = json.loads(stdout_str)
                     return HookResult(
                         success=True,
-                        decision=HookDecision(
-                            output_data.get("decision", "allow")
-                        ),
+                        decision=HookDecision(output_data.get("decision", "allow")),
                         reason=output_data.get("reason", ""),
                         modified_input=output_data.get("modified_input"),
                         additional_context=output_data.get("additional_context", ""),
@@ -434,9 +424,7 @@ class HookManager:
 
             else:
                 # Non-blocking error
-                logger.warning(
-                    f"Hook command exited with code {proc.returncode}: {stderr_str}"
-                )
+                logger.warning(f"Hook command exited with code {proc.returncode}: {stderr_str}")
                 return HookResult(
                     success=False,
                     reason=stderr_str,
@@ -596,8 +584,7 @@ class HookManager:
                 matchers[hook.matcher].append(hook_def)
 
             config["hooks"][event.value] = [
-                {"matcher": matcher, "hooks": hook_list}
-                for matcher, hook_list in matchers.items()
+                {"matcher": matcher, "hooks": hook_list} for matcher, hook_list in matchers.items()
             ]
 
         path.write_text(json.dumps(config, indent=2), encoding="utf-8")

@@ -36,7 +36,6 @@ BUILTIN_TRANSLATIONS = {
         "warning": "Warning",
         "success": "Success",
         "info": "Info",
-
         # Commands
         "cmd.help": "Show help",
         "cmd.exit": "Exit",
@@ -52,24 +51,20 @@ BUILTIN_TRANSLATIONS = {
         "cmd.tasks": "List background tasks",
         "cmd.doctor": "Run health checks",
         "cmd.theme": "Change theme",
-
         # Modes
         "mode.plan": "Planning mode (read-only)",
         "mode.build": "Build mode",
         "mode.switched": "Switched to {mode} mode",
-
         # Prompts
         "prompt.input": "You ({mode})",
         "prompt.confirm": "Are you sure? [y/N]",
         "prompt.approve": "Approve this operation? [y/N]",
-
         # Status
         "status.loading": "Loading...",
         "status.processing": "Processing...",
         "status.complete": "Complete",
         "status.failed": "Failed",
         "status.cancelled": "Cancelled",
-
         # Errors
         "error.unknown_command": "Unknown command: {command}",
         "error.file_not_found": "File not found: {path}",
@@ -77,7 +72,6 @@ BUILTIN_TRANSLATIONS = {
         "error.api_error": "API error: {message}",
         "error.network": "Network error: {message}",
         "error.timeout": "Operation timed out",
-
         # Tasks
         "task.started": "Task started: {name}",
         "task.completed": "Task completed: {name}",
@@ -85,30 +79,25 @@ BUILTIN_TRANSLATIONS = {
         "task.interrupted": "Task interrupted: {name}",
         "task.resumed": "Task resumed: {name}",
         "task.recovery_prompt": "Found {count} interrupted tasks. Resume? [y/N]",
-
         # Notifications
         "notify.build_complete": "Build completed successfully",
         "notify.build_failed": "Build failed",
         "notify.task_complete": "Task completed",
         "notify.error": "An error occurred",
-
         # Cost
         "cost.session": "Session cost: ${cost}",
         "cost.daily": "Daily cost: ${cost}",
         "cost.budget_warning": "Warning: Approaching budget limit",
         "cost.budget_exceeded": "Budget limit exceeded",
-
         # Checkpoints
         "checkpoint.created": "Checkpoint created: {id}",
         "checkpoint.restored": "Restored to checkpoint: {id}",
         "checkpoint.list_empty": "No checkpoints available",
-
         # Doctor
         "doctor.running": "Running health checks...",
         "doctor.complete": "Health check complete",
         "doctor.issues_found": "Found {count} issues",
     },
-
     "zh": {
         # 通用
         "welcome": "欢迎使用智能体！",
@@ -121,7 +110,6 @@ BUILTIN_TRANSLATIONS = {
         "warning": "警告",
         "success": "成功",
         "info": "信息",
-
         # 命令
         "cmd.help": "显示帮助",
         "cmd.exit": "退出",
@@ -137,24 +125,20 @@ BUILTIN_TRANSLATIONS = {
         "cmd.tasks": "列出后台任务",
         "cmd.doctor": "运行健康检查",
         "cmd.theme": "更改主题",
-
         # 模式
         "mode.plan": "规划模式（只读）",
         "mode.build": "构建模式",
         "mode.switched": "已切换到 {mode} 模式",
-
         # 提示
         "prompt.input": "你 ({mode})",
         "prompt.confirm": "确定吗？[y/N]",
         "prompt.approve": "批准此操作？[y/N]",
-
         # 状态
         "status.loading": "加载中...",
         "status.processing": "处理中...",
         "status.complete": "完成",
         "status.failed": "失败",
         "status.cancelled": "已取消",
-
         # 错误
         "error.unknown_command": "未知命令：{command}",
         "error.file_not_found": "文件未找到：{path}",
@@ -162,7 +146,6 @@ BUILTIN_TRANSLATIONS = {
         "error.api_error": "API 错误：{message}",
         "error.network": "网络错误：{message}",
         "error.timeout": "操作超时",
-
         # 任务
         "task.started": "任务已启动：{name}",
         "task.completed": "任务完成：{name}",
@@ -170,30 +153,25 @@ BUILTIN_TRANSLATIONS = {
         "task.interrupted": "任务中断：{name}",
         "task.resumed": "任务已恢复：{name}",
         "task.recovery_prompt": "发现 {count} 个中断的任务。是否恢复？[y/N]",
-
         # 通知
         "notify.build_complete": "构建成功完成",
         "notify.build_failed": "构建失败",
         "notify.task_complete": "任务完成",
         "notify.error": "发生错误",
-
         # 费用
         "cost.session": "会话费用：${cost}",
         "cost.daily": "每日费用：${cost}",
         "cost.budget_warning": "警告：即将达到预算限制",
         "cost.budget_exceeded": "已超出预算限制",
-
         # 检查点
         "checkpoint.created": "检查点已创建：{id}",
         "checkpoint.restored": "已恢复到检查点：{id}",
         "checkpoint.list_empty": "没有可用的检查点",
-
         # 健康检查
         "doctor.running": "正在运行健康检查...",
         "doctor.complete": "健康检查完成",
         "doctor.issues_found": "发现 {count} 个问题",
     },
-
     "ja": {
         # 一般
         "welcome": "エージェントへようこそ！",
@@ -206,13 +184,11 @@ BUILTIN_TRANSLATIONS = {
         "warning": "警告",
         "success": "成功",
         "info": "情報",
-
         # コマンド
         "cmd.help": "ヘルプを表示",
         "cmd.exit": "終了",
         "cmd.clear": "会話をクリア",
         "cmd.mode": "モードを切り替え",
-
         # ステータス
         "status.loading": "読み込み中...",
         "status.processing": "処理中...",

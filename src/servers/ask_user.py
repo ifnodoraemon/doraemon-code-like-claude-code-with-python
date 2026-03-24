@@ -33,12 +33,14 @@ def ask_user(
     """
     # Display the question prominently
     console.print()
-    console.print(Panel(
-        f"[bold]{question}[/bold]",
-        title="[bold cyan]AI Question[/bold cyan]",
-        border_style="cyan",
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            f"[bold]{question}[/bold]",
+            title="[bold cyan]AI Question[/bold cyan]",
+            border_style="cyan",
+            expand=False,
+        )
+    )
 
     # No options — free text input
     if not options.strip():

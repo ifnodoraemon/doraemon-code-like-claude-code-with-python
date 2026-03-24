@@ -146,6 +146,7 @@ class HotReloadManager:
         on_change: Callable[[dict], None] | None = None,
     ) -> bool:
         """Watch an .env file."""
+
         def parse_env(content: str) -> dict:
             result = {}
             for line in content.splitlines():

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GatewayConfig:
     """Gateway client configuration."""
+
     base_url: str = "http://localhost:8000"
     api_key: str | None = None
     timeout: float = 120.0

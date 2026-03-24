@@ -7,11 +7,10 @@
 
 import asyncio
 import time
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from typing import List, Dict
+from concurrent.futures import ThreadPoolExecutor
 
 
-def simulate_task(task_id: int, duration: float = 1.0) -> Dict:
+def simulate_task(task_id: int, duration: float = 1.0) -> dict:
     """模拟一个耗时任务"""
     time.sleep(duration)
     return {
@@ -21,7 +20,7 @@ def simulate_task(task_id: int, duration: float = 1.0) -> Dict:
     }
 
 
-async def simulate_task_async(task_id: int, duration: float = 1.0) -> Dict:
+async def simulate_task_async(task_id: int, duration: float = 1.0) -> dict:
     """模拟一个异步耗时任务"""
     await asyncio.sleep(duration)
     return {
@@ -31,7 +30,7 @@ async def simulate_task_async(task_id: int, duration: float = 1.0) -> Dict:
     }
 
 
-def run_serial(tasks: List[Dict]) -> Dict:
+def run_serial(tasks: list[dict]) -> dict:
     """串行执行"""
     print("\n" + "=" * 80)
     print("🐢 串行执行 (Serial Execution)")
@@ -58,7 +57,7 @@ def run_serial(tasks: List[Dict]) -> Dict:
     }
 
 
-def run_parallel_threads(tasks: List[Dict], max_workers: int = 4) -> Dict:
+def run_parallel_threads(tasks: list[dict], max_workers: int = 4) -> dict:
     """多线程并行执行"""
     print("\n" + "=" * 80)
     print(f"🚀 多线程并行执行 (ThreadPool) - {max_workers} workers")
@@ -67,10 +66,7 @@ def run_parallel_threads(tasks: List[Dict], max_workers: int = 4) -> Dict:
     start_time = time.time()
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(simulate_task, task["id"], task["duration"])
-            for task in tasks
-        ]
+        futures = [executor.submit(simulate_task, task["id"], task["duration"]) for task in tasks]
 
         results = []
         for i, future in enumerate(futures, 1):
@@ -92,7 +88,7 @@ def run_parallel_threads(tasks: List[Dict], max_workers: int = 4) -> Dict:
     }
 
 
-async def run_parallel_async(tasks: List[Dict], max_concurrent: int = 4) -> Dict:
+async def run_parallel_async(tasks: list[dict], max_concurrent: int = 4) -> dict:
     """异步并行执行"""
     print("\n" + "=" * 80)
     print(f"⚡ 异步并行执行 (AsyncIO) - {max_concurrent} concurrent")
@@ -126,7 +122,7 @@ async def run_parallel_async(tasks: List[Dict], max_concurrent: int = 4) -> Dict
     }
 
 
-def print_comparison(results: List[Dict]):
+def print_comparison(results: list[dict]):
     """打印对比结果"""
     print("\n" + "=" * 80)
     print("📊 性能对比 (Performance Comparison)")
@@ -149,9 +145,7 @@ def print_comparison(results: List[Dict]):
         throughput = result["throughput"]
         speedup = baseline_time / total_time
 
-        print(
-            f"{mode:<30} {total_time:>10.2f}s  {throughput:>12.2f}/s  {speedup:>8.2f}x"
-        )
+        print(f"{mode:<30} {total_time:>10.2f}s  {throughput:>12.2f}/s  {speedup:>8.2f}x")
 
     # 计算最佳加速比
     best_result = max(results, key=lambda r: baseline_time / r["total_time"])
@@ -161,7 +155,7 @@ def print_comparison(results: List[Dict]):
     print(f"🏆 最佳加速: {best_result['mode']} - {best_speedup:.2f}x")
     print(
         f"⚡ 时间节省: {baseline_time - best_result['total_time']:.2f}秒 "
-        f"({(1 - best_result['total_time']/baseline_time)*100:.1f}%)"
+        f"({(1 - best_result['total_time'] / baseline_time) * 100:.1f}%)"
     )
     print("=" * 80)
 
@@ -178,7 +172,7 @@ def main():
 
     tasks = [{"id": i, "duration": task_duration} for i in range(1, num_tasks + 1)]
 
-    print(f"\n📋 测试配置:")
+    print("\n📋 测试配置:")
     print(f"  任务数量: {num_tasks}")
     print(f"  单任务耗时: {task_duration}秒")
     print(f"  理论总耗时(串行): {num_tasks * task_duration}秒")

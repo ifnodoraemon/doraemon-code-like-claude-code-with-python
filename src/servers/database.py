@@ -1,4 +1,3 @@
-
 import json
 import logging
 import re
@@ -29,13 +28,13 @@ def _get_connection(db_path: str) -> sqlite3.Connection:
 def _contains_multiple_statements(query: str) -> bool:
     """Check if a query contains multiple SQL statements (semicolon outside strings/comments)."""
     # Remove SQL comments
-    cleaned = re.sub(r'--[^\n]*', '', query)   # single-line comments
-    cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)  # block comments
+    cleaned = re.sub(r"--[^\n]*", "", query)  # single-line comments
+    cleaned = re.sub(r"/\*.*?\*/", "", cleaned, flags=re.DOTALL)  # block comments
     # Remove string literals
-    cleaned = re.sub(r"'[^']*'", '', cleaned)
-    cleaned = re.sub(r'"[^"]*"', '', cleaned)
+    cleaned = re.sub(r"'[^']*'", "", cleaned)
+    cleaned = re.sub(r'"[^"]*"', "", cleaned)
     # Check for semicolons (ignoring trailing whitespace after last statement)
-    parts = [p.strip() for p in cleaned.split(';') if p.strip()]
+    parts = [p.strip() for p in cleaned.split(";") if p.strip()]
     return len(parts) > 1
 
 
@@ -151,7 +150,7 @@ def db_describe_table(table_name: str, db_path: str) -> str:
     import re
 
     # Validate table name to prevent injection in PRAGMA
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
         return f"Error: Invalid table name '{table_name}'"
 
     query = f"PRAGMA table_info({table_name});"

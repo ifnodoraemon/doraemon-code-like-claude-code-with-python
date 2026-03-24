@@ -169,10 +169,14 @@ class DoraemonTUI(App):
             # Show mode info
             mode_info = ModelClient.get_mode_info()
             if mode_info.get("mode") == "gateway":
-                chat.add_message("system", f"Agent TUI v0.7.0 - Gateway Mode ({mode_info.get('gateway_url')})")
+                chat.add_message(
+                    "system", f"Agent TUI v0.7.0 - Gateway Mode ({mode_info.get('gateway_url')})"
+                )
             else:
                 providers = [p for p, v in mode_info.get("providers", {}).items() if v]
-                chat.add_message("system", f"Agent TUI v0.7.0 - Direct Mode ({', '.join(providers)})")
+                chat.add_message(
+                    "system", f"Agent TUI v0.7.0 - Direct Mode ({', '.join(providers)})"
+                )
 
             chat.add_message("system", "Type /help for commands")
         except Exception as e:
@@ -225,10 +229,12 @@ class DoraemonTUI(App):
             )
 
             # Add assistant response to history
-            self.conversation_history.append(Message(
-                role="assistant",
-                content=response.content,
-            ))
+            self.conversation_history.append(
+                Message(
+                    role="assistant",
+                    content=response.content,
+                )
+            )
 
             # Display response
             if response.content:
@@ -287,7 +293,9 @@ class DoraemonTUI(App):
                     sidebar.mode = new_mode
                     chat.add_message("system", f"Switched to {new_mode} mode")
                 else:
-                    chat.add_message("system", f"Unknown mode: {new_mode}. Available: {', '.join(self.modes)}")
+                    chat.add_message(
+                        "system", f"Unknown mode: {new_mode}. Available: {', '.join(self.modes)}"
+                    )
             else:
                 chat.add_message("system", f"Current mode: {self.current_mode}")
 

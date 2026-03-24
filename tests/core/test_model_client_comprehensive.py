@@ -9,11 +9,9 @@ Covers:
 - Error handling and edge cases
 """
 
-import json
-import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from collections.abc import AsyncIterator
 
 from src.core.model_client import (
     DirectModelClient,
@@ -32,10 +30,10 @@ from src.core.model_utils import (
     ToolDefinition,
 )
 
-
 # ============================================================================
 # PART 1: Message and ToolDefinition Tests (10 tests)
 # ============================================================================
+
 
 class TestMessageClass:
     """Tests for Message dataclass."""
@@ -57,7 +55,7 @@ class TestMessageClass:
             thought="Thinking...",
             tool_calls=tool_calls,
             tool_call_id="call_123",
-            name="my_tool"
+            name="my_tool",
         )
         assert msg.role == "assistant"
         assert msg.content == "Response"
@@ -85,7 +83,7 @@ class TestMessageClass:
             thought="Thinking",
             tool_calls=[{"id": "1"}],
             tool_call_id="call_1",
-            name="tool_1"
+            name="tool_1",
         )
         d = msg.to_dict()
         assert d["role"] == "assistant"
@@ -115,9 +113,7 @@ class TestToolDefinition:
     def test_tool_definition_creation(self):
         """Test creating a tool definition."""
         tool = ToolDefinition(
-            name="read_file",
-            description="Read a file",
-            parameters={"type": "object"}
+            name="read_file", description="Read a file", parameters={"type": "object"}
         )
         assert tool.name == "read_file"
         assert tool.description == "Read a file"
@@ -131,8 +127,8 @@ class TestToolDefinition:
             parameters={
                 "type": "object",
                 "properties": {"path": {"type": "string"}},
-                "required": ["path"]
-            }
+                "required": ["path"],
+            },
         )
         openai_format = tool.to_openai_format()
         assert openai_format["type"] == "function"
@@ -143,16 +139,12 @@ class TestToolDefinition:
     def test_tool_to_genai_format(self):
         """Test conversion to GenAI format."""
         tool = ToolDefinition(
-            name="test_tool",
-            description="Test tool",
-            parameters={"type": "object"}
+            name="test_tool", description="Test tool", parameters={"type": "object"}
         )
         with patch("google.genai.types.FunctionDeclaration") as mock_func:
             tool.to_genai_format()
             mock_func.assert_called_once_with(
-                name="test_tool",
-                description="Test tool",
-                parameters={"type": "object"}
+                name="test_tool", description="Test tool", parameters={"type": "object"}
             )
 
 
@@ -161,22 +153,14 @@ class TestToolCall:
 
     def test_tool_call_creation(self):
         """Test creating a tool call."""
-        tc = ToolCall(
-            id="call_123",
-            name="read_file",
-            arguments={"path": "/test.txt"}
-        )
+        tc = ToolCall(id="call_123", name="read_file", arguments={"path": "/test.txt"})
         assert tc.id == "call_123"
         assert tc.name == "read_file"
         assert tc.arguments == {"path": "/test.txt"}
 
     def test_tool_call_to_dict(self):
         """Test converting tool call to dict."""
-        tc = ToolCall(
-            id="call_123",
-            name="read_file",
-            arguments={"path": "/test.txt"}
-        )
+        tc = ToolCall(id="call_123", name="read_file", arguments={"path": "/test.txt"})
         d = tc.to_dict()
         assert d["id"] == "call_123"
         assert d["name"] == "read_file"
@@ -187,7 +171,7 @@ class TestToolCall:
         data = {
             "id": "call_456",
             "name": "write_file",
-            "arguments": {"path": "/out.txt", "content": "data"}
+            "arguments": {"path": "/out.txt", "content": "data"},
         }
         tc = ToolCall.from_dict(data)
         assert tc.id == "call_456"
@@ -216,10 +200,7 @@ class TestChatResponse:
 
     def test_chat_response_has_tool_calls_true(self):
         """Test has_tool_calls property when tools are present."""
-        response = ChatResponse(
-            content="",
-            tool_calls=[{"id": "1", "name": "test"}]
-        )
+        response = ChatResponse(content="", tool_calls=[{"id": "1", "name": "test"}])
         assert response.has_tool_calls is True
 
     def test_chat_response_has_tool_calls_false(self):
@@ -238,11 +219,7 @@ class TestStreamChunk:
 
     def test_stream_chunk_creation(self):
         """Test creating a stream chunk."""
-        chunk = StreamChunk(
-            content="Hello",
-            thought="Thinking",
-            finish_reason="stop"
-        )
+        chunk = StreamChunk(content="Hello", thought="Thinking", finish_reason="stop")
         assert chunk.content == "Hello"
         assert chunk.thought == "Thinking"
         assert chunk.finish_reason == "stop"
@@ -250,9 +227,7 @@ class TestStreamChunk:
     def test_stream_chunk_with_tool_calls(self):
         """Test stream chunk with tool calls."""
         chunk = StreamChunk(
-            content=None,
-            tool_calls=[{"id": "1", "name": "test"}],
-            finish_reason="tool_calls"
+            content=None, tool_calls=[{"id": "1", "name": "test"}], finish_reason="tool_calls"
         )
         assert chunk.content is None
         assert chunk.tool_calls == [{"id": "1", "name": "test"}]
@@ -262,6 +237,7 @@ class TestStreamChunk:
 # ============================================================================
 # PART 2: ClientConfig Tests (10 tests)
 # ============================================================================
+
 
 class TestClientConfig:
     """Tests for ClientConfig dataclass."""
@@ -282,7 +258,7 @@ class TestClientConfig:
             model="gpt-4",
             temperature=0.5,
             max_tokens=2000,
-            system_prompt="You are helpful"
+            system_prompt="You are helpful",
         )
         assert config.mode == ClientMode.GATEWAY
         assert config.model == "gpt-4"
@@ -292,11 +268,14 @@ class TestClientConfig:
 
     def test_client_config_from_env_gateway_mode(self):
         """Test loading config from project config in gateway mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gpt-4",
-            "gateway_url": "http://localhost:8000",
-            "gateway_key": "test_key",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gpt-4",
+                "gateway_url": "http://localhost:8000",
+                "gateway_key": "test_key",
+            },
+        ):
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.GATEWAY
             assert config.gateway_url == "http://localhost:8000"
@@ -305,12 +284,15 @@ class TestClientConfig:
 
     def test_client_config_from_env_direct_mode(self):
         """Test loading config from project config in direct mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gemini-2.5-flash",
-            "google_api_key": "google_key",
-            "openai_api_key": "openai_key",
-            "anthropic_api_key": "anthropic_key",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gemini-2.5-flash",
+                "google_api_key": "google_key",
+                "openai_api_key": "openai_key",
+                "anthropic_api_key": "anthropic_key",
+            },
+        ):
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.DIRECT
             assert config.google_api_key == "google_key"
@@ -326,10 +308,13 @@ class TestClientConfig:
 
     def test_client_config_from_env_ollama_base_url(self):
         """Test loading Ollama base URL from project config."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "llama2",
-            "ollama_base_url": "http://custom:11434",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "llama2",
+                "ollama_base_url": "http://custom:11434",
+            },
+        ):
             config = ClientConfig.from_env()
             assert config.ollama_base_url == "http://custom:11434"
 
@@ -342,9 +327,7 @@ class TestClientConfig:
     def test_client_config_gateway_settings(self):
         """Test gateway-specific settings."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://api.example.com",
-            gateway_key="secret_key"
+            mode=ClientMode.GATEWAY, gateway_url="http://api.example.com", gateway_key="secret_key"
         )
         assert config.gateway_url == "http://api.example.com"
         assert config.gateway_key == "secret_key"
@@ -355,7 +338,7 @@ class TestClientConfig:
             mode=ClientMode.DIRECT,
             google_api_key="google_key",
             openai_api_key="openai_key",
-            anthropic_api_key="anthropic_key"
+            anthropic_api_key="anthropic_key",
         )
         assert config.google_api_key == "google_key"
         assert config.openai_api_key == "openai_key"
@@ -372,25 +355,20 @@ class TestClientConfig:
 # PART 3: GatewayModelClient Initialization Tests (10 tests)
 # ============================================================================
 
+
 class TestGatewayModelClientInit:
     """Tests for GatewayModelClient initialization."""
 
     def test_gateway_client_creation(self):
         """Test creating a GatewayModelClient."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         assert client.config == config
         assert client._client is None
 
     def test_gateway_client_context_manager(self):
         """Test GatewayModelClient as context manager."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         assert hasattr(client, "__aenter__")
         assert hasattr(client, "__aexit__")
@@ -406,10 +384,7 @@ class TestGatewayModelClientInit:
     @pytest.mark.asyncio
     async def test_gateway_client_connect_with_url(self):
         """Test connect initializes HTTP client."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         with patch("httpx.AsyncClient") as mock_client:
             await client.connect()
@@ -420,9 +395,7 @@ class TestGatewayModelClientInit:
     async def test_gateway_client_connect_with_auth_key(self):
         """Test connect includes authorization header."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            gateway_key="test_key"
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", gateway_key="test_key"
         )
         client = GatewayModelClient(config)
         with patch("httpx.AsyncClient") as mock_client:
@@ -434,10 +407,7 @@ class TestGatewayModelClientInit:
     @pytest.mark.asyncio
     async def test_gateway_client_close(self):
         """Test closing the gateway client."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         mock_http_client = AsyncMock()
         client._client = mock_http_client
@@ -448,10 +418,7 @@ class TestGatewayModelClientInit:
     @pytest.mark.asyncio
     async def test_gateway_client_close_when_not_connected(self):
         """Test closing when client is not connected."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         await client.close()  # Should not raise
         assert client._client is None
@@ -459,10 +426,7 @@ class TestGatewayModelClientInit:
     @pytest.mark.asyncio
     async def test_gateway_client_context_manager_connect_disconnect(self):
         """Test context manager connects and disconnects."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
             with patch.object(client, "close", new_callable=AsyncMock) as mock_close:
@@ -474,10 +438,7 @@ class TestGatewayModelClientInit:
     @pytest.mark.asyncio
     async def test_gateway_client_context_manager_exception_handling(self):
         """Test context manager doesn't suppress exceptions."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         with patch.object(client, "connect", new_callable=AsyncMock):
             with patch.object(client, "close", new_callable=AsyncMock):
@@ -488,12 +449,9 @@ class TestGatewayModelClientInit:
     @pytest.mark.asyncio
     async def test_gateway_client_timeout_configuration(self):
         """Test HTTP client timeout is configured."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("httpx.AsyncClient"):
             with patch("httpx.Timeout") as mock_timeout:
                 await client.connect()
                 mock_timeout.assert_called_with(120.0)
@@ -503,6 +461,7 @@ class TestGatewayModelClientInit:
 # PART 4: GatewayModelClient Chat Tests (12 tests)
 # ============================================================================
 
+
 class TestGatewayModelClientChat:
     """Tests for GatewayModelClient chat functionality."""
 
@@ -510,22 +469,19 @@ class TestGatewayModelClientChat:
     async def test_gateway_chat_basic(self):
         """Test basic chat request."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            model="gpt-4"
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", model="gpt-4"
         )
         client = GatewayModelClient(config)
 
         # Mock the API response
         mock_response = {
-            "choices": [{
-                "message": {"content": "Hello!"},
-                "finish_reason": "stop"
-            }],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5}
+            "choices": [{"message": {"content": "Hello!"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
         }
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ):
             messages = [Message(role="user", content="Hi")]
             response = await client.chat(messages)
 
@@ -536,23 +492,26 @@ class TestGatewayModelClientChat:
     @pytest.mark.asyncio
     async def test_gateway_chat_with_tools(self):
         """Test chat request with tools."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {
-            "choices": [{
-                "message": {
-                    "content": None,
-                    "tool_calls": [{"id": "1", "function": {"name": "test", "arguments": "{}"}}]
-                },
-                "finish_reason": "tool_calls"
-            }]
+            "choices": [
+                {
+                    "message": {
+                        "content": None,
+                        "tool_calls": [
+                            {"id": "1", "function": {"name": "test", "arguments": "{}"}}
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
         }
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ):
             messages = [Message(role="user", content="Call a tool")]
             tools = [ToolDefinition(name="test", description="Test", parameters={})]
             response = await client.chat(messages, tools=tools)
@@ -563,15 +522,14 @@ class TestGatewayModelClientChat:
     @pytest.mark.asyncio
     async def test_gateway_chat_empty_choices(self):
         """Test chat with empty choices in response."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [], "usage": {}}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ):
             messages = [Message(role="user", content="Hi")]
             response = await client.chat(messages)
 
@@ -581,15 +539,14 @@ class TestGatewayModelClientChat:
     @pytest.mark.asyncio
     async def test_gateway_chat_message_normalization(self):
         """Test that messages are normalized to dict format."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response) as mock_call:
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ) as mock_call:
             messages = [Message(role="user", content="Hi")]
             await client.chat(messages)
 
@@ -601,15 +558,14 @@ class TestGatewayModelClientChat:
     @pytest.mark.asyncio
     async def test_gateway_chat_tool_normalization(self):
         """Test that tools are normalized to OpenAI format."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response) as mock_call:
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ) as mock_call:
             messages = [Message(role="user", content="Hi")]
             tools = [ToolDefinition(name="test", description="Test", parameters={})]
             await client.chat(messages, tools=tools)
@@ -623,15 +579,15 @@ class TestGatewayModelClientChat:
     async def test_gateway_chat_custom_model(self):
         """Test chat with custom model parameter."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            model="default-model"
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", model="default-model"
         )
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response) as mock_call:
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ) as mock_call:
             messages = [Message(role="user", content="Hi")]
             await client.chat(messages, model="custom-model")
 
@@ -643,15 +599,15 @@ class TestGatewayModelClientChat:
     async def test_gateway_chat_custom_temperature(self):
         """Test chat with custom temperature."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            temperature=0.7
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", temperature=0.7
         )
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response) as mock_call:
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ) as mock_call:
             messages = [Message(role="user", content="Hi")]
             await client.chat(messages, temperature=0.3)
 
@@ -663,15 +619,15 @@ class TestGatewayModelClientChat:
     async def test_gateway_chat_max_tokens(self):
         """Test chat includes max_tokens when configured."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            max_tokens=1000
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", max_tokens=1000
         )
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response) as mock_call:
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ) as mock_call:
             messages = [Message(role="user", content="Hi")]
             await client.chat(messages)
 
@@ -682,16 +638,15 @@ class TestGatewayModelClientChat:
     @pytest.mark.asyncio
     async def test_gateway_chat_auto_connect(self):
         """Test chat auto-connects if not connected."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
         with patch.object(client, "connect", new_callable=AsyncMock):
-            with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response):
+            with patch.object(
+                client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+            ):
                 messages = [Message(role="user", content="Hi")]
                 await client.chat(messages)
                 client.connect.assert_called_once()
@@ -699,15 +654,14 @@ class TestGatewayModelClientChat:
     @pytest.mark.asyncio
     async def test_gateway_chat_dict_messages(self):
         """Test chat accepts dict messages."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ):
             messages = [{"role": "user", "content": "Hi"}]
             response = await client.chat(messages)
             assert response.content == "OK"
@@ -715,15 +669,14 @@ class TestGatewayModelClientChat:
     @pytest.mark.asyncio
     async def test_gateway_chat_dict_tools(self):
         """Test chat accepts dict tools."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response) as mock_call:
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ) as mock_call:
             messages = [Message(role="user", content="Hi")]
             tools = [{"type": "function", "function": {"name": "test"}}]
             await client.chat(messages, tools=tools)
@@ -737,16 +690,14 @@ class TestGatewayModelClientChat:
 # PART 5: GatewayModelClient Streaming Tests (8 tests)
 # ============================================================================
 
+
 class TestGatewayModelClientStreaming:
     """Tests for GatewayModelClient streaming functionality."""
 
     @pytest.mark.asyncio
     async def test_gateway_chat_stream_exists(self):
         """Test that chat_stream method exists."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         assert hasattr(client, "chat_stream")
         assert callable(client.chat_stream)
@@ -754,10 +705,7 @@ class TestGatewayModelClientStreaming:
     @pytest.mark.asyncio
     async def test_gateway_chat_stream_returns_async_iterator(self):
         """Test that chat_stream returns an async iterator."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         # Create a simple async generator for testing
@@ -773,13 +721,15 @@ class TestGatewayModelClientStreaming:
 
             async def async_iter_lines():
                 yield 'data: {"choices":[{"delta":{"content":"Hello"}}]}'
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
             mock_response.aiter_lines = async_iter_lines
-            client._client.stream = MagicMock(return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(return_value=False)
-            ))
+            client._client.stream = MagicMock(
+                return_value=AsyncMock(
+                    __aenter__=AsyncMock(return_value=mock_response),
+                    __aexit__=AsyncMock(return_value=False),
+                )
+            )
 
             messages = [Message(role="user", content="Hi")]
             result = client.chat_stream(messages)
@@ -788,10 +738,7 @@ class TestGatewayModelClientStreaming:
     @pytest.mark.asyncio
     async def test_gateway_chat_stream_with_tools(self):
         """Test streaming with tools parameter."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         with patch.object(client, "connect", new_callable=AsyncMock):
@@ -800,13 +747,15 @@ class TestGatewayModelClientStreaming:
             mock_response.raise_for_status = MagicMock()
 
             async def async_iter_lines():
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
             mock_response.aiter_lines = async_iter_lines
-            client._client.stream = MagicMock(return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(return_value=False)
-            ))
+            client._client.stream = MagicMock(
+                return_value=AsyncMock(
+                    __aenter__=AsyncMock(return_value=mock_response),
+                    __aexit__=AsyncMock(return_value=False),
+                )
+            )
 
             messages = [Message(role="user", content="Hi")]
             tools = [ToolDefinition(name="test", description="Test", parameters={})]
@@ -816,10 +765,7 @@ class TestGatewayModelClientStreaming:
     @pytest.mark.asyncio
     async def test_gateway_chat_stream_auto_connect(self):
         """Test streaming auto-connects if needed."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         with patch.object(client, "connect", new_callable=AsyncMock):
@@ -828,13 +774,15 @@ class TestGatewayModelClientStreaming:
             mock_response.raise_for_status = MagicMock()
 
             async def async_iter_lines():
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
             mock_response.aiter_lines = async_iter_lines
-            client._client.stream = MagicMock(return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(return_value=False)
-            ))
+            client._client.stream = MagicMock(
+                return_value=AsyncMock(
+                    __aenter__=AsyncMock(return_value=mock_response),
+                    __aexit__=AsyncMock(return_value=False),
+                )
+            )
 
             messages = [Message(role="user", content="Hi")]
             async for _ in client.chat_stream(messages):
@@ -846,27 +794,21 @@ class TestGatewayModelClientStreaming:
     @pytest.mark.asyncio
     async def test_gateway_chat_stream_no_client_error(self):
         """Test streaming raises error if client not initialized."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         client._client = None
 
         messages = [Message(role="user", content="Hi")]
 
         with patch.object(client, "connect", new_callable=AsyncMock):
-            with pytest.raises(Exception):
+            with pytest.raises(RuntimeError):
                 async for _ in client.chat_stream(messages):
                     pass
 
     @pytest.mark.asyncio
     async def test_gateway_chat_stream_message_normalization(self):
         """Test streaming normalizes messages."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         with patch.object(client, "connect", new_callable=AsyncMock):
@@ -875,13 +817,15 @@ class TestGatewayModelClientStreaming:
             mock_response.raise_for_status = MagicMock()
 
             async def async_iter_lines():
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
             mock_response.aiter_lines = async_iter_lines
-            client._client.stream = MagicMock(return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(return_value=False)
-            ))
+            client._client.stream = MagicMock(
+                return_value=AsyncMock(
+                    __aenter__=AsyncMock(return_value=mock_response),
+                    __aexit__=AsyncMock(return_value=False),
+                )
+            )
 
             messages = [Message(role="user", content="Hi")]
             async for _ in client.chat_stream(messages):
@@ -894,9 +838,7 @@ class TestGatewayModelClientStreaming:
     async def test_gateway_chat_stream_custom_model(self):
         """Test streaming with custom model."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            model="default-model"
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", model="default-model"
         )
         client = GatewayModelClient(config)
 
@@ -906,13 +848,15 @@ class TestGatewayModelClientStreaming:
             mock_response.raise_for_status = MagicMock()
 
             async def async_iter_lines():
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
             mock_response.aiter_lines = async_iter_lines
-            client._client.stream = MagicMock(return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(return_value=False)
-            ))
+            client._client.stream = MagicMock(
+                return_value=AsyncMock(
+                    __aenter__=AsyncMock(return_value=mock_response),
+                    __aexit__=AsyncMock(return_value=False),
+                )
+            )
 
             messages = [Message(role="user", content="Hi")]
             async for _ in client.chat_stream(messages, model="custom-model"):
@@ -925,9 +869,7 @@ class TestGatewayModelClientStreaming:
     async def test_gateway_chat_stream_custom_temperature(self):
         """Test streaming with custom temperature."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            temperature=0.7
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", temperature=0.7
         )
         client = GatewayModelClient(config)
 
@@ -937,13 +879,15 @@ class TestGatewayModelClientStreaming:
             mock_response.raise_for_status = MagicMock()
 
             async def async_iter_lines():
-                yield 'data: [DONE]'
+                yield "data: [DONE]"
 
             mock_response.aiter_lines = async_iter_lines
-            client._client.stream = MagicMock(return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(return_value=False)
-            ))
+            client._client.stream = MagicMock(
+                return_value=AsyncMock(
+                    __aenter__=AsyncMock(return_value=mock_response),
+                    __aexit__=AsyncMock(return_value=False),
+                )
+            )
 
             messages = [Message(role="user", content="Hi")]
             async for _ in client.chat_stream(messages, temperature=0.3):
@@ -956,26 +900,26 @@ class TestGatewayModelClientStreaming:
 # PART 6: GatewayModelClient API Call and Error Handling (10 tests)
 # ============================================================================
 
+
 class TestGatewayModelClientAPICall:
     """Tests for GatewayModelClient API call handling."""
 
     @pytest.mark.asyncio
     async def test_gateway_list_models(self):
         """Test listing available models."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_response = {
             "data": [
                 {"id": "gpt-4", "provider": "openai"},
-                {"id": "claude-3", "provider": "anthropic"}
+                {"id": "claude-3", "provider": "anthropic"},
             ]
         }
 
-        with patch.object(client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            client, "_make_api_call", new_callable=AsyncMock, return_value=mock_response
+        ):
             models = await client.list_models()
             assert len(models) == 2
             assert models[0]["id"] == "gpt-4"
@@ -983,10 +927,7 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_success(self):
         """Test successful API call."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_http_response = MagicMock()
@@ -1003,10 +944,7 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_get_method(self):
         """Test API call with GET method."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         mock_http_response = MagicMock()
@@ -1023,21 +961,23 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_rate_limit_error(self):
         """Test API call handles rate limit error."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
-        from src.core.errors import RateLimitError
         import httpx
+
+        from src.core.errors import RateLimitError
 
         mock_http_response = MagicMock()
         mock_http_response.status_code = 429
         mock_http_response.headers = {"Retry-After": "60"}
 
         mock_http_client = AsyncMock()
-        mock_http_client.post = AsyncMock(side_effect=httpx.HTTPStatusError("429", request=MagicMock(), response=mock_http_response))
+        mock_http_client.post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "429", request=MagicMock(), response=mock_http_response
+            )
+        )
         client._client = mock_http_client
 
         with pytest.raises(RateLimitError):
@@ -1046,20 +986,22 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_server_error(self):
         """Test API call handles server error."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
-        from src.core.errors import TransientError
         import httpx
+
+        from src.core.errors import TransientError
 
         mock_http_response = MagicMock()
         mock_http_response.status_code = 500
 
         mock_http_client = AsyncMock()
-        mock_http_client.post = AsyncMock(side_effect=httpx.HTTPStatusError("500", request=MagicMock(), response=mock_http_response))
+        mock_http_client.post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "500", request=MagicMock(), response=mock_http_response
+            )
+        )
         client._client = mock_http_client
 
         with pytest.raises(TransientError):
@@ -1068,21 +1010,23 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_client_error(self):
         """Test API call handles client error."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
-        from src.core.errors import AgentError
         import httpx
+
+        from src.core.errors import AgentError
 
         mock_http_response = MagicMock()
         mock_http_response.status_code = 400
         mock_http_response.text = "Bad request"
 
         mock_http_client = AsyncMock()
-        mock_http_client.post = AsyncMock(side_effect=httpx.HTTPStatusError("400", request=MagicMock(), response=mock_http_response))
+        mock_http_client.post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "400", request=MagicMock(), response=mock_http_response
+            )
+        )
         client._client = mock_http_client
 
         with pytest.raises(AgentError):
@@ -1091,14 +1035,12 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_network_error(self):
         """Test API call handles network error."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
-        from src.core.errors import TransientError
         import httpx
+
+        from src.core.errors import TransientError
 
         mock_http_client = AsyncMock()
         mock_http_client.post = AsyncMock(side_effect=httpx.RequestError("Connection failed"))
@@ -1110,10 +1052,7 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_auto_reconnect(self):
         """Test API call auto-reconnects if client is None."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
         client._client = None
 
@@ -1132,10 +1071,7 @@ class TestGatewayModelClientAPICall:
     @pytest.mark.asyncio
     async def test_gateway_make_api_call_retry_on_transient_error(self):
         """Test API call retries on transient error."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
         client = GatewayModelClient(config)
 
         from src.core.errors import TransientError
@@ -1146,10 +1082,9 @@ class TestGatewayModelClientAPICall:
 
         mock_http_client = AsyncMock()
         # First call fails, second succeeds
-        mock_http_client.post = AsyncMock(side_effect=[
-            TransientError("Temporary error"),
-            mock_http_response
-        ])
+        mock_http_client.post = AsyncMock(
+            side_effect=[TransientError("Temporary error"), mock_http_response]
+        )
         client._client = mock_http_client
 
         # This should retry and eventually succeed
@@ -1161,15 +1096,13 @@ class TestGatewayModelClientAPICall:
 # PART 7: DirectModelClient Initialization Tests (10 tests)
 # ============================================================================
 
+
 class TestDirectModelClientInit:
     """Tests for DirectModelClient initialization."""
 
     def test_direct_client_creation(self):
         """Test creating a DirectModelClient."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, google_api_key="test_key")
         client = DirectModelClient(config)
         assert client.config == config
         assert client._providers == {}
@@ -1185,10 +1118,7 @@ class TestDirectModelClientInit:
     @pytest.mark.asyncio
     async def test_direct_client_connect_google(self):
         """Test connecting Google provider."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, google_api_key="test_key")
         client = DirectModelClient(config)
 
         with patch("google.genai.Client") as mock_client:
@@ -1199,10 +1129,7 @@ class TestDirectModelClientInit:
     @pytest.mark.asyncio
     async def test_direct_client_connect_openai(self):
         """Test connecting OpenAI provider."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            openai_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, openai_api_key="test_key")
         client = DirectModelClient(config)
 
         with patch("openai.AsyncOpenAI") as mock_client:
@@ -1213,10 +1140,7 @@ class TestDirectModelClientInit:
     @pytest.mark.asyncio
     async def test_direct_client_connect_anthropic(self):
         """Test connecting Anthropic provider."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            anthropic_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, anthropic_api_key="test_key")
         client = DirectModelClient(config)
 
         with patch("anthropic.AsyncAnthropic") as mock_client:
@@ -1227,10 +1151,7 @@ class TestDirectModelClientInit:
     @pytest.mark.asyncio
     async def test_direct_client_connect_ollama(self):
         """Test connecting Ollama provider."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            ollama_base_url="http://localhost:11434"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, ollama_base_url="http://localhost:11434")
         client = DirectModelClient(config)
 
         with patch("httpx.AsyncClient") as mock_client:
@@ -1255,10 +1176,7 @@ class TestDirectModelClientInit:
     @pytest.mark.asyncio
     async def test_direct_client_close(self):
         """Test closing the direct client."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, google_api_key="test_key")
         client = DirectModelClient(config)
 
         mock_ollama = AsyncMock()
@@ -1272,10 +1190,7 @@ class TestDirectModelClientInit:
     @pytest.mark.asyncio
     async def test_direct_client_context_manager(self):
         """Test DirectModelClient as context manager."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, google_api_key="test_key")
         client = DirectModelClient(config)
 
         with patch.object(client, "connect", new_callable=AsyncMock):
@@ -1306,6 +1221,7 @@ class TestDirectModelClientInit:
 # PART 8: DirectModelClient Chat Tests (12 tests)
 # ============================================================================
 
+
 class TestDirectModelClientChat:
     """Tests for DirectModelClient chat functionality."""
 
@@ -1313,9 +1229,7 @@ class TestDirectModelClientChat:
     async def test_direct_chat_google(self):
         """Test chat with Google provider."""
         config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key",
-            model="gemini-2.5-flash"
+            mode=ClientMode.DIRECT, google_api_key="test_key", model="gemini-2.5-flash"
         )
         client = DirectModelClient(config)
 
@@ -1332,11 +1246,7 @@ class TestDirectModelClientChat:
     @pytest.mark.asyncio
     async def test_direct_chat_openai(self):
         """Test chat with OpenAI provider."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            openai_api_key="test_key",
-            model="gpt-4"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, openai_api_key="test_key", model="gpt-4")
         client = DirectModelClient(config)
 
         with patch.object(client, "_chat_openai", new_callable=AsyncMock) as mock_chat:
@@ -1344,7 +1254,7 @@ class TestDirectModelClientChat:
             client._providers[Provider.OPENAI] = MagicMock()
 
             messages = [Message(role="user", content="Hi")]
-            response = await client.chat(messages)
+            await client.chat(messages)
 
             mock_chat.assert_called_once()
 
@@ -1352,9 +1262,7 @@ class TestDirectModelClientChat:
     async def test_direct_chat_anthropic(self):
         """Test chat with Anthropic provider."""
         config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            anthropic_api_key="test_key",
-            model="claude-3"
+            mode=ClientMode.DIRECT, anthropic_api_key="test_key", model="claude-3"
         )
         client = DirectModelClient(config)
 
@@ -1363,17 +1271,14 @@ class TestDirectModelClientChat:
             client._providers[Provider.ANTHROPIC] = MagicMock()
 
             messages = [Message(role="user", content="Hi")]
-            response = await client.chat(messages)
+            await client.chat(messages)
 
             mock_chat.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_direct_chat_ollama(self):
         """Test chat with Ollama provider."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            model="llama2"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, model="llama2")
         client = DirectModelClient(config)
 
         with patch.object(client, "_chat_ollama", new_callable=AsyncMock) as mock_chat:
@@ -1381,7 +1286,7 @@ class TestDirectModelClientChat:
             client._providers[Provider.OLLAMA] = MagicMock()
 
             messages = [Message(role="user", content="Hi")]
-            response = await client.chat(messages)
+            await client.chat(messages)
 
             mock_chat.assert_called_once()
 
@@ -1389,9 +1294,7 @@ class TestDirectModelClientChat:
     async def test_direct_chat_auto_connect(self):
         """Test chat auto-connects if needed."""
         config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key",
-            model="gemini-2.5-flash"
+            mode=ClientMode.DIRECT, google_api_key="test_key", model="gemini-2.5-flash"
         )
         client = DirectModelClient(config)
         # Ensure providers are empty to trigger auto-connect
@@ -1413,9 +1316,7 @@ class TestDirectModelClientChat:
     async def test_direct_chat_stream_fallback(self):
         """Test streaming uses provider-specific streaming (Google)."""
         config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key",
-            model="gemini-2.5-flash"
+            mode=ClientMode.DIRECT, google_api_key="test_key", model="gemini-2.5-flash"
         )
         client = DirectModelClient(config)
 
@@ -1437,10 +1338,7 @@ class TestDirectModelClientChat:
     @pytest.mark.asyncio
     async def test_direct_list_models_google(self):
         """Test listing Google models."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, google_api_key="test_key")
         client = DirectModelClient(config)
         client._providers[Provider.GOOGLE] = MagicMock()
 
@@ -1450,10 +1348,7 @@ class TestDirectModelClientChat:
     @pytest.mark.asyncio
     async def test_direct_list_models_openai(self):
         """Test listing OpenAI models."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            openai_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, openai_api_key="test_key")
         client = DirectModelClient(config)
         client._providers[Provider.OPENAI] = MagicMock()
 
@@ -1463,10 +1358,7 @@ class TestDirectModelClientChat:
     @pytest.mark.asyncio
     async def test_direct_list_models_anthropic(self):
         """Test listing Anthropic models."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            anthropic_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, anthropic_api_key="test_key")
         client = DirectModelClient(config)
         client._providers[Provider.ANTHROPIC] = MagicMock()
 
@@ -1477,9 +1369,7 @@ class TestDirectModelClientChat:
     async def test_direct_chat_custom_model(self):
         """Test chat with custom model parameter."""
         config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key",
-            model="gemini-2.5-flash"
+            mode=ClientMode.DIRECT, google_api_key="test_key", model="gemini-2.5-flash"
         )
         client = DirectModelClient(config)
 
@@ -1500,7 +1390,7 @@ class TestDirectModelClientChat:
             mode=ClientMode.DIRECT,
             google_api_key="test_key",
             model="gemini-2.5-flash",
-            temperature=0.7
+            temperature=0.7,
         )
         client = DirectModelClient(config)
 
@@ -1519,16 +1409,14 @@ class TestDirectModelClientChat:
 # PART 9: ModelClient Factory Tests (10 tests)
 # ============================================================================
 
+
 class TestModelClientFactory:
     """Tests for ModelClient factory."""
 
     @pytest.mark.asyncio
     async def test_model_client_create_gateway_mode(self):
         """Test creating client in gateway mode."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
 
         with patch.object(GatewayModelClient, "connect", new_callable=AsyncMock):
             client = await ModelClient.create(config)
@@ -1537,10 +1425,7 @@ class TestModelClientFactory:
     @pytest.mark.asyncio
     async def test_model_client_create_direct_mode(self):
         """Test creating client in direct mode."""
-        config = ClientConfig(
-            mode=ClientMode.DIRECT,
-            google_api_key="test_key"
-        )
+        config = ClientConfig(mode=ClientMode.DIRECT, google_api_key="test_key")
 
         with patch.object(DirectModelClient, "connect", new_callable=AsyncMock):
             client = await ModelClient.create(config)
@@ -1549,10 +1434,13 @@ class TestModelClientFactory:
     @pytest.mark.asyncio
     async def test_model_client_create_from_env(self):
         """Test creating client from project config."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gpt-4o",
-            "gateway_url": "http://localhost:8000",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gpt-4o",
+                "gateway_url": "http://localhost:8000",
+            },
+        ):
             with patch.object(GatewayModelClient, "connect", new_callable=AsyncMock):
                 client = await ModelClient.create()
                 assert isinstance(client, GatewayModelClient)
@@ -1560,10 +1448,7 @@ class TestModelClientFactory:
     @pytest.mark.asyncio
     async def test_model_client_create_calls_connect(self):
         """Test that create calls connect."""
-        config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000"
-        )
+        config = ClientConfig(mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000")
 
         with patch.object(GatewayModelClient, "connect", new_callable=AsyncMock) as mock_connect:
             await ModelClient.create(config)
@@ -1571,10 +1456,13 @@ class TestModelClientFactory:
 
     def test_model_client_get_mode_gateway(self):
         """Test get_mode returns gateway mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gpt-4o",
-            "gateway_url": "http://localhost:8000",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gpt-4o",
+                "gateway_url": "http://localhost:8000",
+            },
+        ):
             mode = ModelClient.get_mode()
             assert mode == ClientMode.GATEWAY
 
@@ -1586,11 +1474,14 @@ class TestModelClientFactory:
 
     def test_model_client_get_mode_info_gateway(self):
         """Test get_mode_info for gateway mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gpt-4o",
-            "gateway_url": "http://localhost:8000",
-            "gateway_key": "test_key",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gpt-4o",
+                "gateway_url": "http://localhost:8000",
+                "gateway_key": "test_key",
+            },
+        ):
             info = ModelClient.get_mode_info()
             assert info["mode"] == "gateway"
             assert info["gateway_url"] == "http://localhost:8000"
@@ -1598,11 +1489,14 @@ class TestModelClientFactory:
 
     def test_model_client_get_mode_info_direct(self):
         """Test get_mode_info for direct mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gemini-2.5-flash",
-            "google_api_key": "google_key",
-            "openai_api_key": "openai_key",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gemini-2.5-flash",
+                "google_api_key": "google_key",
+                "openai_api_key": "openai_key",
+            },
+        ):
             info = ModelClient.get_mode_info()
             assert info["mode"] == "direct"
             assert "providers" in info
@@ -1626,6 +1520,7 @@ class TestModelClientFactory:
 # ============================================================================
 # PART 10: Provider Detection and Tool Conversion Tests (10 tests)
 # ============================================================================
+
 
 class TestProviderDetection:
     """Tests for provider detection."""
@@ -1718,17 +1613,13 @@ class TestProviderDetection:
 # PART 11: Edge Cases and Integration Tests (8 tests)
 # ============================================================================
 
+
 class TestEdgeCasesAndIntegration:
     """Tests for edge cases and integration scenarios."""
 
     def test_message_with_none_values(self):
         """Test message handles None values correctly."""
-        msg = Message(
-            role="user",
-            content=None,
-            thought=None,
-            tool_calls=None
-        )
+        msg = Message(role="user", content=None, thought=None, tool_calls=None)
         d = msg.to_dict()
         assert d["role"] == "user"
         assert "content" not in d
@@ -1743,19 +1634,12 @@ class TestEdgeCasesAndIntegration:
                 "path": {"type": "string"},
                 "options": {
                     "type": "object",
-                    "properties": {
-                        "recursive": {"type": "boolean"},
-                        "depth": {"type": "integer"}
-                    }
-                }
+                    "properties": {"recursive": {"type": "boolean"}, "depth": {"type": "integer"}},
+                },
             },
-            "required": ["path"]
+            "required": ["path"],
         }
-        tool = ToolDefinition(
-            name="complex_tool",
-            description="Complex tool",
-            parameters=params
-        )
+        tool = ToolDefinition(name="complex_tool", description="Complex tool", parameters=params)
         openai_format = tool.to_openai_format()
         assert openai_format["function"]["parameters"]["properties"]["options"]["type"] == "object"
 
@@ -1763,9 +1647,7 @@ class TestEdgeCasesAndIntegration:
     async def test_gateway_client_with_no_auth_key(self):
         """Test gateway client works without auth key."""
         config = ClientConfig(
-            mode=ClientMode.GATEWAY,
-            gateway_url="http://localhost:8000",
-            gateway_key=None
+            mode=ClientMode.GATEWAY, gateway_url="http://localhost:8000", gateway_key=None
         )
         client = GatewayModelClient(config)
 
@@ -1782,7 +1664,7 @@ class TestEdgeCasesAndIntegration:
             mode=ClientMode.DIRECT,
             google_api_key="google_key",
             openai_api_key="openai_key",
-            anthropic_api_key="anthropic_key"
+            anthropic_api_key="anthropic_key",
         )
         client = DirectModelClient(config)
 
@@ -1800,7 +1682,7 @@ class TestEdgeCasesAndIntegration:
             tool_calls=[{"id": "1"}],
             finish_reason="tool_calls",
             usage={"prompt_tokens": 10, "completion_tokens": 5},
-            raw={"raw": "data"}
+            raw={"raw": "data"},
         )
         assert response.content == "Response"
         assert response.thought == "Thinking"
@@ -1811,10 +1693,7 @@ class TestEdgeCasesAndIntegration:
 
     def test_stream_chunk_with_usage(self):
         """Test StreamChunk includes usage information."""
-        chunk = StreamChunk(
-            content="Hello",
-            usage={"prompt_tokens": 10, "completion_tokens": 5}
-        )
+        chunk = StreamChunk(content="Hello", usage={"prompt_tokens": 10, "completion_tokens": 5})
         assert chunk.usage is not None
         assert chunk.usage["prompt_tokens"] == 10
 
@@ -1826,11 +1705,7 @@ class TestEdgeCasesAndIntegration:
 
     def test_tool_call_round_trip(self):
         """Test ToolCall can be converted to dict and back."""
-        original = ToolCall(
-            id="call_123",
-            name="test_tool",
-            arguments={"param": "value"}
-        )
+        original = ToolCall(id="call_123", name="test_tool", arguments={"param": "value"})
         d = original.to_dict()
         restored = ToolCall.from_dict(d)
         assert restored.id == original.id

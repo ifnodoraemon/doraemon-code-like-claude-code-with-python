@@ -95,9 +95,7 @@ class CompressingRotatingFileHandler(RotatingFileHandler):
         """Compress a file using gzip."""
         try:
             with open(filepath, "rb") as f_in:
-                with gzip.open(
-                    f"{filepath}.gz", "wb", compresslevel=self._compress_level
-                ) as f_out:
+                with gzip.open(f"{filepath}.gz", "wb", compresslevel=self._compress_level) as f_out:
                     shutil.copyfileobj(f_in, f_out)
 
             # Remove original
@@ -153,9 +151,7 @@ class CompressingTimedRotatingFileHandler(TimedRotatingFileHandler):
         """Compress a file using gzip."""
         try:
             with open(filepath, "rb") as f_in:
-                with gzip.open(
-                    f"{filepath}.gz", "wb", compresslevel=self._compress_level
-                ) as f_out:
+                with gzip.open(f"{filepath}.gz", "wb", compresslevel=self._compress_level) as f_out:
                     shutil.copyfileobj(f_in, f_out)
 
             os.remove(filepath)
@@ -394,9 +390,7 @@ def setup_rotating_logger(
     handler = manager.create_handler(log_path)
     handler.setLevel(level)
 
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
 
     logger = logging.getLogger(name)

@@ -1,9 +1,14 @@
 """Comprehensive tests for skills.py"""
-import pytest
+
 from pathlib import Path
+
 from src.core.skills import (
-    SkillMetadata, Skill, SkillLoader, SkillManager,
-    create_skill_template, format_skills_for_prompt
+    Skill,
+    SkillLoader,
+    SkillManager,
+    SkillMetadata,
+    create_skill_template,
+    format_skills_for_prompt,
 )
 
 
@@ -107,9 +112,7 @@ class TestSkill:
 
     def test_matches_context_with_priority_boost(self):
         """Test that priority boosts score."""
-        metadata_low = SkillMetadata(
-            name="Low", description="Low", triggers=["test"], priority=0
-        )
+        metadata_low = SkillMetadata(name="Low", description="Low", triggers=["test"], priority=0)
         metadata_high = SkillMetadata(
             name="High", description="High", triggers=["test"], priority=50
         )

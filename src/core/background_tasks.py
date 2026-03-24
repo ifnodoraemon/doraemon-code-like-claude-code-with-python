@@ -159,7 +159,8 @@ class BackgroundTaskManager:
 
         # Auto-cleanup if too many completed tasks accumulated
         completed_count = sum(
-            1 for t in self._tasks.values()
+            1
+            for t in self._tasks.values()
             if t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED)
         )
         if completed_count > self._max_completed:
@@ -311,9 +312,7 @@ class BackgroundTaskManager:
         if task:
             task.token_usage += tokens
 
-    def list_tasks(
-        self, status: TaskStatus | None = None, limit: int = 20
-    ) -> list[dict[str, Any]]:
+    def list_tasks(self, status: TaskStatus | None = None, limit: int = 20) -> list[dict[str, Any]]:
         """
         List tasks.
 

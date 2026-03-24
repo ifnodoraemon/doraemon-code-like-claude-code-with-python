@@ -1,12 +1,17 @@
 """Advanced comprehensive tests for context_manager.py - 30+ tests for improved coverage"""
-import pytest
+
 import json
 import time
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
 from src.core.context_manager import (
-    Message, ConversationSummary, ContextConfig, ContextManager,
-    DEFAULT_CONFIG, create_llm_summarizer, SUMMARIZE_PROMPT
+    DEFAULT_CONFIG,
+    SUMMARIZE_PROMPT,
+    ContextConfig,
+    ContextManager,
+    ConversationSummary,
+    Message,
+    create_llm_summarizer,
 )
 
 
@@ -32,7 +37,7 @@ class TestMessageAdvanced:
             role="assistant",
             content="Response text",
             token_count=42,
-            metadata={"source": "test", "nested": {"key": "val"}}
+            metadata={"source": "test", "nested": {"key": "val"}},
         )
         data = msg.to_dict()
         assert data["role"] == "assistant"
@@ -79,7 +84,7 @@ class TestConversationSummaryAdvanced:
             content="Summary content",
             message_count=15,
             token_count=1000,
-            key_points=["Point 1", "Point 2"]
+            key_points=["Point 1", "Point 2"],
         )
         data = summary.to_dict()
         assert data["content"] == "Summary content"
@@ -89,11 +94,7 @@ class TestConversationSummaryAdvanced:
 
     def test_summary_from_dict_with_defaults(self):
         """Test from_dict uses defaults for missing fields."""
-        data = {
-            "content": "Test",
-            "message_count": 5,
-            "token_count": 100
-        }
+        data = {"content": "Test", "message_count": 5, "token_count": 100}
         summary = ConversationSummary.from_dict(data)
         assert summary.content == "Test"
         assert isinstance(summary.created_at, float)
@@ -107,7 +108,7 @@ class TestConversationSummaryAdvanced:
             "message_count": 20,
             "token_count": 2000,
             "created_at": created_time,
-            "key_points": ["Key 1", "Key 2", "Key 3"]
+            "key_points": ["Key 1", "Key 2", "Key 3"],
         }
         summary = ConversationSummary.from_dict(data)
         assert summary.created_at == created_time
@@ -129,9 +130,7 @@ class TestContextConfigAdvanced:
     def test_custom_config_values(self):
         """Test custom config values are respected."""
         config = ContextConfig(
-            max_context_tokens=50_000,
-            summarize_threshold=0.8,
-            keep_recent_messages=10
+            max_context_tokens=50_000, summarize_threshold=0.8, keep_recent_messages=10
         )
         assert config.max_context_tokens == 50_000
         assert config.summarize_threshold == 0.8
@@ -148,7 +147,7 @@ class TestContextManagerInitialization:
 
     def test_initialization_default(self):
         """Test default initialization."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             assert manager.project == "default"
             assert manager.config == DEFAULT_CONFIG
@@ -158,27 +157,27 @@ class TestContextManagerInitialization:
 
     def test_initialization_with_project(self):
         """Test initialization with custom project."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(project="my_project")
             assert manager.project == "my_project"
 
     def test_initialization_with_custom_config(self):
         """Test initialization with custom config."""
         config = ContextConfig(max_context_tokens=50_000)
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(config=config)
             assert manager.config.max_context_tokens == 50_000
 
     def test_initialization_with_summarizer(self):
         """Test initialization with custom summarizer."""
         summarizer = Mock()
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(summarize_fn=summarizer)
             assert manager.summarize_fn == summarizer
 
     def test_session_id_generation(self):
         """Test session ID is generated."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             assert len(manager.session_id) == 12
             assert isinstance(manager.session_id, str)
@@ -189,7 +188,7 @@ class TestContextManagerMessageManagement:
 
     def test_add_user_message(self):
         """Test adding user message."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             msg = manager.add_user_message("Hello")
             assert msg.role == "user"
@@ -199,7 +198,7 @@ class TestContextManagerMessageManagement:
 
     def test_add_system_message(self):
         """Test adding system message."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             msg = manager.add_system_message("System prompt")
             assert msg.role == "system"
@@ -208,7 +207,7 @@ class TestContextManagerMessageManagement:
 
     def test_add_assistant_message_basic(self):
         """Test adding assistant message."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             msg = manager.add_assistant_message("Response")
             assert msg.role == "assistant"
@@ -217,19 +216,15 @@ class TestContextManagerMessageManagement:
 
     def test_add_assistant_message_with_tokens(self):
         """Test adding assistant message with token counts."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
-            msg = manager.add_assistant_message(
-                "Response",
-                prompt_tokens=100,
-                completion_tokens=50
-            )
+            manager.add_assistant_message("Response", prompt_tokens=100, completion_tokens=50)
             assert manager._last_prompt_tokens == 100
             assert manager._total_tokens_used == 150
 
     def test_multiple_messages_sequence(self):
         """Test adding multiple messages in sequence."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_user_message("Q1")
             manager.add_assistant_message("A1")
@@ -244,7 +239,7 @@ class TestContextManagerTokenEstimation:
 
     def test_estimate_tokens_basic(self):
         """Test basic token estimation."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             # 300 chars / 3.0 = 100 tokens
             tokens = manager._estimate_tokens("x" * 300)
@@ -253,7 +248,7 @@ class TestContextManagerTokenEstimation:
     def test_estimate_tokens_custom_ratio(self):
         """Test token estimation with custom ratio."""
         config = ContextConfig(chars_per_token_estimate=4.0)
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(config=config)
             # 400 chars / 4.0 = 100 tokens
             tokens = manager._estimate_tokens("x" * 400)
@@ -261,14 +256,14 @@ class TestContextManagerTokenEstimation:
 
     def test_estimate_current_tokens_empty(self):
         """Test token estimation for empty context."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             tokens = manager._estimate_current_tokens()
             assert tokens == 0
 
     def test_estimate_current_tokens_with_messages(self):
         """Test token estimation with messages."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_user_message("x" * 300)  # ~100 tokens
             manager.add_assistant_message("x" * 300)  # ~100 tokens
@@ -277,7 +272,7 @@ class TestContextManagerTokenEstimation:
 
     def test_estimate_current_tokens_with_actual_counts(self):
         """Test token estimation uses actual counts when available."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_assistant_message("Response", completion_tokens=50)
             tokens = manager._estimate_current_tokens()
@@ -290,7 +285,7 @@ class TestContextManagerSummarization:
 
     def test_simple_summarize_empty(self):
         """Test simple summarization with empty messages."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             summary = manager._simple_summarize([])
             assert "Conversation Summary" in summary
@@ -298,7 +293,7 @@ class TestContextManagerSummarization:
 
     def test_simple_summarize_user_messages(self):
         """Test simple summarization extracts user messages."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             messages = [
                 Message(role="user", content="First question"),
@@ -311,7 +306,7 @@ class TestContextManagerSummarization:
 
     def test_simple_summarize_actions(self):
         """Test simple summarization extracts actions."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             messages = [
                 Message(role="user", content="Create a file"),
@@ -322,25 +317,21 @@ class TestContextManagerSummarization:
 
     def test_format_summaries_for_context_empty(self):
         """Test formatting empty summaries."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             formatted = manager._format_summaries_for_context()
             assert formatted == ""
 
     def test_format_summaries_for_context_with_summaries(self):
         """Test formatting summaries for context."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
-            manager.summaries.append(ConversationSummary(
-                content="Summary 1",
-                message_count=5,
-                token_count=100
-            ))
-            manager.summaries.append(ConversationSummary(
-                content="Summary 2",
-                message_count=5,
-                token_count=100
-            ))
+            manager.summaries.append(
+                ConversationSummary(content="Summary 1", message_count=5, token_count=100)
+            )
+            manager.summaries.append(
+                ConversationSummary(content="Summary 2", message_count=5, token_count=100)
+            )
             formatted = manager._format_summaries_for_context()
             assert "Segment 1" in formatted
             assert "Segment 2" in formatted
@@ -353,7 +344,7 @@ class TestContextManagerContextStats:
 
     def test_get_context_stats_empty(self):
         """Test context stats for empty manager."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             stats = manager.get_context_stats()
             assert stats["messages"] == 0
@@ -364,7 +355,7 @@ class TestContextManagerContextStats:
 
     def test_get_context_stats_with_messages(self):
         """Test context stats with messages."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_user_message("x" * 300)
             stats = manager.get_context_stats()
@@ -374,11 +365,8 @@ class TestContextManagerContextStats:
 
     def test_get_context_stats_needs_summary(self):
         """Test context stats indicates when summary needed."""
-        config = ContextConfig(
-            max_context_tokens=1000,
-            summarize_threshold=0.5
-        )
-        with patch.object(ContextManager, '_load_state'):
+        config = ContextConfig(max_context_tokens=1000, summarize_threshold=0.5)
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(config=config)
             # Add enough messages to exceed threshold (1000 * 0.5 = 500 tokens)
             # Each message is ~33 tokens (100 chars / 3.0), so need ~15 messages
@@ -394,7 +382,7 @@ class TestContextManagerClear:
 
     def test_clear_messages_only(self):
         """Test clearing messages without summaries."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_user_message("Test")
             manager.clear(keep_summaries=False)
@@ -403,7 +391,7 @@ class TestContextManagerClear:
 
     def test_clear_with_summary_preservation(self):
         """Test clearing messages while preserving summaries."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_user_message("Q1")
             manager.add_assistant_message("A1")
@@ -421,14 +409,12 @@ class TestContextManagerReset:
 
     def test_reset_clears_everything(self):
         """Test reset clears all state."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_user_message("Test")
-            manager.summaries.append(ConversationSummary(
-                content="Summary",
-                message_count=1,
-                token_count=50
-            ))
+            manager.summaries.append(
+                ConversationSummary(content="Summary", message_count=1, token_count=50)
+            )
             old_session = manager.session_id
 
             manager.reset()
@@ -440,7 +426,7 @@ class TestContextManagerReset:
 
     def test_reset_generates_new_session(self):
         """Test reset generates new session ID."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             session1 = manager.session_id
             manager.reset()
@@ -453,7 +439,7 @@ class TestContextManagerPersistence:
 
     def test_get_save_path(self):
         """Test save path generation."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(project="test_project")
             path = manager._get_save_path()
             assert "test_project.json" in str(path)
@@ -462,7 +448,7 @@ class TestContextManagerPersistence:
     def test_save_state_creates_file(self, tmp_path):
         """Test save state creates file."""
         config = ContextConfig(save_directory=str(tmp_path))
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(config=config)
             manager.add_user_message("Test message")
             manager._save_state()
@@ -473,7 +459,7 @@ class TestContextManagerPersistence:
     def test_save_state_content(self, tmp_path):
         """Test saved state has correct content."""
         config = ContextConfig(save_directory=str(tmp_path))
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager(config=config)
             manager.add_user_message("Test")
             manager._save_state()
@@ -492,7 +478,7 @@ class TestContextManagerPersistence:
         config = ContextConfig(save_directory=str(tmp_path))
 
         # First, save some state
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager1 = ContextManager(config=config)
             manager1.add_user_message("Saved message")
             manager1._save_state()
@@ -508,7 +494,7 @@ class TestContextManagerHistoryForAPI:
 
     def test_get_history_for_api_empty(self):
         """Test API history for empty context."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             history = manager.get_history_for_api()
             assert isinstance(history, list)
@@ -516,7 +502,7 @@ class TestContextManagerHistoryForAPI:
 
     def test_get_history_for_api_with_messages(self):
         """Test API history with messages."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
             manager.add_user_message("Hello")
             manager.add_assistant_message("Hi there")
@@ -527,13 +513,11 @@ class TestContextManagerHistoryForAPI:
 
     def test_get_history_for_api_with_summaries(self):
         """Test API history includes summaries."""
-        with patch.object(ContextManager, '_load_state'):
+        with patch.object(ContextManager, "_load_state"):
             manager = ContextManager()
-            manager.summaries.append(ConversationSummary(
-                content="Previous context",
-                message_count=5,
-                token_count=100
-            ))
+            manager.summaries.append(
+                ConversationSummary(content="Previous context", message_count=5, token_count=100)
+            )
             manager.add_user_message("New question")
             history = manager.get_history_for_api()
             # Should have summary context + new message
@@ -555,7 +539,7 @@ class TestLLMSummarizer:
         summarizer = create_llm_summarizer(chat_fn)
         messages = [
             Message(role="user", content="Question"),
-            Message(role="assistant", content="Answer")
+            Message(role="assistant", content="Answer"),
         ]
         result = summarizer(messages)
         assert result == "Generated summary"

@@ -51,17 +51,21 @@ def get_tools_for_mode(mode: str = "build"):
     definitions = []
     for tool in genai_tools:
         if hasattr(tool, "name"):
-            definitions.append(ToolDefinition(
-                name=tool.name,
-                description=getattr(tool, "description", ""),
-                parameters=getattr(tool, "parameters", {}) or {},
-            ))
+            definitions.append(
+                ToolDefinition(
+                    name=tool.name,
+                    description=getattr(tool, "description", ""),
+                    parameters=getattr(tool, "parameters", {}) or {},
+                )
+            )
         elif isinstance(tool, dict):
-            definitions.append(ToolDefinition(
-                name=tool.get("name", ""),
-                description=tool.get("description", ""),
-                parameters=tool.get("parameters", {}),
-            ))
+            definitions.append(
+                ToolDefinition(
+                    name=tool.get("name", ""),
+                    description=tool.get("description", ""),
+                    parameters=tool.get("parameters", {}),
+                )
+            )
     return definitions
 
 
@@ -84,7 +88,7 @@ async def chat_endpoint(request: ChatRequest):
         # Prepare messages
         messages = [
             Message(role="system", content="You are Doraemon Code, an intelligent AI assistant."),
-            Message(role="user", content=request.message)
+            Message(role="user", content=request.message),
         ]
 
         # Generator for SSE
@@ -95,7 +99,7 @@ async def chat_endpoint(request: ChatRequest):
                     data = {
                         "content": chunk.content,
                         "tool_calls": chunk.tool_calls,
-                        "finish_reason": chunk.finish_reason
+                        "finish_reason": chunk.finish_reason,
                     }
                     yield f"data: {json.dumps(data)}\n\n"
 

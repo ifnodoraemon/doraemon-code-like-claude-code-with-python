@@ -105,9 +105,7 @@ class GoogleAdapter(BaseAdapter):
         # Convert response
         return self._convert_response(response, request.model)
 
-    async def chat_stream(
-        self, request: ChatRequest
-    ) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[StreamChunk]:
         """Stream chat response from Gemini."""
 
         contents, system_instruction = self._convert_messages(request.messages)
@@ -171,7 +169,9 @@ class GoogleAdapter(BaseAdapter):
         """Get available Google models."""
         return GOOGLE_MODELS
 
-    def _convert_messages(self, messages: list[ChatMessage]) -> tuple[list[dict[str, Any]], str | None]:
+    def _convert_messages(
+        self, messages: list[ChatMessage]
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """Convert unified messages to Gemini format.
 
         Returns:
@@ -200,21 +200,25 @@ class GoogleAdapter(BaseAdapter):
             # Tool calls (function responses)
             if msg.tool_calls:
                 for tc in msg.tool_calls:
-                    parts.append({
-                        "function_call": {
-                            "name": tc.name,
-                            "args": tc.arguments,
+                    parts.append(
+                        {
+                            "function_call": {
+                                "name": tc.name,
+                                "args": tc.arguments,
+                            }
                         }
-                    })
+                    )
 
             # Tool results
             if role == "tool" and msg.tool_call_id and msg.content:
-                parts.append({
-                    "function_response": {
-                        "name": msg.name or "function",
-                        "response": {"result": msg.content},
+                parts.append(
+                    {
+                        "function_response": {
+                            "name": msg.name or "function",
+                            "response": {"result": msg.content},
+                        }
                     }
-                })
+                )
 
             if parts:
                 contents.append({"role": gemini_role, "parts": parts})
@@ -250,7 +254,7 @@ class GoogleAdapter(BaseAdapter):
                     types.FunctionDeclaration(
                         name=tool.name,
                         description=tool.description,
-                        parameters=tool.parameters, # type: ignore
+                        parameters=tool.parameters,  # type: ignore
                     )
                 )
             config_kwargs["tools"] = [types.Tool(function_declarations=function_declarations)]

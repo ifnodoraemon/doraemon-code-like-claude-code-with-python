@@ -16,7 +16,6 @@ Features:
 """
 
 import hashlib
-import json
 import os
 import shutil
 import sqlite3
@@ -26,7 +25,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any
 
 
 @dataclass
@@ -35,9 +34,9 @@ class FileSnapshot:
 
     path: str
     exists: bool
-    content_hash: Optional[str] = None
-    size: Optional[int] = None
-    mtime: Optional[float] = None
+    content_hash: str | None = None
+    size: int | None = None
+    mtime: float | None = None
 
     @classmethod
     def from_path(cls, path: Path) -> "FileSnapshot":
@@ -65,10 +64,10 @@ class EnvironmentSnapshot:
 
     timestamp: str
     root_dir: str
-    files: Dict[str, FileSnapshot] = field(default_factory=dict)
-    env_vars: Dict[str, str] = field(default_factory=dict)
+    files: dict[str, FileSnapshot] = field(default_factory=dict)
+    env_vars: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert snapshot to dictionary."""
         return {
             "timestamp": self.timestamp,
@@ -92,20 +91,20 @@ class FileDiff:
 
     path: str
     change_type: str  # "created", "modified", "deleted", "unchanged"
-    old_hash: Optional[str] = None
-    new_hash: Optional[str] = None
+    old_hash: str | None = None
+    new_hash: str | None = None
 
 
 @dataclass
 class EnvironmentDiff:
     """Difference between two environment snapshots."""
 
-    created_files: List[str] = field(default_factory=list)
-    modified_files: List[str] = field(default_factory=list)
-    deleted_files: List[str] = field(default_factory=list)
-    env_var_changes: Dict[str, Dict[str, Optional[str]]] = field(default_factory=dict)
+    created_files: list[str] = field(default_factory=list)
+    modified_files: list[str] = field(default_factory=list)
+    deleted_files: list[str] = field(default_factory=list)
+    env_var_changes: dict[str, dict[str, str | None]] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert diff to dictionary."""
         return {
             "created_files": self.created_files,
@@ -144,13 +143,13 @@ class IsolatedEnvironment:
 
     def __init__(
         self,
-        base_dir: Optional[str] = None,
-        fixtures: Optional[List[str]] = None,
+        base_dir: str | None = None,
+        fixtures: list[str] | None = None,
         cleanup: bool = True,
         init_git: bool = False,
         init_db: bool = False,
-        db_schema: Optional[str] = None,
-        env_vars: Optional[Dict[str, str]] = None,
+        db_schema: str | None = None,
+        env_vars: dict[str, str] | None = None,
         change_cwd: bool = True,
     ):
         """
@@ -177,13 +176,13 @@ class IsolatedEnvironment:
         self.change_cwd = change_cwd
 
         # State tracking
-        self._temp_dir: Optional[tempfile.TemporaryDirectory] = None
-        self._root_dir: Optional[Path] = None
-        self._original_cwd: Optional[Path] = None
-        self._original_env: Dict[str, Optional[str]] = {}
-        self._initial_snapshot: Optional[EnvironmentSnapshot] = None
-        self._db_connection: Optional[sqlite3.Connection] = None
-        self._created_files: Set[str] = set()
+        self._temp_dir: tempfile.TemporaryDirectory | None = None
+        self._root_dir: Path | None = None
+        self._original_cwd: Path | None = None
+        self._original_env: dict[str, str | None] = {}
+        self._initial_snapshot: EnvironmentSnapshot | None = None
+        self._db_connection: sqlite3.Connection | None = None
+        self._created_files: set[str] = set()
         self._is_active: bool = False
 
     @property
@@ -194,12 +193,12 @@ class IsolatedEnvironment:
         return self._root_dir
 
     @property
-    def original_cwd(self) -> Optional[Path]:
+    def original_cwd(self) -> Path | None:
         """Get the original working directory."""
         return self._original_cwd
 
     @property
-    def db_path(self) -> Optional[Path]:
+    def db_path(self) -> Path | None:
         """Get the database path if initialized."""
         if self.init_db and self._root_dir:
             return self._root_dir / "test.db"
@@ -325,10 +324,7 @@ class IsolatedEnvironment:
         )
 
         # Create initial commit if there are files (excluding .git directory)
-        has_files = any(
-            item for item in self._root_dir.iterdir()
-            if item.name != ".git"
-        )
+        has_files = any(item for item in self._root_dir.iterdir() if item.name != ".git")
         if has_files:
             subprocess.run(
                 ["git", "add", "-A"],
@@ -393,7 +389,7 @@ class IsolatedEnvironment:
 
         return self._root_dir
 
-    def create_file(self, path: Union[str, Path], content: str = "") -> Path:
+    def create_file(self, path: str | Path, content: str = "") -> Path:
         """
         Create a test file in the isolated environment.
 
@@ -410,7 +406,7 @@ class IsolatedEnvironment:
         self._created_files.add(str(file_path.relative_to(self._root_dir)))
         return file_path
 
-    def create_directory(self, path: Union[str, Path]) -> Path:
+    def create_directory(self, path: str | Path) -> Path:
         """
         Create a directory in the isolated environment.
 
@@ -424,7 +420,7 @@ class IsolatedEnvironment:
         dir_path.mkdir(parents=True, exist_ok=True)
         return dir_path
 
-    def copy_from_template(self, template_name: str, dest: Optional[str] = None) -> Path:
+    def copy_from_template(self, template_name: str, dest: str | None = None) -> Path:
         """
         Copy files from a template directory.
 
@@ -455,7 +451,7 @@ class IsolatedEnvironment:
 
         return dest_path
 
-    def read_file(self, path: Union[str, Path]) -> str:
+    def read_file(self, path: str | Path) -> str:
         """
         Read a file from the isolated environment.
 
@@ -468,7 +464,7 @@ class IsolatedEnvironment:
         file_path = self._root_dir / path
         return file_path.read_text()
 
-    def file_exists(self, path: Union[str, Path]) -> bool:
+    def file_exists(self, path: str | Path) -> bool:
         """
         Check if a file exists in the isolated environment.
 
@@ -548,7 +544,7 @@ class IsolatedEnvironment:
             env_var_changes=env_changes,
         )
 
-    def get_created_files(self) -> List[str]:
+    def get_created_files(self) -> list[str]:
         """
         Get list of files created since environment initialization.
 
@@ -561,7 +557,7 @@ class IsolatedEnvironment:
         diff = self.diff(self._initial_snapshot)
         return diff.created_files
 
-    def get_modified_files(self) -> List[str]:
+    def get_modified_files(self) -> list[str]:
         """
         Get list of files modified since environment initialization.
 
@@ -574,7 +570,7 @@ class IsolatedEnvironment:
         diff = self.diff(self._initial_snapshot)
         return diff.modified_files
 
-    def get_deleted_files(self) -> List[str]:
+    def get_deleted_files(self) -> list[str]:
         """
         Get list of files deleted since environment initialization.
 
@@ -587,7 +583,7 @@ class IsolatedEnvironment:
         diff = self.diff(self._initial_snapshot)
         return diff.deleted_files
 
-    def get_all_files(self) -> List[str]:
+    def get_all_files(self) -> list[str]:
         """
         Get list of all files in the environment.
 
@@ -625,7 +621,7 @@ class IsolatedEnvironment:
         self._db_connection.commit()
         return cursor
 
-    def query_sql(self, sql: str, params: tuple = ()) -> List[tuple]:
+    def query_sql(self, sql: str, params: tuple = ()) -> list[tuple]:
         """
         Execute a query and return all results.
 
@@ -709,7 +705,7 @@ class IsolatedEnvironment:
 
     def run_command(
         self,
-        command: List[str],
+        command: list[str],
         capture_output: bool = True,
         check: bool = True,
         **kwargs,
@@ -734,7 +730,7 @@ class IsolatedEnvironment:
             **kwargs,
         )
 
-    def get_path(self, relative_path: Union[str, Path]) -> Path:
+    def get_path(self, relative_path: str | Path) -> Path:
         """
         Get absolute path for a relative path in the environment.
 
@@ -758,7 +754,7 @@ class IsolatedEnvironment:
 
 @contextmanager
 def isolated_trial(
-    fixtures: Optional[List[str]] = None,
+    fixtures: list[str] | None = None,
     init_git: bool = False,
     init_db: bool = False,
     **kwargs,
@@ -791,8 +787,8 @@ def isolated_trial(
 
 def create_fixture_template(
     name: str,
-    files: Dict[str, str],
-    base_dir: Optional[Path] = None,
+    files: dict[str, str],
+    base_dir: Path | None = None,
 ) -> Path:
     """
     Create a new fixture template.

@@ -120,7 +120,7 @@ class ModelRouter:
         )
         return {
             p: (r if isinstance(r, bool) else False)
-            for p, r in zip(self._adapters, results)
+            for p, r in zip(self._adapters, results, strict=False)
         }
 
     def get_providers(self) -> list[str]:

@@ -21,8 +21,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from .paths import checkpoints_dir
-
 logger = logging.getLogger(__name__)
 
 
@@ -261,9 +259,7 @@ class CheckpointManager:
         self._save_checkpoint(self._current)
         self._save_index()
 
-        logger.info(
-            f"Checkpoint {checkpoint_id} saved with {len(self._current.files)} file(s)"
-        )
+        logger.info(f"Checkpoint {checkpoint_id} saved with {len(self._current.files)} file(s)")
 
         self._current = None
         self._pending_files.clear()
@@ -348,9 +344,7 @@ class CheckpointManager:
                     result["restored_files"].append(snapshot.path)
                 except Exception as e:
                     logger.error(f"Failed to restore {snapshot.path}: {e}")
-                    result["failed_files"].append(
-                        {"path": snapshot.path, "error": str(e)}
-                    )
+                    result["failed_files"].append({"path": snapshot.path, "error": str(e)})
 
         # Handle conversation rewind
         if mode in ("conversation", "both"):
@@ -370,8 +364,7 @@ class CheckpointManager:
             self._save_index()
 
         logger.info(
-            f"Rewound to checkpoint {checkpoint_id}: "
-            f"{len(result['restored_files'])} files restored"
+            f"Rewound to checkpoint {checkpoint_id}: {len(result['restored_files'])} files restored"
         )
 
         return result

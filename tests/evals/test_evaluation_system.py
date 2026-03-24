@@ -4,9 +4,10 @@
 演示如何使用完整的评估系统
 """
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -57,9 +58,7 @@ def test_comprehensive_evaluation():
     )
 
     # 使用少量任务进行测试
-    task_files = [
-        str(Path(__file__).parent / "tasks" / "basic" / "file_and_code_tasks.json")
-    ]
+    task_files = [str(Path(__file__).parent / "tasks" / "basic" / "file_and_code_tasks.json")]
 
     # 运行评估
     report = evaluator.run_full_evaluation(create_mock_agent, task_files)
@@ -83,13 +82,9 @@ def test_parallel_evaluation():
 
     evaluator = ParallelEvaluator(max_workers=2, use_processes=False)
 
-    task_files = [
-        str(Path(__file__).parent / "tasks" / "basic" / "file_and_code_tasks.json")
-    ]
+    task_files = [str(Path(__file__).parent / "tasks" / "basic" / "file_and_code_tasks.json")]
 
-    summary = evaluator.run_parallel_evaluation(
-        create_mock_agent, task_files, n_trials=1
-    )
+    summary = evaluator.run_parallel_evaluation(create_mock_agent, task_files, n_trials=1)
 
     # 验证并行评估结果
     assert summary["total_tasks"] > 0
@@ -206,7 +201,7 @@ def test_model_comparison():
     """测试多模型对比"""
     from tests.evals.multi_model_comparator import MultiModelComparator
 
-    comparator = MultiModelComparator(output_dir="eval_results/test/comparison")
+    MultiModelComparator(output_dir="eval_results/test/comparison")
 
     # 创建不同成功率的模拟 Agent
     def create_agent_a():
@@ -214,11 +209,6 @@ def test_model_comparison():
 
     def create_agent_b():
         return MockAgent(success_rate=0.7)
-
-    agent_factories = {
-        "model_a": create_agent_a,
-        "model_b": create_agent_b,
-    }
 
     # 注意: 这个测试需要实际的任务文件，这里只测试结构
     # 实际使用时需要提供真实的任务文件

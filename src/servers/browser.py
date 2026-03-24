@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 
@@ -18,6 +17,7 @@ mcp = FastMCP("AgentBrowser")
 _browser: Browser | None = None
 _playwright = None
 _browser_lock = asyncio.Lock()
+
 
 async def get_browser():
     global _browser, _playwright
@@ -60,7 +60,7 @@ async def browse_page(url: str) -> str:
             text = await page.evaluate("document.body.innerText")
             title = await page.title()
 
-            return f"Title: {title}\nURL: {url}\n\n{text[:10000]}..." # Limit output size
+            return f"Title: {title}\nURL: {url}\n\n{text[:10000]}..."  # Limit output size
 
         finally:
             await page.close()
@@ -68,6 +68,7 @@ async def browse_page(url: str) -> str:
     except Exception as e:
         logger.error(f"Browser error for {url}: {e}")
         return f"Error: {str(e)}"
+
 
 @mcp.tool()
 async def take_screenshot(url: str, path: str) -> str:
@@ -92,6 +93,7 @@ async def take_screenshot(url: str, path: str) -> str:
     except Exception as e:
         logger.error(f"Screenshot error: {e}")
         return f"Error: {str(e)}"
+
 
 if __name__ == "__main__":
     mcp.run()

@@ -47,7 +47,7 @@ def create_docx(path: str, content: str, title: str | None = None) -> str:
         if title:
             doc.add_heading(title, 0)
 
-        for paragraph in content.split('\n'):
+        for paragraph in content.split("\n"):
             if paragraph.strip():
                 doc.add_paragraph(paragraph)
 

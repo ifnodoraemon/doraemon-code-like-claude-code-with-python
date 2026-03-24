@@ -9,21 +9,18 @@ This test suite provides extensive coverage of:
 """
 
 import asyncio
-import inspect
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
-from typing import Optional
 
 from src.host.tools import (
-    ToolRegistry,
     ToolDefinition,
-    get_default_registry,
+    ToolRegistry,
     call_tool,
+    get_default_registry,
     get_genai_tools,
     is_sensitive_tool,
-    _create_default_registry,
 )
-
 
 # ========================================
 # 1. ToolRegistry Initialization Tests (8)
@@ -294,12 +291,10 @@ class TestToolCalling:
         registry = ToolRegistry()
 
         def multi_arg_tool(a: int, b: int, c: str) -> str:
-            return f"{a}+{b}={a+b}, msg={c}"
+            return f"{a}+{b}={a + b}, msg={c}"
 
         registry.register(multi_arg_tool)
-        result = await registry.call_tool(
-            "multi_arg_tool", {"a": 3, "b": 4, "c": "test"}
-        )
+        result = await registry.call_tool("multi_arg_tool", {"a": 3, "b": 4, "c": "test"})
         assert result == "3+4=7, msg=test"
 
 
@@ -564,9 +559,7 @@ class TestParameterExtraction:
         """Test extracting multiple parameter types."""
         registry = ToolRegistry()
 
-        def multi_type_tool(
-            name: str, count: int, ratio: float, enabled: bool
-        ) -> str:
+        def multi_type_tool(name: str, count: int, ratio: float, enabled: bool) -> str:
             return f"{name}:{count}:{ratio}:{enabled}"
 
         registry.register(multi_type_tool)
@@ -721,6 +714,7 @@ class TestToolDefinition:
 
     def test_tool_definition_creation(self):
         """Test creating ToolDefinition."""
+
         def func() -> str:
             return "result"
 
@@ -738,6 +732,7 @@ class TestToolDefinition:
 
     def test_tool_definition_with_sensitive(self):
         """Test ToolDefinition with sensitive flag."""
+
         def func() -> str:
             return "result"
 
@@ -752,6 +747,7 @@ class TestToolDefinition:
 
     def test_tool_definition_with_timeout(self):
         """Test ToolDefinition with custom timeout."""
+
         def func() -> str:
             return "result"
 
@@ -801,7 +797,10 @@ class TestEdgeCases:
     def test_register_lambda_function(self):
         """Test registering lambda function."""
         registry = ToolRegistry()
-        lambda_tool = lambda x: str(x * 2)
+
+        def lambda_tool(x):
+            return str(x * 2)
+
         registry.register(lambda_tool, name="lambda_tool")
         assert "lambda_tool" in registry.get_tool_names()
 

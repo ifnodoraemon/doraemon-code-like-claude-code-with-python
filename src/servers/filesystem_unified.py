@@ -218,10 +218,10 @@ def find_symbol(symbol: str, path: str = ".") -> str:
 def glob_files(pattern: str, exclude: list[str] | None = None, max_results: int = 1000) -> str:
     """Find files matching a glob pattern."""
     try:
-        if '..' in pattern:
+        if ".." in pattern:
             return "Error: Pattern cannot contain '..' for security reasons."
 
-        if pattern.startswith('/') or pattern.startswith('~'):
+        if pattern.startswith("/") or pattern.startswith("~"):
             return "Error: Pattern cannot be an absolute path."
 
         matches = glob_module.glob(pattern, recursive=True)
@@ -280,9 +280,18 @@ def grep_search(pattern: str, include: str = "*", path: str = ".") -> str:
 
     # Directories to skip during recursive search
     skip_dirs = {
-        ".git", "node_modules", ".venv", "venv", "__pycache__",
-        ".tox", ".mypy_cache", ".pytest_cache", "dist", "build",
-        ".eggs", ".egg-info",
+        ".git",
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        "dist",
+        "build",
+        ".eggs",
+        ".egg-info",
     }
     # Max file size to search (10 MB)
     max_file_size = 10 * 1024 * 1024
@@ -814,7 +823,9 @@ def notebook_read(path: str) -> str:
                             if "text/plain" in data:
                                 result.append("".join(data["text/plain"]))
                         elif output_type == "error":
-                            result.append(f"Error: {output.get('ename', '')}: {output.get('evalue', '')}")
+                            result.append(
+                                f"Error: {output.get('ename', '')}: {output.get('evalue', '')}"
+                            )
 
             result.append("")
 
@@ -861,7 +872,7 @@ def notebook_edit(
 
         if operation == "delete":
             if cell_index < 0 or cell_index >= len(cells):
-                return f"Error: Cell index {cell_index} out of range (0-{len(cells)-1})"
+                return f"Error: Cell index {cell_index} out of range (0-{len(cells) - 1})"
             del cells[cell_index]
             notebook["cells"] = cells
 
@@ -881,7 +892,7 @@ def notebook_edit(
 
         elif operation == "replace":
             if cell_index < 0 or cell_index >= len(cells):
-                return f"Error: Cell index {cell_index} out of range (0-{len(cells)-1})"
+                return f"Error: Cell index {cell_index} out of range (0-{len(cells) - 1})"
             cells[cell_index]["source"] = new_source.split("\n")
             # Clear outputs for code cells
             if cells[cell_index].get("cell_type") == "code":

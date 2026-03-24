@@ -18,8 +18,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .paths import sessions_dir
-
 logger = logging.getLogger(__name__)
 
 
@@ -217,7 +215,9 @@ class SessionManager:
         """Save session to file."""
         path = self._get_session_path(session.metadata.id)
         session.metadata.updated_at = time.time()
-        path.write_text(json.dumps(session.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        path.write_text(
+            json.dumps(session.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
     def load_session(self, session_id: str) -> SessionData | None:
         """Load a session by ID."""
@@ -351,9 +351,7 @@ class SessionManager:
 
         return sessions[:limit]
 
-    def search_sessions(
-        self, query: str, project: str | None = None
-    ) -> list[SessionMetadata]:
+    def search_sessions(self, query: str, project: str | None = None) -> list[SessionMetadata]:
         """
         Search sessions by name, description, or tags.
 

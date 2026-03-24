@@ -2,10 +2,10 @@ import base64
 import logging
 from abc import ABC, abstractmethod
 
-from google import genai
-from google.genai import types
 from openai import OpenAI
 
+from google import genai
+from google.genai import types
 from src.core.config import load_config
 
 # Setup logging
@@ -121,7 +121,9 @@ class OpenAIAdapter(VisionAdapter):
                             {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
-                                "image_url": {"url": f"data:{self._get_mime_type(image_path)};base64,{base64_image}"},
+                                "image_url": {
+                                    "url": f"data:{self._get_mime_type(image_path)};base64,{base64_image}"
+                                },
                             },
                         ],
                     }

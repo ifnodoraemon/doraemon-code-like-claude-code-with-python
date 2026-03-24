@@ -8,9 +8,10 @@
 import json
 import random
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -21,10 +22,10 @@ class GradeResult:
 
     score: float  # 0-1
     grader_type: str  # 'code', 'model', 'human'
-    breakdown: Dict[str, float] = field(default_factory=dict)  # 各维度得分
+    breakdown: dict[str, float] = field(default_factory=dict)  # 各维度得分
     feedback: str = ""  # 反馈信息
     confidence: float = 1.0  # 置信度
-    metadata: Dict[str, Any] = field(default_factory=dict)  # 额外信息
+    metadata: dict[str, Any] = field(default_factory=dict)  # 额外信息
 
 
 class CodeGrader:
@@ -39,10 +40,10 @@ class CodeGrader:
     - Lint 通过
     """
 
-    def __init__(self, base_dir: Optional[str] = None):
+    def __init__(self, base_dir: str | None = None):
         self.base_dir = Path(base_dir) if base_dir else Path.cwd()
 
-    def grade(self, result: Dict, task: Dict) -> GradeResult:
+    def grade(self, result: dict, task: dict) -> GradeResult:
         """
         执行代码评分
 
@@ -83,9 +84,7 @@ class CodeGrader:
                 "passed": verification["passed"],
                 "total": verification["total"],
                 "failed_assertions": [
-                    r["assertion"]
-                    for r in verification["results"]
-                    if not r["result"].success
+                    r["assertion"] for r in verification["results"] if not r["result"].success
                 ],
             },
         )
@@ -111,9 +110,9 @@ class ModelGrader:
             model_client: 模型客户端，如果为 None 则使用默认客户端
         """
         self.model_client = model_client
-        self.calibration_data: List[Dict] = []
+        self.calibration_data: list[dict] = []
 
-    def grade(self, result: Dict, task: Dict) -> GradeResult:
+    def grade(self, result: dict, task: dict) -> GradeResult:
         """
         执行模型评分
 
@@ -125,8 +124,8 @@ class ModelGrader:
             GradeResult
         """
         rubric = task.get("rubric", "")
-        code_output = result.get("output", "")
-        tool_calls = result.get("tool_calls", [])
+        result.get("output", "")
+        result.get("tool_calls", [])
 
         # 构建评分提示
         prompt = self._build_grading_prompt(result, task, rubric)
@@ -149,22 +148,20 @@ class ModelGrader:
             # 回退到启发式评分
             return self._heuristic_grade(result, task, error=str(e))
 
-    def _build_grading_prompt(
-        self, result: Dict, task: Dict, rubric: str
-    ) -> str:
+    def _build_grading_prompt(self, result: dict, task: dict, rubric: str) -> str:
         """构建评分提示"""
         return f"""你是一个代码质量评估专家。请评估以下任务执行结果。
 
 ## 任务描述
-{task.get('prompt', '')}
+{task.get("prompt", "")}
 
 ## 评分标准
-{rubric if rubric else '代码质量、完整性、可维护性'}
+{rubric if rubric else "代码质量、完整性、可维护性"}
 
 ## 执行结果
-成功: {result.get('success', False)}
-输出: {result.get('output', '')[:2000]}
-工具调用: {len(result.get('tool_calls', []))} 次
+成功: {result.get("success", False)}
+输出: {result.get("output", "")[:2000]}
+工具调用: {len(result.get("tool_calls", []))} 次
 
 ## 评分要求
 请从以下维度评分（每个维度 0-1 分）：
@@ -189,9 +186,7 @@ class ModelGrader:
 }}
 """
 
-    def _parse_model_response(
-        self, response: Any, result: Dict, task: Dict
-    ) -> GradeResult:
+    def _parse_model_response(self, response: Any, result: dict, task: dict) -> GradeResult:
         """解析模型响应"""
         try:
             # 提取 JSON
@@ -199,6 +194,7 @@ class ModelGrader:
 
             # 尝试找到 JSON 块
             import re
+
             json_match = re.search(r"\{[\s\S]*\}", content)
             if json_match:
                 data = json.loads(json_match.group())
@@ -216,9 +212,7 @@ class ModelGrader:
         # 解析失败，使用启发式
         return self._heuristic_grade(result, task, error="解析模型响应失败")
 
-    def _heuristic_grade(
-        self, result: Dict, task: Dict, error: Optional[str] = None
-    ) -> GradeResult:
+    def _heuristic_grade(self, result: dict, task: dict, error: str | None = None) -> GradeResult:
         """启发式评分（当模型不可用时）"""
         score = 0.0
         breakdown = {}
@@ -268,7 +262,7 @@ class ModelGrader:
             metadata={"heuristic": True, "error": error},
         )
 
-    def calibrate(self, human_grades: List[Dict]):
+    def calibrate(self, human_grades: list[dict]):
         """
         使用人工评分数据校准模型
 
@@ -289,7 +283,7 @@ class HumanGrader:
     - 校准模型评分器
     """
 
-    def __init__(self, sample_rate: float = 0.1, callback: Optional[Callable] = None):
+    def __init__(self, sample_rate: float = 0.1, callback: Callable | None = None):
         """
         初始化人工评分器
 
@@ -299,13 +293,13 @@ class HumanGrader:
         """
         self.sample_rate = sample_rate
         self.callback = callback
-        self.grades: List[Dict] = []
+        self.grades: list[dict] = []
 
     def should_sample(self) -> bool:
         """决定是否需要人工评估"""
         return random.random() < self.sample_rate
 
-    def grade(self, result: Dict, task: Dict) -> Optional[GradeResult]:
+    def grade(self, result: dict, task: dict) -> GradeResult | None:
         """
         执行人工评分
 
@@ -351,7 +345,7 @@ class HumanGrader:
         )
         return None
 
-    def get_pending_reviews(self) -> List[Dict]:
+    def get_pending_reviews(self) -> list[dict]:
         """获取待人工评估的项目"""
         return [g for g in self.grades if g.get("pending")]
 
@@ -390,7 +384,7 @@ class MultiLayerGrader:
         code_weight: float = 0.5,
         model_weight: float = 0.3,
         human_weight: float = 0.2,
-        base_dir: Optional[str] = None,
+        base_dir: str | None = None,
         model_client=None,
         human_sample_rate: float = 0.1,
     ):
@@ -413,7 +407,7 @@ class MultiLayerGrader:
         self.model_grader = ModelGrader(model_client)
         self.human_grader = HumanGrader(human_sample_rate)
 
-    def grade(self, result: Dict, task: Dict) -> GradeResult:
+    def grade(self, result: dict, task: dict) -> GradeResult:
         """
         执行多层评分
 
@@ -452,7 +446,7 @@ class MultiLayerGrader:
         return self._aggregate_grades(grades, weights)
 
     def _aggregate_grades(
-        self, grades: Dict[str, GradeResult], weights: Dict[str, float]
+        self, grades: dict[str, GradeResult], weights: dict[str, float]
     ) -> GradeResult:
         """聚合多个评分结果"""
         total_score = 0.0
@@ -484,7 +478,7 @@ class MultiLayerGrader:
             },
         )
 
-    def generate_grade_report(self, result: Dict, task: Dict) -> Dict:
+    def generate_grade_report(self, result: dict, task: dict) -> dict:
         """生成详细的评分报告"""
         grade = self.grade(result, task)
 
@@ -504,15 +498,15 @@ class MultiLayerGrader:
             },
         }
 
-    def batch_grade(self, results: List[Dict], tasks: List[Dict]) -> List[Dict]:
+    def batch_grade(self, results: list[dict], tasks: list[dict]) -> list[dict]:
         """批量评分"""
         reports = []
-        for result, task in zip(results, tasks):
+        for result, task in zip(results, tasks, strict=False):
             report = self.generate_grade_report(result, task)
             reports.append(report)
         return reports
 
-    def get_pending_human_reviews(self) -> List[Dict]:
+    def get_pending_human_reviews(self) -> list[dict]:
         """获取待人工评审的项目"""
         return self.human_grader.get_pending_reviews()
 
@@ -523,11 +517,11 @@ class MultiLayerGrader:
 
 # 便捷函数
 def grade_task_result(
-    result: Dict,
-    task: Dict,
-    base_dir: Optional[str] = None,
+    result: dict,
+    task: dict,
+    base_dir: str | None = None,
     model_client=None,
-) -> Dict:
+) -> dict:
     """
     评分任务结果
 

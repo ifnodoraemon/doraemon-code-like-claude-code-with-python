@@ -6,12 +6,11 @@
 
 import asyncio
 import json
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
-import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -39,8 +38,8 @@ class ParallelEvaluator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def run_parallel_evaluation(
-        self, agent_factory, task_files: List[str], n_trials: int = 1
-    ) -> Dict:
+        self, agent_factory, task_files: list[str], n_trials: int = 1
+    ) -> dict:
         """
         并行运行评估
 
@@ -119,8 +118,8 @@ class ParallelEvaluator:
         return summary
 
     async def run_async_evaluation(
-        self, agent_factory, task_files: List[str], n_trials: int = 1
-    ) -> Dict:
+        self, agent_factory, task_files: list[str], n_trials: int = 1
+    ) -> dict:
         """
         异步并行运行评估（使用 asyncio）
 
@@ -191,7 +190,7 @@ class ParallelEvaluator:
 
         return summary
 
-    def _evaluate_single_task(self, agent_factory, task_data: Dict) -> Dict:
+    def _evaluate_single_task(self, agent_factory, task_data: dict) -> dict:
         """评估单个任务（同步版本）"""
         from tests.evals.agent_evaluator import AgentEvaluator
 
@@ -219,9 +218,7 @@ class ParallelEvaluator:
                 "error": str(e),
             }
 
-    async def _evaluate_single_task_async(
-        self, agent_factory, task_data: Dict
-    ) -> Dict:
+    async def _evaluate_single_task_async(self, agent_factory, task_data: dict) -> dict:
         """评估单个任务（异步版本）"""
         # 在异步环境中运行同步代码
         loop = asyncio.get_event_loop()
@@ -229,9 +226,7 @@ class ParallelEvaluator:
             None, self._evaluate_single_task, agent_factory, task_data
         )
 
-    def _generate_summary(
-        self, results: List[Dict], total_time: float, n_trials: int
-    ) -> Dict:
+    def _generate_summary(self, results: list[dict], total_time: float, n_trials: int) -> dict:
         """生成评估汇总"""
         total_tasks = len(results)
         successful_tasks = sum(1 for r in results if r.get("success", False))
@@ -291,7 +286,7 @@ class ParallelEvaluator:
 
         return summary
 
-    def _estimate_speedup(self, results: List[Dict], total_time: float) -> float:
+    def _estimate_speedup(self, results: list[dict], total_time: float) -> float:
         """估算并行加速比"""
         # 计算串行执行时间（所有任务执行时间之和）
         serial_time = sum(r.get("execution_time", 0) for r in results)
@@ -300,7 +295,7 @@ class ParallelEvaluator:
             return serial_time / total_time
         return 1.0
 
-    def _save_results(self, summary: Dict, results: List[Dict]):
+    def _save_results(self, summary: dict, results: list[dict]):
         """保存评估结果"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -314,36 +309,36 @@ class ParallelEvaluator:
         with open(results_file, "w") as f:
             json.dump(results, f, indent=2)
 
-        print(f"\n结果已保存:")
+        print("\n结果已保存:")
         print(f"  汇总: {summary_file}")
         print(f"  详细: {results_file}")
 
-    def print_summary(self, summary: Dict):
+    def print_summary(self, summary: dict):
         """打印评估汇总"""
         print("\n" + "=" * 60)
         print("并行评估汇总")
         print("=" * 60)
 
-        print(f"\n执行信息:")
+        print("\n执行信息:")
         print(f"  评估时间: {summary['timestamp']}")
         print(f"  总耗时: {summary['total_time']:.2f}s")
         print(f"  并行度: {summary['parallelization']['max_workers']}")
         print(f"  加速比: {summary['parallelization']['speedup']:.2f}x")
 
-        print(f"\n任务统计:")
+        print("\n任务统计:")
         print(f"  总任务数: {summary['total_tasks']}")
         print(f"  独立任务: {summary['unique_tasks']}")
         print(f"  试验次数: {summary['n_trials']}")
         print(f"  成功任务: {summary['successful_tasks']}")
-        print(f"  成功率: {summary['success_rate']*100:.1f}%")
+        print(f"  成功率: {summary['success_rate'] * 100:.1f}%")
         print(f"  平均耗时: {summary['avg_time_per_task']:.2f}s/任务")
 
-        print(f"\n按类别统计:")
+        print("\n按类别统计:")
         for category, stats in summary["by_category"].items():
             rate = stats["success"] / stats["total"] * 100
             print(f"  {category}: {stats['success']}/{stats['total']} ({rate:.1f}%)")
 
-        print(f"\n按难度统计:")
+        print("\n按难度统计:")
         for difficulty, stats in sorted(summary["by_difficulty"].items()):
             rate = stats["success"] / stats["total"] * 100
             print(f"  难度 {difficulty}: {stats['success']}/{stats['total']} ({rate:.1f}%)")

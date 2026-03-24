@@ -10,10 +10,9 @@ Coverage targets:
 
 import asyncio
 import json
-import logging
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -598,9 +597,7 @@ class TestHookErrorHandling:
         manager = HookManager()
         manager.register(
             HookEvent.PRE_TOOL_USE,
-            callback=lambda ctx: HookResult(
-                success=True, decision=HookDecision.ALLOW
-            ),
+            callback=lambda ctx: HookResult(success=True, decision=HookDecision.ALLOW),
         )
         manager.register(
             HookEvent.PRE_TOOL_USE,
@@ -618,15 +615,11 @@ class TestHookErrorHandling:
         manager = HookManager()
         manager.register(
             HookEvent.PRE_TOOL_USE,
-            callback=lambda ctx: HookResult(
-                success=True, decision=HookDecision.ALLOW
-            ),
+            callback=lambda ctx: HookResult(success=True, decision=HookDecision.ALLOW),
         )
         manager.register(
             HookEvent.PRE_TOOL_USE,
-            callback=lambda ctx: HookResult(
-                success=True, decision=HookDecision.ASK
-            ),
+            callback=lambda ctx: HookResult(success=True, decision=HookDecision.ASK),
         )
         result = await manager.trigger(HookEvent.PRE_TOOL_USE)
         assert result.decision == HookDecision.ASK
@@ -637,9 +630,7 @@ class TestHookErrorHandling:
         manager = HookManager()
         manager.register(
             HookEvent.PRE_TOOL_USE,
-            callback=lambda ctx: HookResult(
-                success=True, continue_processing=False
-            ),
+            callback=lambda ctx: HookResult(success=True, continue_processing=False),
         )
         result = await manager.trigger(HookEvent.PRE_TOOL_USE)
         assert result.continue_processing is False
@@ -657,9 +648,7 @@ class TestHookConfigurationLoading:
 
     def test_load_from_file_valid_config(self):
         """Test loading valid hook configuration from file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             config = {
                 "hooks": {
                     "PreToolUse": [
@@ -691,23 +680,17 @@ class TestHookConfigurationLoading:
 
     def test_load_from_file_multiple_hooks(self):
         """Test loading multiple hooks from configuration."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             config = {
                 "hooks": {
                     "PreToolUse": [
                         {
                             "matcher": "Bash",
-                            "hooks": [
-                                {"type": "command", "command": "cmd1.sh"}
-                            ],
+                            "hooks": [{"type": "command", "command": "cmd1.sh"}],
                         },
                         {
                             "matcher": "Write",
-                            "hooks": [
-                                {"type": "command", "command": "cmd2.sh"}
-                            ],
+                            "hooks": [{"type": "command", "command": "cmd2.sh"}],
                         },
                     ]
                 }
@@ -723,17 +706,13 @@ class TestHookConfigurationLoading:
 
     def test_load_from_file_invalid_event(self):
         """Test loading configuration with invalid event name."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             config = {
                 "hooks": {
                     "InvalidEvent": [
                         {
                             "matcher": "Bash",
-                            "hooks": [
-                                {"type": "command", "command": "cmd.sh"}
-                            ],
+                            "hooks": [{"type": "command", "command": "cmd.sh"}],
                         }
                     ]
                 }
@@ -750,9 +729,7 @@ class TestHookConfigurationLoading:
 
     def test_load_from_file_malformed_json(self):
         """Test loading malformed JSON file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             f.write("{invalid json")
             f.flush()
 
@@ -852,9 +829,7 @@ class TestHookFiltering:
             matcher="[invalid(regex",
         )
         # Should fallback to exact match
-        hooks = manager._get_matching_hooks(
-            HookEvent.PRE_TOOL_USE, "[invalid(regex"
-        )
+        hooks = manager._get_matching_hooks(HookEvent.PRE_TOOL_USE, "[invalid(regex")
         assert len(hooks) == 1
 
     def test_get_matching_hooks_disabled_excluded(self):
@@ -1019,15 +994,11 @@ class TestHookAggregation:
         manager = HookManager()
         manager.register(
             HookEvent.PRE_TOOL_USE,
-            callback=lambda ctx: HookResult(
-                success=True, modified_input={"key": "value1"}
-            ),
+            callback=lambda ctx: HookResult(success=True, modified_input={"key": "value1"}),
         )
         manager.register(
             HookEvent.PRE_TOOL_USE,
-            callback=lambda ctx: HookResult(
-                success=True, modified_input={"key": "value2"}
-            ),
+            callback=lambda ctx: HookResult(success=True, modified_input={"key": "value2"}),
         )
         result = await manager.trigger(HookEvent.PRE_TOOL_USE)
         assert result.modified_input == {"key": "value2"}
@@ -1126,4 +1097,3 @@ class TestHookContextData:
         manager.register(HookEvent.SESSION_START, callback=callback)
         await manager.trigger(HookEvent.SESSION_START)
         assert captured_context.timestamp > 0
-

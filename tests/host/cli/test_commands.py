@@ -200,7 +200,6 @@ class TestModeCommand:
             project="test",
         )
 
-
         with patch("src.host.cli.commands_core.console"):
             result = await handler.handle(
                 cmd="mode",
@@ -233,7 +232,6 @@ class TestModeCommand:
             hook_mgr=hook_mgr,
             project="test",
         )
-
 
         with patch("src.host.cli.commands_core.console"):
             result = await handler.handle(
@@ -321,7 +319,6 @@ class TestResetCommand:
             hook_mgr=MagicMock(),
             project="test",
         )
-
 
         with patch("src.host.cli.commands_core.console"):
             result = await handler.handle(
@@ -496,7 +493,7 @@ class TestInitCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                            )
+                )
 
                 assert result.handled is True
 
@@ -525,7 +522,7 @@ class TestInitCommand:
                     tool_definitions=[],
                     conversation_history=[],
                     active_skills_content="",
-                            )
+                )
 
                 assert result.handled is True
                 # Verify write_text was not called

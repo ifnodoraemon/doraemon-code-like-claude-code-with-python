@@ -95,11 +95,31 @@ def sample_results() -> list[dict[str, Any]]:
 def mixed_error_results() -> list[dict[str, Any]]:
     """创建包含多种错误类型的结果"""
     return [
-        {"success": False, "errors": ["timeout: operation timed out"], "category": "a", "difficulty": 1},
+        {
+            "success": False,
+            "errors": ["timeout: operation timed out"],
+            "category": "a",
+            "difficulty": 1,
+        },
         {"success": False, "errors": ["assertion failed"], "category": "a", "difficulty": 1},
-        {"success": False, "errors": ["tool error: tool_call failed"], "category": "b", "difficulty": 2},
-        {"success": False, "errors": ["SyntaxError: invalid syntax"], "category": "b", "difficulty": 2},
-        {"success": False, "errors": ["RuntimeError: division by zero"], "category": "c", "difficulty": 3},
+        {
+            "success": False,
+            "errors": ["tool error: tool_call failed"],
+            "category": "b",
+            "difficulty": 2,
+        },
+        {
+            "success": False,
+            "errors": ["SyntaxError: invalid syntax"],
+            "category": "b",
+            "difficulty": 2,
+        },
+        {
+            "success": False,
+            "errors": ["RuntimeError: division by zero"],
+            "category": "c",
+            "difficulty": 3,
+        },
         {"success": True, "errors": [], "category": "a", "difficulty": 1},
         {"success": True, "errors": [], "category": "b", "difficulty": 2},
     ]
@@ -221,7 +241,9 @@ class TestPassPowerK:
 class TestLatencyDistribution:
     """延迟分布测试"""
 
-    def test_latency_distribution_basic(self, collector: MetricsCollector, sample_results: list[dict]):
+    def test_latency_distribution_basic(
+        self, collector: MetricsCollector, sample_results: list[dict]
+    ):
         """测试基本延迟分布计算"""
         dist = collector.calculate_latency_distribution(sample_results)
 
@@ -372,7 +394,9 @@ class TestCostMetrics:
 class TestErrorAnalysis:
     """错误分析测试"""
 
-    def test_analyze_errors_basic(self, collector: MetricsCollector, mixed_error_results: list[dict]):
+    def test_analyze_errors_basic(
+        self, collector: MetricsCollector, mixed_error_results: list[dict]
+    ):
         """测试基本错误分析"""
         errors = collector.analyze_errors(mixed_error_results)
 
@@ -381,14 +405,18 @@ class TestErrorAnalysis:
         assert "error_by_category" in errors
         assert "error_by_difficulty" in errors
 
-    def test_analyze_errors_rate(self, collector: MetricsCollector, mixed_error_results: list[dict]):
+    def test_analyze_errors_rate(
+        self, collector: MetricsCollector, mixed_error_results: list[dict]
+    ):
         """测试错误率计算"""
         errors = collector.analyze_errors(mixed_error_results)
 
         # 7 个结果中 5 个失败
         assert errors["error_rate"] == pytest.approx(5 / 7)
 
-    def test_analyze_errors_types(self, collector: MetricsCollector, mixed_error_results: list[dict]):
+    def test_analyze_errors_types(
+        self, collector: MetricsCollector, mixed_error_results: list[dict]
+    ):
         """测试错误类型分类"""
         errors = collector.analyze_errors(mixed_error_results)
 
@@ -399,7 +427,9 @@ class TestErrorAnalysis:
         assert error_types.get("syntax_error", 0) == 1
         assert error_types.get("runtime_error", 0) == 1
 
-    def test_analyze_errors_by_category(self, collector: MetricsCollector, mixed_error_results: list[dict]):
+    def test_analyze_errors_by_category(
+        self, collector: MetricsCollector, mixed_error_results: list[dict]
+    ):
         """测试按类别统计错误"""
         errors = collector.analyze_errors(mixed_error_results)
 
@@ -410,7 +440,9 @@ class TestErrorAnalysis:
         assert by_category["a"]["failed"] == 2
         assert by_category["a"]["error_rate"] == pytest.approx(2 / 3)
 
-    def test_analyze_errors_by_difficulty(self, collector: MetricsCollector, mixed_error_results: list[dict]):
+    def test_analyze_errors_by_difficulty(
+        self, collector: MetricsCollector, mixed_error_results: list[dict]
+    ):
         """测试按难度统计错误"""
         errors = collector.analyze_errors(mixed_error_results)
 
@@ -444,7 +476,9 @@ class TestErrorAnalysis:
 class TestAnthropicStyleReport:
     """Anthropic 风格报告测试"""
 
-    def test_generate_report_structure(self, collector: MetricsCollector, sample_results: list[dict]):
+    def test_generate_report_structure(
+        self, collector: MetricsCollector, sample_results: list[dict]
+    ):
         """测试报告结构"""
         report = collector.generate_anthropic_style_report(sample_results)
 
@@ -468,7 +502,9 @@ class TestAnthropicStyleReport:
         assert summary["success_rate"] == pytest.approx(0.6)
         assert summary["model_name"] == "claude-3-opus"
 
-    def test_generate_report_pass_metrics(self, collector: MetricsCollector, sample_results: list[dict]):
+    def test_generate_report_pass_metrics(
+        self, collector: MetricsCollector, sample_results: list[dict]
+    ):
         """测试报告中的 pass 指标"""
         report = collector.generate_anthropic_style_report(sample_results)
 
@@ -488,7 +524,9 @@ class TestAnthropicStyleReport:
 
         assert "error" in report
 
-    def test_generate_report_recommendations(self, collector: MetricsCollector, sample_results: list[dict]):
+    def test_generate_report_recommendations(
+        self, collector: MetricsCollector, sample_results: list[dict]
+    ):
         """测试报告建议"""
         report = collector.generate_anthropic_style_report(sample_results)
 
@@ -496,7 +534,9 @@ class TestAnthropicStyleReport:
         assert isinstance(recommendations, list)
         assert len(recommendations) > 0
 
-    def test_generate_report_by_category(self, collector: MetricsCollector, sample_results: list[dict]):
+    def test_generate_report_by_category(
+        self, collector: MetricsCollector, sample_results: list[dict]
+    ):
         """测试按类别统计"""
         report = collector.generate_anthropic_style_report(sample_results)
 
@@ -509,7 +549,9 @@ class TestAnthropicStyleReport:
         assert by_category["code_generation"]["total"] == 2
         assert by_category["code_generation"]["success"] == 2
 
-    def test_generate_report_by_difficulty(self, collector: MetricsCollector, sample_results: list[dict]):
+    def test_generate_report_by_difficulty(
+        self, collector: MetricsCollector, sample_results: list[dict]
+    ):
         """测试按难度统计"""
         report = collector.generate_anthropic_style_report(sample_results)
 
@@ -542,7 +584,9 @@ class TestSaveAndPrint:
             assert "summary" in saved_report
             assert "pass_metrics" in saved_report
 
-    def test_print_anthropic_summary(self, collector: MetricsCollector, sample_results: list[dict], capsys):
+    def test_print_anthropic_summary(
+        self, collector: MetricsCollector, sample_results: list[dict], capsys
+    ):
         """测试打印 Anthropic 摘要"""
         collector.print_anthropic_summary(sample_results)
 
@@ -621,7 +665,9 @@ class TestEdgeCases:
 
     def test_single_result(self, collector: MetricsCollector):
         """测试单个结果"""
-        results = [{"success": True, "execution_time": 1.0, "input_tokens": 100, "output_tokens": 50}]
+        results = [
+            {"success": True, "execution_time": 1.0, "input_tokens": 100, "output_tokens": 50}
+        ]
 
         report = collector.generate_anthropic_style_report(results)
 

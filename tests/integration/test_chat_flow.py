@@ -1,7 +1,9 @@
 """Integration tests"""
+
 import pytest
-from src.core.context_manager import ContextConfig, ContextManager
-from tests.utils.factories import create_mock_model_client, create_test_tool_registry
+
+from tests.utils.factories import create_test_tool_registry
+
 
 class TestIntegration:
     @pytest.mark.asyncio
@@ -12,6 +14,7 @@ class TestIntegration:
 
     def test_mode_switching(self):
         from src.core.tool_selector import ToolSelector
+
         selector = ToolSelector()
         plan_tools = selector.get_tools_for_mode("plan")
         build_tools = selector.get_tools_for_mode("build")

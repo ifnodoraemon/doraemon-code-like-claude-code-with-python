@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class TaskStatus(Enum):
     """Task execution status."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -28,6 +29,7 @@ class TaskStatus(Enum):
 
 class TaskPriority(Enum):
     """Task priority level."""
+
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -36,6 +38,7 @@ class TaskPriority(Enum):
 
 class RiskLevel(Enum):
     """Risk level for a task."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -44,6 +47,7 @@ class RiskLevel(Enum):
 @dataclass
 class TaskDependency:
     """A dependency between tasks."""
+
     task_id: str
     dependency_type: str  # "requires", "blocked_by", "related_to"
     reason: str | None = None
@@ -52,6 +56,7 @@ class TaskDependency:
 @dataclass
 class RiskAssessment:
     """Risk assessment for a task."""
+
     level: RiskLevel
     factors: list[str] = field(default_factory=list)
     mitigations: list[str] = field(default_factory=list)
@@ -60,6 +65,7 @@ class RiskAssessment:
 @dataclass
 class Task:
     """A decomposed task with metadata."""
+
     id: str
     title: str
     description: str
@@ -94,7 +100,9 @@ class Task:
                 "level": self.risk.level.value,
                 "factors": self.risk.factors,
                 "mitigations": self.risk.mitigations,
-            } if self.risk else None,
+            }
+            if self.risk
+            else None,
             "files_affected": self.files_affected,
             "checkpoint_recommended": self.checkpoint_recommended,
         }
@@ -116,11 +124,13 @@ class Task:
 
         # Parse dependencies
         for dep in data.get("dependencies", []):
-            task.dependencies.append(TaskDependency(
-                task_id=dep["task_id"],
-                dependency_type=dep["type"],
-                reason=dep.get("reason"),
-            ))
+            task.dependencies.append(
+                TaskDependency(
+                    task_id=dep["task_id"],
+                    dependency_type=dep["type"],
+                    reason=dep.get("reason"),
+                )
+            )
 
         # Parse subtasks recursively
         for subtask in data.get("subtasks", []):
@@ -140,6 +150,7 @@ class Task:
 @dataclass
 class ExecutionPlan:
     """A complete execution plan for a task."""
+
     id: str
     goal: str
     tasks: list[Task]

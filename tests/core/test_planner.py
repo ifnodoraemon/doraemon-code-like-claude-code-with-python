@@ -43,9 +43,7 @@ class TestTaskDependency:
     def test_creation(self):
         """Test creating a task dependency."""
         dep = TaskDependency(
-            task_id="task_123",
-            dependency_type="requires",
-            reason="Must complete first"
+            task_id="task_123", dependency_type="requires", reason="Must complete first"
         )
         assert dep.task_id == "task_123"
         assert dep.dependency_type == "requires"
@@ -66,7 +64,7 @@ class TestRiskAssessment:
         risk = RiskAssessment(
             level=RiskLevel.HIGH,
             factors=["Destructive operation", "Production impact"],
-            mitigations=["Create backup", "Test in staging"]
+            mitigations=["Create backup", "Test in staging"],
         )
         assert risk.level == RiskLevel.HIGH
         assert len(risk.factors) == 2
@@ -84,11 +82,7 @@ class TestTask:
 
     def test_basic_creation(self):
         """Test creating a basic task."""
-        task = Task(
-            id="task_001",
-            title="Test Task",
-            description="A test task"
-        )
+        task = Task(id="task_001", title="Test Task", description="A test task")
         assert task.id == "task_001"
         assert task.title == "Test Task"
         assert task.status == TaskStatus.PENDING
@@ -110,7 +104,7 @@ class TestTask:
             dependencies=[dep],
             risk=risk,
             files_affected=["file1.py", "file2.py"],
-            checkpoint_recommended=True
+            checkpoint_recommended=True,
         )
         assert task.complexity == 5
         assert task.estimated_minutes == 120
@@ -121,11 +115,7 @@ class TestTask:
 
     def test_to_dict(self):
         """Test converting task to dictionary."""
-        task = Task(
-            id="task_003",
-            title="Dict Task",
-            description="Test dict conversion"
-        )
+        task = Task(id="task_003", title="Dict Task", description="Test dict conversion")
         data = task.to_dict()
         assert data["id"] == "task_003"
         assert data["title"] == "Dict Task"
@@ -135,16 +125,9 @@ class TestTask:
     def test_to_dict_with_risk(self):
         """Test dict conversion with risk."""
         risk = RiskAssessment(
-            level=RiskLevel.MEDIUM,
-            factors=["Factor 1"],
-            mitigations=["Mitigation 1"]
+            level=RiskLevel.MEDIUM, factors=["Factor 1"], mitigations=["Mitigation 1"]
         )
-        task = Task(
-            id="task_004",
-            title="Risky Task",
-            description="Has risk",
-            risk=risk
-        )
+        task = Task(id="task_004", title="Risky Task", description="Has risk", risk=risk)
         data = task.to_dict()
         assert data["risk"] is not None
         assert data["risk"]["level"] == "medium"
@@ -159,7 +142,7 @@ class TestTask:
             "status": "completed",
             "priority": "high",
             "complexity": 3,
-            "estimated_minutes": 45
+            "estimated_minutes": 45,
         }
         task = Task.from_dict(data)
         assert task.id == "task_005"
@@ -173,9 +156,7 @@ class TestTask:
             "id": "task_006",
             "title": "With Deps",
             "description": "Has dependencies",
-            "dependencies": [
-                {"task_id": "task_001", "type": "requires", "reason": "Needs it"}
-            ]
+            "dependencies": [{"task_id": "task_001", "type": "requires", "reason": "Needs it"}],
         }
         task = Task.from_dict(data)
         assert len(task.dependencies) == 1
@@ -187,9 +168,7 @@ class TestTask:
             "id": "task_007",
             "title": "Parent",
             "description": "Has subtasks",
-            "subtasks": [
-                {"id": "sub_001", "title": "Subtask 1", "description": "First subtask"}
-            ]
+            "subtasks": [{"id": "sub_001", "title": "Subtask 1", "description": "First subtask"}],
         }
         task = Task.from_dict(data)
         assert len(task.subtasks) == 1
@@ -209,7 +188,7 @@ class TestExecutionPlan:
             tasks=[task1, task2],
             total_estimated_minutes=90,
             total_complexity=3,
-            high_risk_count=1
+            high_risk_count=1,
         )
         assert plan.id == "plan_001"
         assert plan.goal == "Complete project"
@@ -225,7 +204,7 @@ class TestExecutionPlan:
             tasks=[task],
             total_estimated_minutes=30,
             total_complexity=2,
-            high_risk_count=0
+            high_risk_count=0,
         )
         data = plan.to_dict()
         assert data["id"] == "plan_002"
@@ -240,7 +219,7 @@ class TestExecutionPlan:
             description="Test description",
             complexity=3,
             estimated_minutes=30,
-            priority=TaskPriority.HIGH
+            priority=TaskPriority.HIGH,
         )
         plan = ExecutionPlan(
             id="plan_003",
@@ -248,7 +227,7 @@ class TestExecutionPlan:
             tasks=[task],
             total_estimated_minutes=30,
             total_complexity=3,
-            high_risk_count=0
+            high_risk_count=0,
         )
         markdown = plan.to_markdown()
         assert "# Execution Plan" in markdown
@@ -376,7 +355,7 @@ class TestTaskPlanner:
             id="t1",
             title="Multi-file",
             description="Affects many files",
-            files_affected=["f1", "f2", "f3", "f4"]
+            files_affected=["f1", "f2", "f3", "f4"],
         )
         planner._analyzer.recommend_checkpoints([task])
         assert task.checkpoint_recommended is True
@@ -391,7 +370,7 @@ class TestTaskPlanner:
             tasks=[task],
             total_estimated_minutes=30,
             total_complexity=2,
-            high_risk_count=0
+            high_risk_count=0,
         )
         result = planner.update_task_status(plan, "t1", TaskStatus.COMPLETED)
         assert result is True
@@ -407,7 +386,7 @@ class TestTaskPlanner:
             tasks=[],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         result = planner.update_task_status(plan, "nonexistent", TaskStatus.COMPLETED)
         assert result is False
@@ -423,7 +402,7 @@ class TestTaskPlanner:
             tasks=[task1, task2],
             total_estimated_minutes=60,
             total_complexity=2,
-            high_risk_count=0
+            high_risk_count=0,
         )
         next_tasks = planner.get_next_tasks(plan)
         assert len(next_tasks) == 2
@@ -436,7 +415,7 @@ class TestTaskPlanner:
             id="t2",
             title="Task 2",
             description="Second",
-            dependencies=[TaskDependency(task_id="t1", dependency_type="requires")]
+            dependencies=[TaskDependency(task_id="t1", dependency_type="requires")],
         )
         plan = ExecutionPlan(
             id="p1",
@@ -444,7 +423,7 @@ class TestTaskPlanner:
             tasks=[task1, task2],
             total_estimated_minutes=60,
             total_complexity=2,
-            high_risk_count=0
+            high_risk_count=0,
         )
         # Initially, only task1 should be ready
         next_tasks = planner.get_next_tasks(plan)
@@ -462,14 +441,16 @@ class TestTaskPlanner:
         planner = TaskPlanner()
         task_low = Task(id="t1", title="Low", description="Low", priority=TaskPriority.LOW)
         task_high = Task(id="t2", title="High", description="High", priority=TaskPriority.HIGH)
-        task_critical = Task(id="t3", title="Critical", description="Critical", priority=TaskPriority.CRITICAL)
+        task_critical = Task(
+            id="t3", title="Critical", description="Critical", priority=TaskPriority.CRITICAL
+        )
         plan = ExecutionPlan(
             id="p1",
             goal="Goal",
             tasks=[task_low, task_high, task_critical],
             total_estimated_minutes=90,
             total_complexity=3,
-            high_risk_count=0
+            high_risk_count=0,
         )
         next_tasks = planner.get_next_tasks(plan)
         # Should be sorted: critical, high, low

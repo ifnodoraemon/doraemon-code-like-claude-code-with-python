@@ -4,7 +4,6 @@ Unit tests for the Lint Server.
 Tests linting, formatting, and code quality analysis.
 """
 
-import json
 import os
 import subprocess
 import tempfile
@@ -189,7 +188,7 @@ class TestLintIssue:
             severity="error",
             code="E501",
             message="Line too long",
-            source="ruff"
+            source="ruff",
         )
         assert issue.file == "test.py"
         assert issue.line == 10
@@ -208,7 +207,7 @@ class TestLintIssue:
             severity="error",
             code="E501",
             message="Line too long",
-            source="ruff"
+            source="ruff",
         )
         result = issue.to_string()
         assert "test.py:10:5" in result
@@ -225,7 +224,7 @@ class TestLintIssue:
             severity="warning",
             code="W291",
             message="Trailing whitespace",
-            source="ruff"
+            source="ruff",
         )
         assert issue.severity == "warning"
         assert "[warning]" in issue.to_string()
@@ -239,7 +238,7 @@ class TestLintIssue:
             severity="info",
             code="I001",
             message="Import sorting",
-            source="ruff"
+            source="ruff",
         )
         assert issue.severity == "info"
         assert "[info]" in issue.to_string()
@@ -752,7 +751,7 @@ class TestEdgeCases:
             severity="error",
             code="E501",
             message="Line too long: 'special chars: @#$%^&*()'",
-            source="ruff"
+            source="ruff",
         )
         result = issue.to_string()
         assert "special chars" in result
@@ -766,7 +765,7 @@ class TestEdgeCases:
             severity="error",
             code="E501",
             message="Unicode: 你好世界 🌍",
-            source="ruff"
+            source="ruff",
         )
         result = issue.to_string()
         assert "Unicode" in result

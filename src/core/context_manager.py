@@ -11,7 +11,6 @@ Key improvements over naive approaches:
 4. Injects summary as user context (not system instruction)
 """
 
-
 import json
 import logging
 import time
@@ -21,8 +20,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-from .paths import conversations_dir
 
 logger = logging.getLogger(__name__)
 

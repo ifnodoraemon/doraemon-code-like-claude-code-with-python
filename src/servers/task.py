@@ -6,7 +6,7 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
-from src.core.tasks import TaskManager, TaskStatus
+from src.core.tasks import TaskClaimError, TaskManager, TaskStatus
 
 mcp = FastMCP("AgentTaskServer")
 manager = TaskManager()
@@ -26,6 +26,13 @@ def _dump(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True)
 
 
+def _normalize_dependencies(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split(",")]
+    return [part for part in parts if part]
+
+
 @mcp.tool()
 def task(
     operation: str = "list",
@@ -34,6 +41,10 @@ def task(
     task_id: str | None = None,
     status: str | None = None,
     parent_id: str | None = None,
+    dependencies: str | None = None,
+    agent_id: str | None = None,
+    priority: int | None = None,
+    workspace_id: str | None = None,
     delete_subtasks: bool = False,
 ) -> str:
     """
@@ -44,19 +55,29 @@ def task(
       - list: optional status and parent_id filters
       - get: requires task_id
       - update: requires task_id and status
+      - ready: list tasks whose dependencies are satisfied
+      - claim: requires task_id and agent_id
+      - release: requires task_id
       - delete: requires task_id
       - clear: delete all tasks
     """
     operation = operation.lower().strip()
+    parsed_dependencies = _normalize_dependencies(dependencies)
 
     if operation == "create":
         if not title:
             return _dump({"ok": False, "error": "title is required"})
-        created = manager.create_task(
-            title=title,
-            description=description or "",
-            parent_id=parent_id,
-        )
+        try:
+            created = manager.create_task(
+                title=title,
+                description=description or "",
+                parent_id=parent_id,
+                dependencies=parsed_dependencies,
+                priority=priority or 0,
+                workspace_id=workspace_id,
+            )
+        except ValueError as exc:
+            return _dump({"ok": False, "error": str(exc)})
         return _dump({"ok": True, "task": created.to_dict()})
 
     if operation == "list":
@@ -64,10 +85,13 @@ def task(
         if status is not None and parsed_status is None:
             return _dump({"ok": False, "error": f"invalid status: {status}"})
         tasks = [
-            task.to_dict()
-            for task in manager.list_tasks(status=parsed_status, parent_id=parent_id)
+            task.to_dict() for task in manager.list_tasks(status=parsed_status, parent_id=parent_id)
         ]
         return _dump({"ok": True, "tasks": tasks, "tree": manager.get_task_tree()})
+
+    if operation == "ready":
+        tasks = [task.to_dict() for task in manager.list_ready_tasks()]
+        return _dump({"ok": True, "tasks": tasks})
 
     if operation == "get":
         if not task_id:
@@ -80,13 +104,47 @@ def task(
     if operation == "update":
         if not task_id:
             return _dump({"ok": False, "error": "task_id is required"})
-        parsed_status = _normalize_status(status)
-        if parsed_status is None:
+        parsed_status = _normalize_status(status) if status is not None else None
+        if status is not None and parsed_status is None:
             return _dump({"ok": False, "error": "valid status is required"})
-        updated = manager.update_task_status(task_id, parsed_status)
+        update_kwargs = {
+            "status": parsed_status,
+            "dependencies": parsed_dependencies,
+            "priority": priority,
+            "workspace_id": workspace_id,
+        }
+        if agent_id is not None:
+            update_kwargs["assigned_agent"] = agent_id
+        try:
+            updated = manager.update_task(
+                task_id,
+                **update_kwargs,
+            )
+        except ValueError as exc:
+            return _dump({"ok": False, "error": str(exc)})
         if not updated:
             return _dump({"ok": False, "error": f"task not found: {task_id}"})
-        return _dump({"ok": True, "task": manager.get_task(task_id).to_dict()})
+        return _dump({"ok": True, "task": updated.to_dict()})
+
+    if operation == "claim":
+        if not task_id:
+            return _dump({"ok": False, "error": "task_id is required"})
+        if not agent_id:
+            return _dump({"ok": False, "error": "agent_id is required"})
+        try:
+            claimed = manager.claim_task(task_id, agent_id)
+        except TaskClaimError as exc:
+            return _dump({"ok": False, "error": str(exc)})
+        return _dump({"ok": True, "task": claimed.to_dict()})
+
+    if operation == "release":
+        if not task_id:
+            return _dump({"ok": False, "error": "task_id is required"})
+        try:
+            released = manager.release_task(task_id, agent_id=agent_id)
+        except TaskClaimError as exc:
+            return _dump({"ok": False, "error": str(exc)})
+        return _dump({"ok": True, "task": released.to_dict()})
 
     if operation == "delete":
         if not task_id:

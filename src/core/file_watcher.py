@@ -33,6 +33,7 @@ try:
         FileSystemEventHandler,
     )
     from watchdog.observers import Observer
+
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
@@ -124,6 +125,7 @@ class DebouncedHandler:
 
 
 if WATCHDOG_AVAILABLE:
+
     class WatchdogHandler(FileSystemEventHandler):
         """Watchdog event handler."""
 
@@ -169,26 +171,20 @@ if WATCHDOG_AVAILABLE:
 
         def on_created(self, event):
             is_dir = isinstance(event, DirCreatedEvent)
-            file_event = self._create_event(
-                FileEventType.CREATED, event.src_path, is_dir
-            )
+            file_event = self._create_event(FileEventType.CREATED, event.src_path, is_dir)
             if file_event:
                 self._callback(file_event)
 
         def on_modified(self, event):
             if isinstance(event, DirCreatedEvent | DirDeletedEvent | DirMovedEvent):
                 return
-            file_event = self._create_event(
-                FileEventType.MODIFIED, event.src_path, False
-            )
+            file_event = self._create_event(FileEventType.MODIFIED, event.src_path, False)
             if file_event:
                 self._callback(file_event)
 
         def on_deleted(self, event):
             is_dir = isinstance(event, DirDeletedEvent)
-            file_event = self._create_event(
-                FileEventType.DELETED, event.src_path, is_dir
-            )
+            file_event = self._create_event(FileEventType.DELETED, event.src_path, is_dir)
             if file_event:
                 self._callback(file_event)
 
@@ -374,9 +370,7 @@ class AsyncFileWatcher:
         try:
             while self._watcher.is_running():
                 try:
-                    event = await asyncio.wait_for(
-                        self._queue.get(), timeout=1.0
-                    )
+                    event = await asyncio.wait_for(self._queue.get(), timeout=1.0)
                     yield event
                 except asyncio.TimeoutError:
                     continue

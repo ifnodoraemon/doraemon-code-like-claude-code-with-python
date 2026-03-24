@@ -136,8 +136,7 @@ def cleanup_finished_processes() -> None:
     """Remove finished processes from tracking and clean up temp log files."""
     with _process_lock:
         finished = [
-            pid for pid, bp in _background_processes.items()
-            if bp.process.poll() is not None
+            pid for pid, bp in _background_processes.items() if bp.process.poll() is not None
         ]
         for pid in finished:
             bp = _background_processes[pid]
@@ -217,20 +216,19 @@ def is_command_blocked(command: str, config: ShellConfig = DEFAULT_CONFIG) -> bo
     for sep in [";", "&&", "||"]:
         if sep in command:
             return any(
-                is_command_blocked(sub.strip(), config)
-                for sub in command.split(sep) if sub.strip()
+                is_command_blocked(sub.strip(), config) for sub in command.split(sep) if sub.strip()
             )
 
     # Regex-based dangerous patterns (enhanced)
     dangerous_patterns = [
-        r">\s*/dev/sd",                    # Write to disk device
-        r"\|\s*(bash|sh|zsh)\b",           # Pipe to shell
-        r"eval\s*[\s(]",                       # eval execution (with space or parens)
-        r"exec\s+\d*[<>]",                 # exec redirection
+        r">\s*/dev/sd",  # Write to disk device
+        r"\|\s*(bash|sh|zsh)\b",  # Pipe to shell
+        r"eval\s*[\s(]",  # eval execution (with space or parens)
+        r"exec\s+\d*[<>]",  # exec redirection
         r"\$\([^)]*(?:rm|mkfs|dd|shred)",  # $() command substitution with dangerous cmds
-        r"`[^`]*(?:rm|mkfs|dd|shred)",     # backtick substitution with dangerous cmds
+        r"`[^`]*(?:rm|mkfs|dd|shred)",  # backtick substitution with dangerous cmds
         r"base64\s+(?:-d|--decode)\s*\|",  # base64 decode + pipe (obfuscation)
-        r"xxd\s+-r\s*\|",                  # hex decode + pipe (obfuscation)
+        r"xxd\s+-r\s*\|",  # hex decode + pipe (obfuscation)
         r"python[23]?\s+-c\s+[\"'].*(?:subprocess|os\.system|shutil\.rmtree)",  # Python one-liners
     ]
     return any(re.search(p, command_lower) for p in dangerous_patterns)
@@ -366,8 +364,6 @@ def truncate_output(output: str, max_size: int = DEFAULT_CONFIG.max_output_size)
         )
         return head + separator + tail
 
-    separator = (
-        f"\n\n... [truncated: {omitted} lines omitted, {len(output)} chars total] ...\n\n"
-    )
+    separator = f"\n\n... [truncated: {omitted} lines omitted, {len(output)} chars total] ...\n\n"
 
     return "".join(head_lines) + separator + "".join(tail_lines)

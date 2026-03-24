@@ -98,6 +98,7 @@ def reset_singletons():
     """
     # Reset tool registry singleton
     import src.host.tools as tools_module
+
     tools_module._default_registry = None
 
     yield

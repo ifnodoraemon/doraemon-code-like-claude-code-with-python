@@ -42,7 +42,9 @@ def configure_root_logger(level: str | None = None, log_file: str | None = None)
     root.setLevel(getattr(logging, effective_level, logging.INFO))
     root.handlers.clear()
 
-    console_handler = RichHandler(rich_tracebacks=True, markup=True, show_time=True, show_path=False)
+    console_handler = RichHandler(
+        rich_tracebacks=True, markup=True, show_time=True, show_path=False
+    )
     console_handler.setLevel(getattr(logging, effective_level, logging.INFO))
     root.addHandler(console_handler)
 
@@ -72,7 +74,9 @@ def setup_logger(name: str, level: str = "INFO", log_file: str | None = None) ->
     logger.propagate = False
 
     # Console handler with Rich formatting
-    console_handler = RichHandler(rich_tracebacks=True, markup=True, show_time=True, show_path=False)
+    console_handler = RichHandler(
+        rich_tracebacks=True, markup=True, show_time=True, show_path=False
+    )
     console_handler.setLevel(getattr(logging, effective_level, logging.INFO))
     logger.addHandler(console_handler)
 

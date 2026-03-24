@@ -1,6 +1,7 @@
 """Unit tests for context_manager.py"""
-import pytest
+
 from src.core.context_manager import ContextConfig, ContextManager
+
 
 class TestContextManagerFixed:
     def test_initialization(self):
@@ -19,6 +20,7 @@ class TestContextManagerFixed:
         manager.add_user_message("Hello")
         manager.clear()
         assert len(manager.messages) == 0
+
 
 class TestContextConfig:
     def test_default_values(self):

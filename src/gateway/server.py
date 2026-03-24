@@ -122,6 +122,7 @@ async def limit_request_body(request: Request, call_next):
 
     return await call_next(request)
 
+
 # Gateway API key (optional)
 GATEWAY_API_KEY = os.getenv("AGENT_API_KEY")
 
@@ -146,6 +147,7 @@ def verify_api_key(authorization: str | None) -> bool:
 # Pydantic models for API
 class FunctionDefinition(BaseModel):
     """Typed function definition for tool calls."""
+
     name: str
     description: str = ""
     parameters: dict[str, Any] = {}
@@ -153,6 +155,7 @@ class FunctionDefinition(BaseModel):
 
 class ToolCallInfo(BaseModel):
     """Typed tool call information."""
+
     id: str
     type: str = "function"
     function: FunctionDefinition
@@ -292,6 +295,7 @@ async def chat_completions(
         tool_calls = None
         if m.tool_calls:
             from .schema import ToolCall
+
             tool_calls = [
                 ToolCall(
                     id=tc.id,
@@ -301,13 +305,15 @@ async def chat_completions(
                 for tc in m.tool_calls
             ]
 
-        messages.append(ChatMessage(
-            role=m.role,
-            content=m.content,
-            tool_calls=tool_calls,
-            tool_call_id=m.tool_call_id,
-            name=m.name,
-        ))
+        messages.append(
+            ChatMessage(
+                role=m.role,
+                content=m.content,
+                tool_calls=tool_calls,
+                tool_call_id=m.tool_call_id,
+                name=m.name,
+            )
+        )
 
     tools = None
     if request.tools:

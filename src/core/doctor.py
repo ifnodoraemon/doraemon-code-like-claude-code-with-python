@@ -231,9 +231,8 @@ class Doctor:
                 status=CheckStatus.WARNING,
                 message="Some features unavailable",
                 details=f"Missing: {', '.join(missing)}",
-                fix_suggestion="Install with: pip install " + " ".join(
-                    m.split(" ")[0] for m in missing
-                ),
+                fix_suggestion="Install with: pip install "
+                + " ".join(m.split(" ")[0] for m in missing),
             )
 
         return CheckResult(
@@ -267,9 +266,7 @@ class Doctor:
 
         # Get git version
         try:
-            result = subprocess.run(
-                ["git", "--version"], capture_output=True, text=True
-            )
+            result = subprocess.run(["git", "--version"], capture_output=True, text=True)
             version = result.stdout.strip()
         except Exception:
             version = "unknown"

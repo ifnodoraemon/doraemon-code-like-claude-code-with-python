@@ -73,12 +73,14 @@ def is_image_path(path_str: str) -> bool:
 
 class ClientMode(Enum):
     """Client connection mode."""
+
     GATEWAY = "gateway"
     DIRECT = "direct"
 
 
 class Provider(Enum):
     """Supported providers for direct mode."""
+
     GOOGLE = "google"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
@@ -88,6 +90,7 @@ class Provider(Enum):
 @dataclass
 class Message:
     """Unified message format. content can be str or list[dict] for multimodal."""
+
     role: str
     content: str | list[dict] | None = None
     thought: str | None = None  # Reasoning/thought process
@@ -113,6 +116,7 @@ class Message:
 @dataclass
 class ToolDefinition:
     """Tool/function definition."""
+
     name: str
     description: str
     parameters: dict[str, Any]
@@ -130,6 +134,7 @@ class ToolDefinition:
     def to_genai_format(self):
         """Convert to Google GenAI format."""
         from google.genai import types
+
         return types.FunctionDeclaration(
             name=self.name,
             description=self.description,
@@ -140,6 +145,7 @@ class ToolDefinition:
 @dataclass
 class ChatResponse:
     """Unified chat response."""
+
     content: str | None = None
     thought: str | None = None  # Reasoning/thought process
     tool_calls: list[dict] | None = None
@@ -155,6 +161,7 @@ class ChatResponse:
 @dataclass
 class StreamChunk:
     """Streaming response chunk."""
+
     content: str | None = None
     thought: str | None = None  # Streaming thought content
     tool_calls: list[dict] | None = None
@@ -165,6 +172,7 @@ class StreamChunk:
 @dataclass
 class ToolCall:
     """A tool/function call from the model."""
+
     id: str
     name: str
     arguments: dict[str, Any]
@@ -188,6 +196,7 @@ class ToolCall:
 @dataclass
 class ClientConfig:
     """Model client configuration."""
+
     mode: ClientMode = ClientMode.DIRECT
     model: str | None = None
     temperature: float = 0.7

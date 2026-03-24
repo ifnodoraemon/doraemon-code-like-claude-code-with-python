@@ -1,36 +1,34 @@
 """API routes module."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.main import (
-    User,
-    Item,
-    create_user,
-    get_user,
-    list_users,
-    update_user,
-    delete_user,
     create_item,
-    get_item,
-    list_items,
-    update_item,
+    create_user,
     delete_item,
+    delete_user,
+    get_item,
+    get_user,
+    list_items,
+    list_users,
+    update_item,
+    update_user,
 )
 
 
 # Simulated HTTP response helpers
-def json_response(data: Any, status_code: int = 200) -> Dict[str, Any]:
+def json_response(data: Any, status_code: int = 200) -> dict[str, Any]:
     """Create a JSON response."""
     return {"status_code": status_code, "data": data}
 
 
-def error_response(message: str, status_code: int = 400) -> Dict[str, Any]:
+def error_response(message: str, status_code: int = 400) -> dict[str, Any]:
     """Create an error response."""
     return {"status_code": status_code, "error": message}
 
 
 # User routes
-def route_create_user(username: str, email: str) -> Dict[str, Any]:
+def route_create_user(username: str, email: str) -> dict[str, Any]:
     """POST /users - Create a new user."""
     if not username or not email:
         return error_response("Username and email are required", 400)
@@ -42,37 +40,31 @@ def route_create_user(username: str, email: str) -> Dict[str, Any]:
     )
 
 
-def route_get_user(user_id: int) -> Dict[str, Any]:
+def route_get_user(user_id: int) -> dict[str, Any]:
     """GET /users/{user_id} - Get a user by ID."""
     user = get_user(user_id)
     if not user:
         return error_response("User not found", 404)
 
-    return json_response(
-        {"id": user.id, "username": user.username, "email": user.email}
-    )
+    return json_response({"id": user.id, "username": user.username, "email": user.email})
 
 
-def route_list_users() -> Dict[str, Any]:
+def route_list_users() -> dict[str, Any]:
     """GET /users - List all users."""
     users = list_users()
-    return json_response(
-        [{"id": u.id, "username": u.username, "email": u.email} for u in users]
-    )
+    return json_response([{"id": u.id, "username": u.username, "email": u.email} for u in users])
 
 
-def route_update_user(user_id: int, **kwargs) -> Dict[str, Any]:
+def route_update_user(user_id: int, **kwargs) -> dict[str, Any]:
     """PUT /users/{user_id} - Update a user."""
     user = update_user(user_id, **kwargs)
     if not user:
         return error_response("User not found", 404)
 
-    return json_response(
-        {"id": user.id, "username": user.username, "email": user.email}
-    )
+    return json_response({"id": user.id, "username": user.username, "email": user.email})
 
 
-def route_delete_user(user_id: int) -> Dict[str, Any]:
+def route_delete_user(user_id: int) -> dict[str, Any]:
     """DELETE /users/{user_id} - Delete a user."""
     if delete_user(user_id):
         return json_response({"message": "User deleted"})
@@ -85,7 +77,7 @@ def route_create_item(
     description: str = None,
     price: float = 0.0,
     owner_id: int = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """POST /items - Create a new item."""
     if not name:
         return error_response("Name is required", 400)
@@ -103,7 +95,7 @@ def route_create_item(
     )
 
 
-def route_get_item(item_id: int) -> Dict[str, Any]:
+def route_get_item(item_id: int) -> dict[str, Any]:
     """GET /items/{item_id} - Get an item by ID."""
     item = get_item(item_id)
     if not item:
@@ -120,7 +112,7 @@ def route_get_item(item_id: int) -> Dict[str, Any]:
     )
 
 
-def route_list_items(owner_id: Optional[int] = None) -> Dict[str, Any]:
+def route_list_items(owner_id: int | None = None) -> dict[str, Any]:
     """GET /items - List items."""
     items = list_items(owner_id)
     return json_response(
@@ -137,7 +129,7 @@ def route_list_items(owner_id: Optional[int] = None) -> Dict[str, Any]:
     )
 
 
-def route_update_item(item_id: int, **kwargs) -> Dict[str, Any]:
+def route_update_item(item_id: int, **kwargs) -> dict[str, Any]:
     """PUT /items/{item_id} - Update an item."""
     item = update_item(item_id, **kwargs)
     if not item:
@@ -154,7 +146,7 @@ def route_update_item(item_id: int, **kwargs) -> Dict[str, Any]:
     )
 
 
-def route_delete_item(item_id: int) -> Dict[str, Any]:
+def route_delete_item(item_id: int) -> dict[str, Any]:
     """DELETE /items/{item_id} - Delete an item."""
     if delete_item(item_id):
         return json_response({"message": "Item deleted"})

@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("google.genai").setLevel(logging.WARNING)
 
+
 class RemoteEmbeddingFunction(EmbeddingFunction):
     """
     Embedding function that uses remote APIs (Google GenAI or OpenAI).
@@ -29,31 +30,41 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
             self.api_key = config.get("openai_api_key")
             try:
                 from openai import OpenAI
+
                 self.client = OpenAI(api_key=self.api_key)
             except ImportError as e:
-                logger.warning(f"openai package not found or failed to load: {e}. Install it to use OpenAI embeddings.")
+                logger.warning(
+                    f"openai package not found or failed to load: {e}. Install it to use OpenAI embeddings."
+                )
                 self.provider = "none"
         elif config.get("google_api_key"):
             self.provider = "google"
             self.api_key = config.get("google_api_key")
             try:
                 from google import genai
+
                 self.client = genai.Client(api_key=self.api_key)
             except ImportError as e:
-                logger.warning(f"google-genai package not found or failed to load: {e}. Install it to use Google embeddings.")
+                logger.warning(
+                    f"google-genai package not found or failed to load: {e}. Install it to use Google embeddings."
+                )
                 self.provider = "none"
         elif config.get("openai_api_key"):
             self.provider = "openai"
             self.api_key = config.get("openai_api_key")
             try:
                 from openai import OpenAI
+
                 self.client = OpenAI(api_key=self.api_key)
             except ImportError as e:
-                logger.warning(f"openai package not found or failed to load: {e}. Install it to use OpenAI embeddings.")
+                logger.warning(
+                    f"openai package not found or failed to load: {e}. Install it to use OpenAI embeddings."
+                )
                 self.provider = "none"
 
     def __call__(self, input: Documents) -> Embeddings:
         from typing import cast
+
         if self.provider == "google":
             try:
                 embed_model = self._embedding_model
@@ -79,15 +90,14 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
                 if not embed_model:
                     logger.warning("embedding_model is not configured")
                     return cast(Embeddings, [[0.0] * 1536 for _ in input])
-                response = self.client.embeddings.create(
-                    input=input,
-                    model=embed_model
-                )
+                response = self.client.embeddings.create(input=input, model=embed_model)
                 return cast(Embeddings, [data.embedding for data in response.data])
             except Exception as e:
                 logger.error(f"OpenAI embedding error: {e}")
                 return cast(Embeddings, [[0.0] * 1536 for _ in input])
 
         else:
-            logger.warning("No remote embedding provider configured. Memory search will not work correctly.")
+            logger.warning(
+                "No remote embedding provider configured. Memory search will not work correctly."
+            )
             return cast(Embeddings, [[0.0] * 768 for _ in input])

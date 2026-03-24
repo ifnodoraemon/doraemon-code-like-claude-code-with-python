@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 mcp = FastMCP("AgentOffice")
 
+
 @mcp.tool()
 def create_word_document(path: str, content: str, title: str = "") -> str:
     """
@@ -135,6 +136,7 @@ def create_presentation(path: str, slides_json: str) -> str:
     except Exception as e:
         logger.error(f"Error creating Presentation: {e}")
         return f"Error: {str(e)}"
+
 
 if __name__ == "__main__":
     mcp.run()

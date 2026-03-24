@@ -1,9 +1,8 @@
 """Comprehensive tests for hooks.py"""
-import pytest
+
 import time
-from src.core.hooks import (
-    HookEvent, HookDecision, HookResult, HookDefinition, HookContext
-)
+
+from src.core.hooks import HookContext, HookDecision, HookDefinition, HookEvent, HookResult
 
 
 class TestHookEvent:
@@ -54,11 +53,7 @@ class TestHookResult:
 
     def test_creation_with_deny(self):
         """Test creating result with deny decision."""
-        result = HookResult(
-            success=True,
-            decision=HookDecision.DENY,
-            reason="Not allowed"
-        )
+        result = HookResult(success=True, decision=HookDecision.DENY, reason="Not allowed")
         assert result.decision == HookDecision.DENY
         assert result.reason == "Not allowed"
 
@@ -69,7 +64,7 @@ class TestHookResult:
             success=True,
             decision=HookDecision.MODIFY,
             modified_input=modified,
-            additional_context="Modified input"
+            additional_context="Modified input",
         )
         assert result.decision == HookDecision.MODIFY
         assert result.modified_input == modified
@@ -77,21 +72,13 @@ class TestHookResult:
 
     def test_creation_with_output(self):
         """Test creating result with output."""
-        result = HookResult(
-            success=True,
-            output="Hook output",
-            duration=1.5
-        )
+        result = HookResult(success=True, output="Hook output", duration=1.5)
         assert result.output == "Hook output"
         assert result.duration == 1.5
 
     def test_failed_result(self):
         """Test creating failed result."""
-        result = HookResult(
-            success=False,
-            reason="Hook failed",
-            continue_processing=False
-        )
+        result = HookResult(success=False, reason="Hook failed", continue_processing=False)
         assert result.success is False
         assert result.continue_processing is False
 
@@ -101,11 +88,7 @@ class TestHookDefinition:
 
     def test_creation_with_command(self):
         """Test creating hook with shell command."""
-        hook = HookDefinition(
-            event=HookEvent.PRE_TOOL_USE,
-            command="echo 'test'",
-            timeout=30
-        )
+        hook = HookDefinition(event=HookEvent.PRE_TOOL_USE, command="echo 'test'", timeout=30)
         assert hook.event == HookEvent.PRE_TOOL_USE
         assert hook.command == "echo 'test'"
         assert hook.timeout == 30
@@ -114,21 +97,17 @@ class TestHookDefinition:
     def test_creation_with_matcher(self):
         """Test creating hook with matcher."""
         hook = HookDefinition(
-            event=HookEvent.PRE_TOOL_USE,
-            matcher="write_.*",
-            command="validate.sh"
+            event=HookEvent.PRE_TOOL_USE, matcher="write_.*", command="validate.sh"
         )
         assert hook.matcher == "write_.*"
 
     def test_creation_with_callback(self):
         """Test creating hook with Python callback."""
+
         def my_callback(ctx):
             return HookResult(success=True)
 
-        hook = HookDefinition(
-            event=HookEvent.SESSION_START,
-            callback=my_callback
-        )
+        hook = HookDefinition(event=HookEvent.SESSION_START, callback=my_callback)
         assert hook.callback == my_callback
         assert hook.command is None
 
@@ -139,7 +118,7 @@ class TestHookDefinition:
             matcher="test_tool",
             command="log.sh",
             timeout=45,
-            enabled=False
+            enabled=False,
         )
         data = hook.to_dict()
         assert data["event"] == "PostToolUse"
@@ -150,13 +129,11 @@ class TestHookDefinition:
 
     def test_to_dict_excludes_callback(self):
         """Test that to_dict doesn't include callback."""
+
         def callback(ctx):
             pass
 
-        hook = HookDefinition(
-            event=HookEvent.STOP,
-            callback=callback
-        )
+        hook = HookDefinition(event=HookEvent.STOP, callback=callback)
         data = hook.to_dict()
         assert "callback" not in data
 
@@ -167,11 +144,7 @@ class TestHookDefinition:
 
     def test_disabled_hook(self):
         """Test creating disabled hook."""
-        hook = HookDefinition(
-            event=HookEvent.PRE_COMPACT,
-            command="test.sh",
-            enabled=False
-        )
+        hook = HookDefinition(event=HookEvent.PRE_COMPACT, command="test.sh", enabled=False)
         assert hook.enabled is False
 
 
@@ -184,7 +157,7 @@ class TestHookContext:
             event=HookEvent.SESSION_START,
             session_id="session_123",
             project_dir="/test/project",
-            permission_mode="ask"
+            permission_mode="ask",
         )
         assert ctx.event == HookEvent.SESSION_START
         assert ctx.session_id == "session_123"
@@ -201,7 +174,7 @@ class TestHookContext:
             project_dir="/project",
             permission_mode="allow",
             tool_name="write_file",
-            tool_input=tool_input
+            tool_input=tool_input,
         )
         assert ctx.tool_name == "write_file"
         assert ctx.tool_input == tool_input
@@ -214,7 +187,7 @@ class TestHookContext:
             project_dir="/project",
             permission_mode="allow",
             tool_name="read_file",
-            tool_output="file contents"
+            tool_output="file contents",
         )
         assert ctx.tool_output == "file contents"
 
@@ -225,7 +198,7 @@ class TestHookContext:
             event=HookEvent.NOTIFICATION,
             session_id="test",
             project_dir="/test",
-            permission_mode="allow"
+            permission_mode="allow",
         )
         after = time.time()
         assert before <= ctx.timestamp <= after
@@ -236,7 +209,7 @@ class TestHookContext:
             event=HookEvent.SESSION_END,
             session_id="test",
             project_dir="/test",
-            permission_mode="deny"
+            permission_mode="deny",
         )
         assert ctx.tool_name is None
         assert ctx.tool_input is None
@@ -250,9 +223,7 @@ class TestHookIntegration:
         """Test complete hook workflow with allow decision."""
         # Define hook
         hook = HookDefinition(
-            event=HookEvent.PRE_TOOL_USE,
-            matcher="write_file",
-            command="validate.sh"
+            event=HookEvent.PRE_TOOL_USE, matcher="write_file", command="validate.sh"
         )
 
         # Create context
@@ -262,14 +233,11 @@ class TestHookIntegration:
             project_dir="/project",
             permission_mode="ask",
             tool_name="write_file",
-            tool_input={"path": "test.py"}
+            tool_input={"path": "test.py"},
         )
 
         # Create result
-        result = HookResult(
-            success=True,
-            decision=HookDecision.ALLOW
-        )
+        result = HookResult(success=True, decision=HookDecision.ALLOW)
 
         assert hook.event == ctx.event
         assert result.decision == HookDecision.ALLOW
@@ -277,34 +245,24 @@ class TestHookIntegration:
 
     def test_hook_workflow_deny(self):
         """Test hook workflow with deny decision."""
-        hook = HookDefinition(
-            event=HookEvent.PRE_TOOL_USE,
-            matcher="delete_.*"
-        )
+        HookDefinition(event=HookEvent.PRE_TOOL_USE, matcher="delete_.*")
 
-        ctx = HookContext(
+        HookContext(
             event=HookEvent.PRE_TOOL_USE,
             session_id="test",
             project_dir="/project",
             permission_mode="ask",
-            tool_name="delete_file"
+            tool_name="delete_file",
         )
 
-        result = HookResult(
-            success=True,
-            decision=HookDecision.DENY,
-            reason="Deletion not allowed"
-        )
+        result = HookResult(success=True, decision=HookDecision.DENY, reason="Deletion not allowed")
 
         assert result.decision == HookDecision.DENY
         assert result.reason == "Deletion not allowed"
 
     def test_hook_workflow_modify(self):
         """Test hook workflow with modification."""
-        hook = HookDefinition(
-            event=HookEvent.PRE_TOOL_USE,
-            matcher=".*"
-        )
+        HookDefinition(event=HookEvent.PRE_TOOL_USE, matcher=".*")
 
         original_input = {"path": "test.py", "content": "old"}
         modified_input = {"path": "test.py", "content": "new"}
@@ -315,14 +273,14 @@ class TestHookIntegration:
             project_dir="/project",
             permission_mode="allow",
             tool_name="write_file",
-            tool_input=original_input
+            tool_input=original_input,
         )
 
         result = HookResult(
             success=True,
             decision=HookDecision.MODIFY,
             modified_input=modified_input,
-            additional_context="Content sanitized"
+            additional_context="Content sanitized",
         )
 
         assert result.modified_input != ctx.tool_input

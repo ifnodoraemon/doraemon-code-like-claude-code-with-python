@@ -227,9 +227,7 @@ def export_notes(collection_name: str = "default", export_format: str = "json") 
     if export_format == "markdown":
         chunks = []
         for note in notes:
-            chunks.append(
-                f"# {note.get('title') or 'Untitled'}\n\n{note.get('content', '')}"
-            )
+            chunks.append(f"# {note.get('title') or 'Untitled'}\n\n{note.get('content', '')}")
         return f"\n\n{NOTE_DELIMITER}\n\n".join(chunks)
 
     return f"Unsupported export format: {export_format}"
@@ -244,7 +242,9 @@ def _sync_note_to_vector(title: str, content: str, collection_name: str, tags: l
 
     try:
         if hasattr(collection, "get") and hasattr(collection, "delete"):
-            existing = collection.get(where={"$and": [{"title": title}, {"project": collection_name}]})
+            existing = collection.get(
+                where={"$and": [{"title": title}, {"project": collection_name}]}
+            )
             existing_ids = existing.get("ids") if existing else []
             if existing_ids:
                 collection.delete(ids=existing_ids)
@@ -362,8 +362,7 @@ def _ensure_initialized():
         COLLECTION_NAME = f"agent_notes_{provider}"
 
         collection = client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            embedding_function=embedding_fn
+            name=COLLECTION_NAME, embedding_function=embedding_fn
         )
     except Exception as e:
         logger.error(f"Failed to initialize ChromaDB collection: {e}")
@@ -380,11 +379,15 @@ def save_note(
     tags = tags or []
 
     if len(content) > 100000:
-        return f"Error: Content too long ({len(content)} chars). Maximum allowed is 100000 characters."
+        return (
+            f"Error: Content too long ({len(content)} chars). Maximum allowed is 100000 characters."
+        )
 
     try:
         _write_note_file(title=title, content=content, collection_name=collection_name, tags=tags)
-        _sync_note_to_vector(title=title, content=content, collection_name=collection_name, tags=tags)
+        _sync_note_to_vector(
+            title=title, content=content, collection_name=collection_name, tags=tags
+        )
         logger.info(f"Saved note '{title}' to project '{collection_name}'")
         return f"Note '{title}' saved to project {collection_name}."
     except Exception as e:
@@ -399,7 +402,9 @@ def search_notes(query: str, collection_name: str = "default", n_results: int = 
 
     try:
         vector_candidates = _vector_search_notes(query, collection_name, n_results)
-        keyword_candidates = _keyword_search_notes(query, collection_name, max(n_results * 3, n_results))
+        keyword_candidates = _keyword_search_notes(
+            query, collection_name, max(n_results * 3, n_results)
+        )
         candidates = _merge_note_candidates(vector_candidates, keyword_candidates)
 
         if not candidates:
@@ -408,7 +413,9 @@ def search_notes(query: str, collection_name: str = "default", n_results: int = 
         config = load_config(validate=False)
         rerank_model = config.get("rerank_model")
         if rerank_model:
-            candidates = NoteReranker(rerank_model).rerank(query=query, candidates=candidates, limit=n_results)
+            candidates = NoteReranker(rerank_model).rerank(
+                query=query, candidates=candidates, limit=n_results
+            )
         else:
             candidates = candidates[:n_results]
 
@@ -434,7 +441,9 @@ def delete_note(title: str, collection_name: str = "default") -> str:
             deleted = True
 
         if collection is not None:
-            results = collection.get(where={"$and": [{"title": title}, {"project": collection_name}]})
+            results = collection.get(
+                where={"$and": [{"title": title}, {"project": collection_name}]}
+            )
             if results and results.get("ids"):
                 collection.delete(ids=results["ids"])
                 deleted = True
@@ -491,6 +500,7 @@ def list_notes(collection_name: str = "default", limit: int = 20) -> str:
     except Exception as e:
         logger.error(f"Failed to list notes: {e}")
         return f"Failed to list notes: {e}"
+
 
 @mcp.tool()
 def update_user_persona(key: str, value: str) -> str:

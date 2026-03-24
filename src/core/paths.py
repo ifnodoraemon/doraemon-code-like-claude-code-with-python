@@ -61,6 +61,14 @@ def tasks_path(project_dir: Path | None = None) -> Path:
     return state_dir(project_dir) / "tasks.json"
 
 
+def mailboxes_dir(project_dir: Path | None = None) -> Path:
+    return state_dir(project_dir) / "mailboxes"
+
+
+def workspaces_dir(project_dir: Path | None = None) -> Path:
+    return state_dir(project_dir) / "workspaces"
+
+
 def theme_path(project_dir: Path | None = None) -> Path:
     return state_dir(project_dir) / "theme.json"
 

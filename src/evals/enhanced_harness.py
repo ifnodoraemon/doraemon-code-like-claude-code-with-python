@@ -151,17 +151,13 @@ def check_assertions_enhanced(
 
         # New types
         elif atype == "file_contains":
-            success, msg = checker.check_file_contains(
-                sandbox_dir, asm["path"], asm["pattern"]
-            )
+            success, msg = checker.check_file_contains(sandbox_dir, asm["path"], asm["pattern"])
             reasons.append(msg)
             if not success:
                 passed = False
 
         elif atype == "file_not_contains":
-            success, msg = checker.check_file_not_contains(
-                sandbox_dir, asm["path"], asm["pattern"]
-            )
+            success, msg = checker.check_file_not_contains(sandbox_dir, asm["path"], asm["pattern"])
             reasons.append(msg)
             if not success:
                 passed = False

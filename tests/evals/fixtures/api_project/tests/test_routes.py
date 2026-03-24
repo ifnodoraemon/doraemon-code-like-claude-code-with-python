@@ -1,18 +1,18 @@
 """Tests for API routes."""
 
 import pytest
-from app.main import users_db, items_db
+from app.main import items_db, users_db
 from app.routes import (
-    route_create_user,
-    route_get_user,
-    route_list_users,
-    route_update_user,
-    route_delete_user,
     route_create_item,
-    route_get_item,
-    route_list_items,
-    route_update_item,
+    route_create_user,
     route_delete_item,
+    route_delete_user,
+    route_get_item,
+    route_get_user,
+    route_list_items,
+    route_list_users,
+    route_update_item,
+    route_update_user,
 )
 
 

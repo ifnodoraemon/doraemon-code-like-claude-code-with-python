@@ -5,10 +5,9 @@
 """
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
-import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -26,7 +25,7 @@ class MultiModelComparator:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def compare_models(self, task_files: List[str]) -> Dict:
+    def compare_models(self, task_files: list[str]) -> dict:
         """对比多个模型"""
         from tests.evals.agent_evaluator import AgentEvaluator
 
@@ -57,7 +56,7 @@ class MultiModelComparator:
 
             # 运行评估
             for task_file in task_files:
-                evaluator = AgentEvaluator(task_file)
+                AgentEvaluator(task_file)
                 # report = evaluator.run_evaluation(agent)  # 需要实现
 
                 # 更新结果
@@ -70,16 +69,18 @@ class MultiModelComparator:
         self.save_comparison(comparison_results)
         return comparison_results
 
-    def save_comparison(self, results: Dict):
+    def save_comparison(self, results: dict):
         """保存对比结果"""
-        output_file = self.output_dir / f"comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        output_file = (
+            self.output_dir / f"comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
 
         with open(output_file, "w") as f:
             json.dump(results, f, indent=2)
 
         print(f"\n对比结果已保存到: {output_file}")
 
-    def generate_comparison_report(self, results: Dict) -> str:
+    def generate_comparison_report(self, results: dict) -> str:
         """生成对比报告"""
         report = []
         report.append("# 多模型对比报告\n")
@@ -147,7 +148,7 @@ class MultiModelComparator:
 
         return "\n".join(report)
 
-    def print_comparison(self, results: Dict):
+    def print_comparison(self, results: dict):
         """打印对比结果"""
         print("\n" + "=" * 60)
         print("多模型对比结果")

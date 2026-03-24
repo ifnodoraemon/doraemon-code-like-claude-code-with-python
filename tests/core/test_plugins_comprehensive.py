@@ -15,7 +15,6 @@ import json
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -26,7 +25,6 @@ from src.core.plugins import (
     PluginManifest,
     PluginScope,
 )
-
 
 # ============================================================================
 # FIXTURES
@@ -126,9 +124,7 @@ class TestPluginLoading:
 
     def test_load_plugin_from_manifest(self, plugin_manager, sample_plugin_dir):
         """Test loading a plugin from a manifest file."""
-        result = plugin_manager._load_plugin(
-            sample_plugin_dir, PluginScope.PROJECT
-        )
+        result = plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
         assert result is True
         assert "test-plugin" in plugin_manager._plugins
 
@@ -235,7 +231,7 @@ class TestPluginLifecycle:
     def test_plugin_state_persistence(self, plugin_manager, sample_plugin_dir):
         """Test plugin state is saved and loaded."""
         plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
-        plugin = plugin_manager.get_plugin("test-plugin")
+        plugin_manager.get_plugin("test-plugin")
 
         # Disable and save state
         plugin_manager.disable("test-plugin")
@@ -400,6 +396,7 @@ class TestPluginErrorHandling:
 
         # Remove the directory
         import shutil
+
         shutil.rmtree(plugin.path)
 
         # Uninstall should fail gracefully
@@ -425,9 +422,7 @@ class TestPluginErrorHandling:
         )
 
         manifest_file = plugin_dir / "plugin.json"
-        manifest_file.write_text(
-            json.dumps(manifest.to_dict(), indent=2), encoding="utf-8"
-        )
+        manifest_file.write_text(json.dumps(manifest.to_dict(), indent=2), encoding="utf-8")
 
         plugin_manager._load_plugin(plugin_dir, PluginScope.PROJECT)
         # Commands without scripts should not be registered
@@ -509,9 +504,7 @@ class TestPluginInstallation:
 
     def test_install_from_local_path(self, plugin_manager, sample_plugin_dir):
         """Test installing plugin from local path."""
-        result = plugin_manager.install(
-            str(sample_plugin_dir), scope=PluginScope.PROJECT
-        )
+        result = plugin_manager.install(str(sample_plugin_dir), scope=PluginScope.PROJECT)
         assert result is not None
         assert result.manifest.name == "test-plugin"
 
@@ -537,9 +530,7 @@ class TestPluginInstallation:
 
     def test_install_from_nonexistent_path(self, plugin_manager):
         """Test installing from nonexistent path fails."""
-        result = plugin_manager.install(
-            "/nonexistent/path", scope=PluginScope.PROJECT
-        )
+        result = plugin_manager.install("/nonexistent/path", scope=PluginScope.PROJECT)
         assert result is None
 
     def test_install_from_path_without_manifest(self, plugin_manager, temp_project_dir):

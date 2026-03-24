@@ -164,9 +164,7 @@ After your thorough analysis, provide your response."""
 
         return ""
 
-    def parse_response(
-        self, response: str, duration: float = 0
-    ) -> ThinkingResult:
+    def parse_response(self, response: str, duration: float = 0) -> ThinkingResult:
         """
         Parse response to extract thinking and final response.
 

@@ -13,7 +13,7 @@ Tests cover:
 import json
 import os
 import tempfile
-from unittest.mock import MagicMock, Mock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,7 +27,6 @@ from src.servers.memory import (
     search_notes,
     update_user_persona,
 )
-
 
 # ========================================
 # Fixtures
@@ -73,9 +72,7 @@ def mock_chromadb_collection():
 def mock_chromadb_client(mock_chromadb_collection):
     """Create a mock ChromaDB client."""
     mock_client = MagicMock()
-    mock_client.get_or_create_collection = MagicMock(
-        return_value=mock_chromadb_collection
-    )
+    mock_client.get_or_create_collection = MagicMock(return_value=mock_chromadb_collection)
     return mock_client
 
 
@@ -93,9 +90,7 @@ class TestSaveNote:
         mock_collection.add = MagicMock()
 
         result = save_note(
-            title="Test Note",
-            content="This is test content",
-            collection_name="default"
+            title="Test Note", content="This is test content", collection_name="default"
         )
 
         assert "已保存" in result or "saved" in result.lower()
@@ -115,7 +110,7 @@ class TestSaveNote:
             title="Tagged Note",
             content="Content with tags",
             collection_name="default",
-            tags=["python", "testing", "mocking"]
+            tags=["python", "testing", "mocking"],
         )
 
         assert "已保存" in result or "saved" in result.lower()
@@ -134,7 +129,7 @@ class TestSaveNote:
         result = save_note(
             title="Custom Collection Note",
             content="Content for custom collection",
-            collection_name="my_project"
+            collection_name="my_project",
         )
 
         assert "已保存" in result or "saved" in result.lower()
@@ -147,11 +142,7 @@ class TestSaveNote:
     @patch("src.servers.memory.collection", None)
     def test_save_note_without_vector_index_still_persists_file(self, temp_memory_dir):
         """Test saving a note still works when vector indexing is unavailable."""
-        result = save_note(
-            title="Test",
-            content="Content",
-            collection_name="default"
-        )
+        result = save_note(title="Test", content="Content", collection_name="default")
 
         assert "saved" in result.lower()
         note_file = os.path.join(temp_memory_dir, ".agent", "memory", "notes", "default", "test.md")
@@ -162,11 +153,7 @@ class TestSaveNote:
         """Test saving a note still succeeds when vector sync fails."""
         mock_collection.add.side_effect = Exception("Database error")
 
-        result = save_note(
-            title="Error Note",
-            content="This will fail",
-            collection_name="default"
-        )
+        result = save_note(title="Error Note", content="This will fail", collection_name="default")
 
         assert "已保存" in result or "saved" in result.lower()
 
@@ -176,10 +163,7 @@ class TestSaveNote:
         mock_collection.add = MagicMock()
 
         result = save_note(
-            title="No Tags",
-            content="Content without tags",
-            collection_name="default",
-            tags=[]
+            title="No Tags", content="Content without tags", collection_name="default", tags=[]
         )
 
         assert "已保存" in result or "saved" in result.lower()
@@ -195,10 +179,7 @@ class TestSaveNote:
         mock_collection.add = MagicMock()
 
         result = save_note(
-            title="Default Tags",
-            content="Content",
-            collection_name="default",
-            tags=None
+            title="Default Tags", content="Content", collection_name="default", tags=None
         )
 
         assert "已保存" in result or "saved" in result.lower()
@@ -214,9 +195,7 @@ class TestSaveNote:
         mock_collection.add = MagicMock()
 
         result = save_note(
-            title="Note with 特殊字符 & symbols!",
-            content="Content",
-            collection_name="default"
+            title="Note with 特殊字符 & symbols!", content="Content", collection_name="default"
         )
 
         assert "已保存" in result or "saved" in result.lower()
@@ -228,11 +207,7 @@ class TestSaveNote:
         mock_collection.add = MagicMock()
 
         long_content = "x" * 10000
-        result = save_note(
-            title="Long Note",
-            content=long_content,
-            collection_name="default"
-        )
+        result = save_note(title="Long Note", content=long_content, collection_name="default")
 
         assert "已保存" in result or "saved" in result.lower()
 
@@ -245,11 +220,7 @@ class TestSaveNote:
         """Test that note IDs are generated correctly."""
         mock_collection.add = MagicMock()
 
-        save_note(
-            title="Test",
-            content="Content",
-            collection_name="project1"
-        )
+        save_note(title="Test", content="Content", collection_name="project1")
 
         call_args = mock_collection.add.call_args
         note_id = call_args[1]["ids"][0]
@@ -291,17 +262,10 @@ class TestSearchNotes:
         """Test successfully searching for notes."""
         mock_collection.query.return_value = {
             "documents": [["Document 1", "Document 2"]],
-            "metadatas": [[
-                {"title": "Note 1"},
-                {"title": "Note 2"}
-            ]]
+            "metadatas": [[{"title": "Note 1"}, {"title": "Note 2"}]],
         }
 
-        result = search_notes(
-            query="test query",
-            collection_name="default",
-            n_results=3
-        )
+        result = search_notes(query="test query", collection_name="default", n_results=3)
 
         assert "Note 1" in result
         assert "Document 1" in result
@@ -312,14 +276,10 @@ class TestSearchNotes:
         """Test searching notes in a custom collection."""
         mock_collection.query.return_value = {
             "documents": [["Result"]],
-            "metadatas": [[{"title": "Result"}]]
+            "metadatas": [[{"title": "Result"}]],
         }
 
-        result = search_notes(
-            query="search",
-            collection_name="my_project",
-            n_results=5
-        )
+        search_notes(query="search", collection_name="my_project", n_results=5)
 
         # Verify the where clause filters by collection_name
         call_args = mock_collection.query.call_args
@@ -330,14 +290,10 @@ class TestSearchNotes:
         """Test searching with custom number of results."""
         mock_collection.query.return_value = {
             "documents": [["Result"]],
-            "metadatas": [[{"title": "Result"}]]
+            "metadatas": [[{"title": "Result"}]],
         }
 
-        search_notes(
-            query="search",
-            collection_name="default",
-            n_results=10
-        )
+        search_notes(query="search", collection_name="default", n_results=10)
 
         # Verify n_results is passed correctly
         call_args = mock_collection.query.call_args
@@ -346,30 +302,18 @@ class TestSearchNotes:
     @patch("src.servers.memory.collection")
     def test_search_notes_no_results(self, mock_collection):
         """Test searching when no results are found."""
-        mock_collection.query.return_value = {
-            "documents": [[]],
-            "metadatas": [[]]
-        }
+        mock_collection.query.return_value = {"documents": [[]], "metadatas": [[]]}
 
-        result = search_notes(
-            query="nonexistent",
-            collection_name="default"
-        )
+        result = search_notes(query="nonexistent", collection_name="default")
 
         assert "未找到" in result or "not found" in result.lower()
 
     @patch("src.servers.memory.collection")
     def test_search_notes_empty_documents(self, mock_collection):
         """Test searching when documents list is empty."""
-        mock_collection.query.return_value = {
-            "documents": [None],
-            "metadatas": [None]
-        }
+        mock_collection.query.return_value = {"documents": [None], "metadatas": [None]}
 
-        result = search_notes(
-            query="search",
-            collection_name="default"
-        )
+        result = search_notes(query="search", collection_name="default")
 
         assert "未找到" in result or "not found" in result.lower()
 
@@ -378,32 +322,24 @@ class TestSearchNotes:
         """Test searching degrades gracefully when vector query fails."""
         mock_collection.query.side_effect = Exception("Query error")
 
-        result = search_notes(
-            query="search",
-            collection_name="default"
-        )
+        result = search_notes(query="search", collection_name="default")
 
         assert "not found" in result.lower()
 
     @patch("src.servers.memory.collection", None)
     def test_search_notes_without_vector_index_uses_files(self, temp_memory_dir):
         """Test searching falls back to persisted note files without vectors."""
-        save_note(
-            title="Searchable",
-            content="search fallback content",
-            collection_name="default"
-        )
+        save_note(title="Searchable", content="search fallback content", collection_name="default")
 
-        result = search_notes(
-            query="fallback",
-            collection_name="default"
-        )
+        result = search_notes(query="fallback", collection_name="default")
 
         assert "Searchable" in result
         assert "fallback content" in result
 
     @patch("src.servers.memory.collection")
-    def test_search_notes_prefers_file_content_over_stale_vector(self, mock_collection, temp_memory_dir):
+    def test_search_notes_prefers_file_content_over_stale_vector(
+        self, mock_collection, temp_memory_dir
+    ):
         """Test search uses file-backed content when vector content is stale."""
         save_note(title="Release Plan", content="updated file content", collection_name="default")
         mock_collection.query.return_value = {
@@ -420,23 +356,11 @@ class TestSearchNotes:
     def test_search_notes_multiple_results(self, mock_collection):
         """Test searching with multiple results."""
         mock_collection.query.return_value = {
-            "documents": [[
-                "Document 1",
-                "Document 2",
-                "Document 3"
-            ]],
-            "metadatas": [[
-                {"title": "Title 1"},
-                {"title": "Title 2"},
-                {"title": "Title 3"}
-            ]]
+            "documents": [["Document 1", "Document 2", "Document 3"]],
+            "metadatas": [[{"title": "Title 1"}, {"title": "Title 2"}, {"title": "Title 3"}]],
         }
 
-        result = search_notes(
-            query="search",
-            collection_name="default",
-            n_results=3
-        )
+        result = search_notes(query="search", collection_name="default", n_results=3)
 
         assert "Title 1" in result
         assert "Title 2" in result
@@ -450,13 +374,10 @@ class TestSearchNotes:
         """Test that query text is passed correctly to ChromaDB."""
         mock_collection.query.return_value = {
             "documents": [["Result"]],
-            "metadatas": [[{"title": "Result"}]]
+            "metadatas": [[{"title": "Result"}]],
         }
 
-        search_notes(
-            query="my search query",
-            collection_name="default"
-        )
+        search_notes(query="my search query", collection_name="default")
 
         # Verify query_texts is passed correctly
         call_args = mock_collection.query.call_args
@@ -467,13 +388,10 @@ class TestSearchNotes:
         """Test that search results are formatted correctly."""
         mock_collection.query.return_value = {
             "documents": [["Content of note"]],
-            "metadatas": [[{"title": "My Note"}]]
+            "metadatas": [[{"title": "My Note"}]],
         }
 
-        result = search_notes(
-            query="search",
-            collection_name="default"
-        )
+        result = search_notes(query="search", collection_name="default")
 
         # Verify formatting includes title and content
         assert "[标题: My Note]" in result
@@ -537,10 +455,7 @@ class TestUpdateUserPersona:
 
     def test_update_user_persona_special_characters(self, temp_memory_dir):
         """Test updating persona with special characters."""
-        result = update_user_persona(
-            "preferences",
-            "喜欢 Python & 测试 (testing)"
-        )
+        result = update_user_persona("preferences", "喜欢 Python & 测试 (testing)")
 
         assert "已记住" in result or "remembered" in result.lower()
 
@@ -662,8 +577,8 @@ class TestGetUserPersona:
             "name": "John",
             "preferences": {
                 "languages": ["Python", "JavaScript"],
-                "frameworks": ["FastAPI", "React"]
-            }
+                "frameworks": ["FastAPI", "React"],
+            },
         }
         with open(memory_file, "w") as f:
             json.dump(data, f, indent=2)
@@ -749,7 +664,7 @@ class TestMemoryIntegration:
             title="Integration Test",
             content="This is integration test content",
             collection_name="default",
-            tags=["test", "integration"]
+            tags=["test", "integration"],
         )
 
         assert "已保存" in save_result or "saved" in save_result.lower()
@@ -757,14 +672,11 @@ class TestMemoryIntegration:
         # Setup mock for search
         mock_collection.query.return_value = {
             "documents": [["This is integration test content"]],
-            "metadatas": [[{"title": "Integration Test"}]]
+            "metadatas": [[{"title": "Integration Test"}]],
         }
 
         # Search for the note
-        search_result = search_notes(
-            query="integration test",
-            collection_name="default"
-        )
+        search_result = search_notes(query="integration test", collection_name="default")
 
         assert "Integration Test" in search_result
         assert "integration test content" in search_result
@@ -794,18 +706,10 @@ class TestMemoryIntegration:
         mock_collection.add = MagicMock()
 
         # Save to project1
-        save_note(
-            title="Note1",
-            content="Content1",
-            collection_name="project1"
-        )
+        save_note(title="Note1", content="Content1", collection_name="project1")
 
         # Save to project2
-        save_note(
-            title="Note2",
-            content="Content2",
-            collection_name="project2"
-        )
+        save_note(title="Note2", content="Content2", collection_name="project2")
 
         # Verify both saves happened
         assert mock_collection.add.call_count == 2
@@ -830,11 +734,7 @@ class TestEdgeCases:
         mock_collection.add = MagicMock()
 
         content = "Line 1\nLine 2\nLine 3"
-        save_note(
-            title="Multiline",
-            content=content,
-            collection_name="default"
-        )
+        save_note(title="Multiline", content=content, collection_name="default")
 
         call_args = mock_collection.add.call_args
         assert call_args[1]["documents"][0] == content
@@ -844,13 +744,10 @@ class TestEdgeCases:
         """Test searching with special characters in query."""
         mock_collection.query.return_value = {
             "documents": [["Result"]],
-            "metadatas": [[{"title": "Result"}]]
+            "metadatas": [[{"title": "Result"}]],
         }
 
-        result = search_notes(
-            query="特殊字符 & symbols!",
-            collection_name="default"
-        )
+        result = search_notes(query="特殊字符 & symbols!", collection_name="default")
 
         assert "Result" in result
 
@@ -871,13 +768,10 @@ class TestEdgeCases:
         """Test searching when metadata has missing fields."""
         mock_collection.query.return_value = {
             "documents": [["Document"]],
-            "metadatas": [[{"title": None}]]
+            "metadatas": [[{"title": None}]],
         }
 
-        result = search_notes(
-            query="search",
-            collection_name="default"
-        )
+        result = search_notes(query="search", collection_name="default")
 
         # Should handle None gracefully
         assert "Untitled" in result or "Document" in result

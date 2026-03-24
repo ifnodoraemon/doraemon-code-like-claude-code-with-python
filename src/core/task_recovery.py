@@ -128,7 +128,9 @@ class RecoverableTask:
             context=data.get("context", {}),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
-            interruption_type=InterruptionType(data["interruption_type"]) if data.get("interruption_type") else None,
+            interruption_type=InterruptionType(data["interruption_type"])
+            if data.get("interruption_type")
+            else None,
             error_message=data.get("error_message"),
             conversation_id=data.get("conversation_id"),
             checkpoint_id=data.get("checkpoint_id"),
@@ -437,8 +439,7 @@ class TaskRecoveryManager:
     def get_interrupted_tasks(self) -> list[RecoverableTask]:
         """Get all interrupted tasks."""
         return [
-            t for t in self._tasks.values()
-            if t.state in (TaskState.INTERRUPTED, TaskState.PAUSED)
+            t for t in self._tasks.values() if t.state in (TaskState.INTERRUPTED, TaskState.PAUSED)
         ]
 
     def get_recent_tasks(self, limit: int = 10) -> list[RecoverableTask]:

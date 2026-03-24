@@ -160,11 +160,12 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_build_mode(self):
         """Test system prompt generation for build mode."""
-        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
-             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
-
+        with (
+            patch("src.host.cli.chat_loop.load_config") as mock_config,
+            patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt,
+            patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions,
+            patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format,
+        ):
             mock_config.return_value = {"persona": {"name": "TestBot"}}
             mock_sys_prompt.return_value = "Base prompt"
             mock_instructions.return_value = "Instructions"
@@ -177,11 +178,12 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_plan_mode(self):
         """Test system prompt generation for plan mode."""
-        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
-             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
-
+        with (
+            patch("src.host.cli.chat_loop.load_config") as mock_config,
+            patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt,
+            patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions,
+            patch("src.host.cli.chat_loop.format_instructions_for_prompt"),
+        ):
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Plan mode prompt"
             mock_instructions.return_value = ""
@@ -193,11 +195,12 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_with_skills(self):
         """Test system prompt includes skills content."""
-        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
-             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
-
+        with (
+            patch("src.host.cli.chat_loop.load_config") as mock_config,
+            patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt,
+            patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions,
+            patch("src.host.cli.chat_loop.format_instructions_for_prompt"),
+        ):
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Base"
             mock_instructions.return_value = ""
@@ -209,11 +212,12 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_with_instructions(self):
         """Test system prompt includes project instructions."""
-        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
-             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
-
+        with (
+            patch("src.host.cli.chat_loop.load_config") as mock_config,
+            patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt,
+            patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions,
+            patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format,
+        ):
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Base"
             mock_instructions.return_value = "Project rules"
@@ -226,11 +230,12 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_empty_persona(self):
         """Test system prompt with missing persona config."""
-        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
-             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
-
+        with (
+            patch("src.host.cli.chat_loop.load_config") as mock_config,
+            patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt,
+            patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions,
+            patch("src.host.cli.chat_loop.format_instructions_for_prompt"),
+        ):
             mock_config.return_value = {}
             mock_sys_prompt.return_value = "Default prompt"
             mock_instructions.return_value = ""
@@ -242,11 +247,12 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_with_all_components(self):
         """Test system prompt with all components combined."""
-        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
-             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format:
-
+        with (
+            patch("src.host.cli.chat_loop.load_config") as mock_config,
+            patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt,
+            patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions,
+            patch("src.host.cli.chat_loop.format_instructions_for_prompt") as mock_format,
+        ):
             mock_config.return_value = {"persona": {"name": "Doraemon", "role": "Assistant"}}
             mock_sys_prompt.return_value = "System: "
             mock_instructions.return_value = "Rules"
@@ -261,11 +267,12 @@ class TestBuildSystemPrompt:
 
     def test_build_system_prompt_returns_string(self):
         """Test that build_system_prompt returns a string."""
-        with patch("src.host.cli.chat_loop.load_config") as mock_config, \
-             patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt, \
-             patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions, \
-             patch("src.host.cli.chat_loop.format_instructions_for_prompt"):
-
+        with (
+            patch("src.host.cli.chat_loop.load_config") as mock_config,
+            patch("src.host.cli.chat_loop.get_system_prompt") as mock_sys_prompt,
+            patch("src.host.cli.chat_loop.load_all_instructions") as mock_instructions,
+            patch("src.host.cli.chat_loop.format_instructions_for_prompt"),
+        ):
             mock_config.return_value = {"persona": {}}
             mock_sys_prompt.return_value = "Prompt"
             mock_instructions.return_value = ""
@@ -297,7 +304,7 @@ class TestConvertToolsToDefinitions:
         tool_dict = {
             "name": "write_file",
             "description": "Write to a file",
-            "parameters": {"type": "object"}
+            "parameters": {"type": "object"},
         }
 
         result = convert_tools_to_definitions([tool_dict])
@@ -319,11 +326,7 @@ class TestConvertToolsToDefinitions:
         mock_tool.description = "Tool 1"
         mock_tool.parameters = {}
 
-        tool_dict = {
-            "name": "tool2",
-            "description": "Tool 2",
-            "parameters": {}
-        }
+        tool_dict = {"name": "tool2", "description": "Tool 2", "parameters": {}}
 
         result = convert_tools_to_definitions([mock_tool, tool_dict])
 
@@ -350,10 +353,7 @@ class TestConvertToolsToDefinitions:
         mock_tool.description = "A complex tool"
         mock_tool.parameters = {
             "type": "object",
-            "properties": {
-                "param1": {"type": "string"},
-                "param2": {"type": "number"}
-            }
+            "properties": {"param1": {"type": "string"}, "param2": {"type": "number"}},
         }
 
         result = convert_tools_to_definitions([mock_tool])
@@ -384,6 +384,7 @@ class TestConvertToolsToDefinitions:
 # chat_loop calls initialize_model_client (via fallback) and initialize_all_managers.
 # These are the correct mock targets since chat_loop does NOT import individual manager
 # classes directly.
+
 
 def _chat_loop_patches(
     mock_model_client=None,
@@ -416,7 +417,9 @@ def _chat_loop_patches(
     # Mock stdin.isatty
     if stdin_read is not None:
         patches["isatty"] = patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=False)
-        patches["stdin_read"] = patch("src.host.cli.chat_loop.sys.stdin.read", return_value=stdin_read)
+        patches["stdin_read"] = patch(
+            "src.host.cli.chat_loop.sys.stdin.read", return_value=stdin_read
+        )
     else:
         patches["isatty"] = patch("src.host.cli.chat_loop.sys.stdin.isatty", return_value=isatty)
 
@@ -464,7 +467,6 @@ def _chat_loop_patches(
     patches["prompt"] = patch("src.host.cli.chat_loop.Prompt.ask", side_effect=prompt_side_effect)
 
     return patches, mock_model_client, managers
-
 
 
 @contextlib.contextmanager
@@ -571,7 +573,9 @@ class TestChatLoopInitialization:
             mock_console = mocks["console"]
             mock_console.print.assert_called()
             calls = [str(c) for c in mock_console.print.call_args_list]
-            assert any("Failed to initialize" in str(c) or "Connection failed" in str(c) for c in calls)
+            assert any(
+                "Failed to initialize" in str(c) or "Connection failed" in str(c) for c in calls
+            )
 
     async def test_chat_loop_with_project_isolation(self):
         """Test chat loop respects project isolation."""
@@ -657,18 +661,21 @@ class TestChatLoopUserInputHandling:
             prompt_side_effect=["/help", "exit"],
         )
 
-        with _apply_patches(patches), \
-             patch("src.host.cli.chat_loop.CommandHandler") as mock_cmd_handler:
-
+        with (
+            _apply_patches(patches),
+            patch("src.host.cli.chat_loop.CommandHandler") as mock_cmd_handler,
+        ):
             mock_handler_inst = AsyncMock()
-            mock_handler_inst.handle = AsyncMock(return_value={
-                "mode": "build",
-                "tool_names": [],
-                "tool_definitions": [],
-                "active_skills_content": "",
-                "conversation_history": [],
-                "system_prompt": None,
-            })
+            mock_handler_inst.handle = AsyncMock(
+                return_value={
+                    "mode": "build",
+                    "tool_names": [],
+                    "tool_definitions": [],
+                    "active_skills_content": "",
+                    "conversation_history": [],
+                    "system_prompt": None,
+                }
+            )
             mock_cmd_handler.return_value = mock_handler_inst
 
             await chat_loop(project="test")
@@ -717,7 +724,7 @@ class TestChatLoopUserInputHandling:
         mock_session_data.metadata.get_display_name.return_value = "Previous Session"
         mock_session_data.messages = [
             {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi there"}
+            {"role": "assistant", "content": "Hi there"},
         ]
         managers["session_mgr"].resume_session.return_value = mock_session_data
 
@@ -745,18 +752,16 @@ class TestChatLoopToolExecution:
         # Mock response with tool call
         mock_response = _make_simple_response(
             content="I'll read the file",
-            tool_calls=[{
-                "id": "call_123",
-                "function": {
-                    "name": "read_file",
-                    "arguments": '{"path": "test.py"}'
+            tool_calls=[
+                {
+                    "id": "call_123",
+                    "function": {"name": "read_file", "arguments": '{"path": "test.py"}'},
                 }
-            }],
+            ],
         )
 
         # Second response without tool calls
         mock_response2 = _make_simple_response(content="File content: test")
-
 
         mock_client.chat = AsyncMock(side_effect=[mock_response, mock_response2])
 
@@ -780,17 +785,15 @@ class TestChatLoopToolExecution:
 
         mock_response = _make_simple_response(
             content="I'll read the file",
-            tool_calls=[{
-                "id": "call_123",
-                "function": {
-                    "name": "read_file",
-                    "arguments": '{"path": "nonexistent.py"}'
+            tool_calls=[
+                {
+                    "id": "call_123",
+                    "function": {"name": "read_file", "arguments": '{"path": "nonexistent.py"}'},
                 }
-            }],
+            ],
         )
 
         mock_response2 = _make_simple_response(content="Error occurred")
-
 
         mock_client.chat = AsyncMock(side_effect=[mock_response, mock_response2])
 
@@ -814,17 +817,18 @@ class TestChatLoopToolExecution:
 
         mock_response = _make_simple_response(
             content="I'll write the file",
-            tool_calls=[{
-                "id": "call_123",
-                "function": {
-                    "name": "write_file",
-                    "arguments": '{"path": "test.py", "content": "print(1)"}'
+            tool_calls=[
+                {
+                    "id": "call_123",
+                    "function": {
+                        "name": "write_file",
+                        "arguments": '{"path": "test.py", "content": "print(1)"}',
+                    },
                 }
-            }],
+            ],
         )
 
         mock_response2 = _make_simple_response(content="File written")
-
 
         mock_client.chat = AsyncMock(side_effect=[mock_response, mock_response2])
 
@@ -841,7 +845,6 @@ class TestChatLoopToolExecution:
         )
 
         with _apply_patches(patches):
-
             await chat_loop(project="test")
 
             managers["registry"].call_tool.assert_called()
@@ -853,16 +856,17 @@ class TestChatLoopToolExecution:
         # Create responses that repeat the same tool call
         responses = []
         for i in range(20):
-            responses.append(_make_simple_response(
-                content=f"Attempt {i}",
-                tool_calls=[{
-                    "id": f"call_{i}",
-                    "function": {
-                        "name": "read_file",
-                        "arguments": '{"path": "test.py"}'
-                    }
-                }],
-            ))
+            responses.append(
+                _make_simple_response(
+                    content=f"Attempt {i}",
+                    tool_calls=[
+                        {
+                            "id": f"call_{i}",
+                            "function": {"name": "read_file", "arguments": '{"path": "test.py"}'},
+                        }
+                    ],
+                )
+            )
 
         mock_client.chat = AsyncMock(side_effect=responses)
 
@@ -876,7 +880,6 @@ class TestChatLoopToolExecution:
         )
 
         with _apply_patches(patches) as mocks:
-
             await chat_loop(project="test")
 
             mocks["console"].print.assert_called()
@@ -888,16 +891,20 @@ class TestChatLoopToolExecution:
         # Create many responses with tool calls
         responses = []
         for i in range(30):
-            responses.append(_make_simple_response(
-                content=f"Step {i}",
-                tool_calls=[{
-                    "id": f"call_{i}",
-                    "function": {
-                        "name": "read_file",
-                        "arguments": f'{{"path": "file_{i}.py"}}'
-                    }
-                }],
-            ))
+            responses.append(
+                _make_simple_response(
+                    content=f"Step {i}",
+                    tool_calls=[
+                        {
+                            "id": f"call_{i}",
+                            "function": {
+                                "name": "read_file",
+                                "arguments": f'{{"path": "file_{i}.py"}}',
+                            },
+                        }
+                    ],
+                )
+            )
 
         mock_client.chat = AsyncMock(side_effect=responses)
 
@@ -911,7 +918,6 @@ class TestChatLoopToolExecution:
         )
 
         with _apply_patches(patches) as mocks:
-
             await chat_loop(project="test")
 
             mock_console = mocks["console"]
@@ -942,7 +948,6 @@ class TestChatLoopContextManagement:
         )
 
         with _apply_patches(patches):
-
             await chat_loop(project="test")
 
             managers["ctx"].add_assistant_message.assert_called()
@@ -953,16 +958,14 @@ class TestChatLoopContextManagement:
 
         mock_response = _make_simple_response(
             content="Response",
-            tool_calls=[{
-                "id": "call_123",
-                "function": {
-                    "name": "switch_mode",
-                    "arguments": '{"mode": "build"}'
+            tool_calls=[
+                {
+                    "id": "call_123",
+                    "function": {"name": "switch_mode", "arguments": '{"mode": "build"}'},
                 }
-            }],
+            ],
         )
         mock_response2 = _make_simple_response(content="Switched")
-
 
         mock_client.chat = AsyncMock(side_effect=[mock_response, mock_response2])
 
@@ -976,7 +979,6 @@ class TestChatLoopContextManagement:
         )
 
         with _apply_patches(patches):
-
             await chat_loop(project="test")
 
             managers["registry"].call_tool.assert_called()
@@ -987,16 +989,17 @@ class TestChatLoopContextManagement:
 
         mock_response = _make_simple_response(
             content="Writing file",
-            tool_calls=[{
-                "id": "call_123",
-                "function": {
-                    "name": "write_file",
-                    "arguments": '{"path": "test.py", "content": "print(1)"}'
+            tool_calls=[
+                {
+                    "id": "call_123",
+                    "function": {
+                        "name": "write_file",
+                        "arguments": '{"path": "test.py", "content": "print(1)"}',
+                    },
                 }
-            }],
+            ],
         )
         mock_response2 = _make_simple_response(content="File written")
-
 
         mock_client.chat = AsyncMock(side_effect=[mock_response, mock_response2])
 
@@ -1013,7 +1016,6 @@ class TestChatLoopContextManagement:
         )
 
         with _apply_patches(patches):
-
             await chat_loop(project="test")
 
             managers["checkpoint_mgr"].begin_checkpoint.assert_called()
@@ -1035,7 +1037,6 @@ class TestChatLoopContextManagement:
         )
 
         with _apply_patches(patches):
-
             await chat_loop(project="test")
 
             managers["cost_tracker"].track.assert_called()
@@ -1057,7 +1058,6 @@ class TestChatLoopContextManagement:
         )
 
         with _apply_patches(patches) as mocks:
-
             await chat_loop(project="test")
 
             mock_console = mocks["console"]
@@ -1087,7 +1087,6 @@ class TestChatLoopSkillsAndHooks:
         )
 
         with _apply_patches(patches):
-
             await chat_loop(project="test")
 
             managers["skill_mgr"].get_skills_for_context.assert_called()
@@ -1108,7 +1107,6 @@ class TestChatLoopSkillsAndHooks:
         )
 
         with _apply_patches(patches):
-
             await chat_loop(project="test")
 
             # Verify hooks were triggered
@@ -1141,7 +1139,6 @@ class TestChatLoopSkillsAndHooks:
         )
 
         with _apply_patches(patches) as mocks:
-
             await chat_loop(project="test")
 
             mocks["console"].print.assert_called()
@@ -1162,7 +1159,6 @@ class TestChatLoopSkillsAndHooks:
         )
 
         with _apply_patches(patches) as mocks:
-
             await chat_loop(project="test")
 
             mocks["prompt"].assert_not_called()
@@ -1183,7 +1179,6 @@ class TestChatLoopSkillsAndHooks:
         )
 
         with _apply_patches(patches) as mocks:
-
             await chat_loop(project="test")
 
             mock_console = mocks["console"]

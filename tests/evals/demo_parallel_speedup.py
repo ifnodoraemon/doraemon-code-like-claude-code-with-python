@@ -10,7 +10,6 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -24,7 +23,7 @@ class MockAgent:
         self.agent_id = agent_id
         self.call_count = 0
 
-    async def execute_task(self, task: Dict) -> Dict:
+    async def execute_task(self, task: dict) -> dict:
         """模拟执行任务"""
         self.call_count += 1
 
@@ -57,13 +56,13 @@ def create_mock_agent(agent_id: int = 0):
     return MockAgent(agent_id)
 
 
-def load_tasks(task_file: str) -> List[Dict]:
+def load_tasks(task_file: str) -> list[dict]:
     """加载任务"""
-    with open(task_file, "r", encoding="utf-8") as f:
+    with open(task_file, encoding="utf-8") as f:
         return json.load(f)
 
 
-def run_serial_evaluation(tasks: List[Dict]) -> Dict:
+def run_serial_evaluation(tasks: list[dict]) -> dict:
     """串行评估"""
     print("\n" + "=" * 80)
     print("🐢 串行评估 (Serial Evaluation)")
@@ -94,7 +93,7 @@ def run_serial_evaluation(tasks: List[Dict]) -> Dict:
     }
 
 
-def run_parallel_evaluation(tasks: List[Dict], max_workers: int = 4) -> Dict:
+def run_parallel_evaluation(tasks: list[dict], max_workers: int = 4) -> dict:
     """并行评估"""
     print("\n" + "=" * 80)
     print(f"🚀 并行评估 (Parallel Evaluation) - {max_workers} workers")
@@ -137,7 +136,7 @@ def run_parallel_evaluation(tasks: List[Dict], max_workers: int = 4) -> Dict:
     }
 
 
-def print_comparison(results: List[Dict]):
+def print_comparison(results: list[dict]):
     """打印对比结果"""
     print("\n" + "=" * 80)
     print("📊 性能对比 (Performance Comparison)")
@@ -160,9 +159,7 @@ def print_comparison(results: List[Dict]):
         throughput = result["throughput"]
         speedup = baseline_time / total_time
 
-        print(
-            f"{mode:<20} {total_time:>10.2f}s  {throughput:>15.2f}  {speedup:>8.2f}x"
-        )
+        print(f"{mode:<20} {total_time:>10.2f}s  {throughput:>15.2f}  {speedup:>8.2f}x")
 
     # 计算最佳加速比
     best_result = max(results, key=lambda r: baseline_time / r["total_time"])
@@ -172,7 +169,7 @@ def print_comparison(results: List[Dict]):
     print(f"🏆 最佳加速: {best_result['mode']} - {best_speedup:.2f}x 加速")
     print(
         f"⚡ 时间节省: {baseline_time - best_result['total_time']:.2f}秒 "
-        f"({(1 - best_result['total_time']/baseline_time)*100:.1f}%)"
+        f"({(1 - best_result['total_time'] / baseline_time) * 100:.1f}%)"
     )
     print("=" * 80)
 

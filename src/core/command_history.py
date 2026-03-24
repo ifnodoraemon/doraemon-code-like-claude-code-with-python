@@ -103,9 +103,7 @@ class CommandHistory:
 
         try:
             data = json.loads(self._history_file.read_text(encoding="utf-8"))
-            self._entries = [
-                HistoryEntry.from_dict(e) for e in data.get("entries", [])
-            ]
+            self._entries = [HistoryEntry.from_dict(e) for e in data.get("entries", [])]
             logger.debug(f"Loaded {len(self._entries)} history entries")
         except Exception as e:
             logger.error(f"Failed to load history: {e}")
@@ -269,10 +267,7 @@ class CommandHistory:
             cmd_part = line[1:]
 
             # Find matching commands
-            matches = [
-                f"/{cmd}" for cmd in self._completion_commands
-                if cmd.startswith(cmd_part)
-            ]
+            matches = [f"/{cmd}" for cmd in self._completion_commands if cmd.startswith(cmd_part)]
 
             if state < len(matches):
                 return matches[state]
@@ -315,9 +310,7 @@ class BashModeExecutor:
         """
         self.cwd = Path(cwd) if cwd else Path.cwd()
 
-    def execute(
-        self, command: str, timeout: float = 30, capture: bool = True
-    ) -> dict[str, Any]:
+    def execute(self, command: str, timeout: float = 30, capture: bool = True) -> dict[str, Any]:
         """
         Execute a shell command.
 

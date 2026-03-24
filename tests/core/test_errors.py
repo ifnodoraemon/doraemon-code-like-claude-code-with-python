@@ -9,11 +9,11 @@ import time
 import pytest
 
 from src.core.errors import (
+    AgentError,
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerOpenError,
     CircuitState,
-    AgentError,
     ConfigurationError,
     ErrorCategory,
     ErrorHandler,

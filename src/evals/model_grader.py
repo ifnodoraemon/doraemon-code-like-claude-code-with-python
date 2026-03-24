@@ -11,7 +11,6 @@ from typing import Any
 
 # Use new Google GenAI SDK (consistent with main CLI)
 from google import genai
-
 from src.core.config import get_required_config_value
 
 
@@ -61,16 +60,18 @@ class ModelGrader:
         try:
             # Use new SDK API - contents must be a list
             from google.genai import types
+
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=[types.Content(parts=[types.Part(text=prompt)])],
             )
             # Extract JSON from response - safely handle empty response
-            if not response or not hasattr(response, 'text') or not response.text:
+            if not response or not hasattr(response, "text") or not response.text:
                 return {"score": 0, "pass": False, "reasoning": "Empty response from model"}
             text = response.text.strip()
             # More robust JSON extraction
             import re
+
             # Try to find JSON object in the response
             if text.startswith("```json"):
                 text = text[7:]
@@ -82,7 +83,7 @@ class ModelGrader:
 
             # If text doesn't start with {, try to find a JSON object
             if not text.startswith("{"):
-                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
+                json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, re.DOTALL)
                 if json_match:
                     text = json_match.group(0)
 

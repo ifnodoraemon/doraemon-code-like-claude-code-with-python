@@ -6,13 +6,12 @@
 
 import ast
 import json
-import os
 import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -23,7 +22,7 @@ class VerificationResult:
 
     success: bool
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
     def __bool__(self) -> bool:
         return self.success
@@ -37,7 +36,7 @@ class StateVerifier:
     基于 Anthropic 最佳实践：验证数据库记录，而非 UI 确认。
     """
 
-    def __init__(self, base_dir: Optional[str] = None):
+    def __init__(self, base_dir: str | None = None):
         """
         初始化验证器
 
@@ -99,9 +98,7 @@ class StateVerifier:
                 success=False, message=f"读取文件失败: {e}", details={"error": str(e)}
             )
 
-    def verify_file_contains_pattern(
-        self, path: str, pattern: str
-    ) -> VerificationResult:
+    def verify_file_contains_pattern(self, path: str, pattern: str) -> VerificationResult:
         """验证文件是否包含指定模式（正则表达式）"""
         full_path = self._resolve_path(path)
         if not full_path.exists():
@@ -128,9 +125,7 @@ class StateVerifier:
                 success=False, message=f"验证失败: {e}", details={"error": str(e)}
             )
 
-    def verify_file_permissions(
-        self, path: str, expected_mode: int
-    ) -> VerificationResult:
+    def verify_file_permissions(self, path: str, expected_mode: int) -> VerificationResult:
         """验证文件权限"""
         full_path = self._resolve_path(path)
         if not full_path.exists():
@@ -163,7 +158,7 @@ class StateVerifier:
         )
 
     def verify_directory_structure(
-        self, path: str, expected_structure: List[str]
+        self, path: str, expected_structure: list[str]
     ) -> VerificationResult:
         """
         验证目录结构
@@ -228,9 +223,7 @@ class StateVerifier:
                 },
             )
 
-    def verify_tests_pass(
-        self, test_path: str, timeout: int = 60
-    ) -> VerificationResult:
+    def verify_tests_pass(self, test_path: str, timeout: int = 60) -> VerificationResult:
         """
         运行测试并验证通过
 
@@ -287,9 +280,7 @@ class StateVerifier:
                 details={"error": str(e)},
             )
 
-    def verify_coverage(
-        self, file_path: str, min_coverage: float = 0.8
-    ) -> VerificationResult:
+    def verify_coverage(self, file_path: str, min_coverage: float = 0.8) -> VerificationResult:
         """
         验证测试覆盖率
 
@@ -307,7 +298,7 @@ class StateVerifier:
 
         try:
             # 运行 coverage
-            result = subprocess.run(
+            subprocess.run(
                 [
                     "python",
                     "-m",
@@ -348,9 +339,7 @@ class StateVerifier:
                 details={"error": str(e)},
             )
 
-    def verify_lint_score(
-        self, file_path: str, min_score: float = 8.0
-    ) -> VerificationResult:
+    def verify_lint_score(self, file_path: str, min_score: float = 8.0) -> VerificationResult:
         """
         验证代码质量（使用 ruff）
 
@@ -486,9 +475,7 @@ class StateVerifier:
                 details={"error": str(e)},
             )
 
-    def verify_file_in_commit(
-        self, commit_hash: str, file_path: str
-    ) -> VerificationResult:
+    def verify_file_in_commit(self, commit_hash: str, file_path: str) -> VerificationResult:
         """验证文件是否在指定提交中被修改"""
         try:
             result = subprocess.run(
@@ -519,9 +506,7 @@ class StateVerifier:
 
     # ==================== 通用验证 ====================
 
-    def verify_json_schema(
-        self, data: Union[Dict, str], schema: Dict
-    ) -> VerificationResult:
+    def verify_json_schema(self, data: dict | str, schema: dict) -> VerificationResult:
         """
         验证 JSON 数据结构
 
@@ -559,8 +544,8 @@ class StateVerifier:
 
     def verify_command_output(
         self,
-        command: List[str],
-        expected_output: Optional[str] = None,
+        command: list[str],
+        expected_output: str | None = None,
         expected_returncode: int = 0,
     ) -> VerificationResult:
         """
@@ -606,7 +591,7 @@ class StateVerifier:
 
     # ==================== 批量验证 ====================
 
-    def verify_assertions(self, assertions: List[Dict]) -> Dict:
+    def verify_assertions(self, assertions: list[dict]) -> dict:
         """
         批量验证断言
 
@@ -639,7 +624,7 @@ class StateVerifier:
             "results": results,
         }
 
-    def _verify_single_assertion(self, assertion: Dict) -> VerificationResult:
+    def _verify_single_assertion(self, assertion: dict) -> VerificationResult:
         """验证单个断言"""
         assertion_type = assertion.get("type")
 
@@ -656,21 +641,13 @@ class StateVerifier:
                 a.get("path"), a.get("structure")
             ),
             "syntax_valid": lambda a: self.verify_syntax(a.get("path")),
-            "tests_pass": lambda a: self.verify_tests_pass(
-                a.get("path"), a.get("timeout", 60)
-            ),
-            "coverage": lambda a: self.verify_coverage(
-                a.get("path"), a.get("min", 0.8)
-            ),
-            "lint_score": lambda a: self.verify_lint_score(
-                a.get("path"), a.get("min", 8.0)
-            ),
+            "tests_pass": lambda a: self.verify_tests_pass(a.get("path"), a.get("timeout", 60)),
+            "coverage": lambda a: self.verify_coverage(a.get("path"), a.get("min", 0.8)),
+            "lint_score": lambda a: self.verify_lint_score(a.get("path"), a.get("min", 8.0)),
             "commit_exists": lambda a: self.verify_commit_exists(a.get("pattern")),
             "branch_exists": lambda a: self.verify_branch_exists(a.get("branch")),
             "no_uncommitted": lambda a: self.verify_no_uncommitted_changes(),
-            "json_schema": lambda a: self.verify_json_schema(
-                a.get("data"), a.get("schema")
-            ),
+            "json_schema": lambda a: self.verify_json_schema(a.get("data"), a.get("schema")),
             "command_output": lambda a: self.verify_command_output(
                 a.get("command"),
                 a.get("expected_output"),
@@ -697,9 +674,7 @@ class StateVerifier:
 
 
 # 便捷函数
-def verify_task_result(
-    task: Dict, result: Dict, base_dir: Optional[str] = None
-) -> Dict:
+def verify_task_result(task: dict, result: dict, base_dir: str | None = None) -> dict:
     """
     验证任务结果
 

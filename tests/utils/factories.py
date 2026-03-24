@@ -181,9 +181,7 @@ def create_test_client_config(mode: ClientMode = ClientMode.DIRECT) -> ClientCon
         )
 
 
-def create_chat_response_with_tools(
-    tool_calls: list[dict[str, Any]]
-) -> ChatResponse:
+def create_chat_response_with_tools(tool_calls: list[dict[str, Any]]) -> ChatResponse:
     """
     Create a ChatResponse with tool calls.
 

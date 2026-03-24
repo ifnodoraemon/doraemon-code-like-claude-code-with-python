@@ -22,106 +22,76 @@ class UnifiedConfig(BaseModel):
     # ========================================
     model: str = Field(..., description="Model to use")
     temperature: float = Field(
-        default=0.7,
-        ge=0.0,
-        le=2.0,
-        description="Model temperature for response generation"
+        default=0.7, ge=0.0, le=2.0, description="Model temperature for response generation"
     )
 
     # ========================================
     # Context Settings
     # ========================================
     max_context_tokens: int = Field(
-        default=100_000,
-        gt=0,
-        description="Maximum context window size in tokens"
+        default=100_000, gt=0, description="Maximum context window size in tokens"
     )
     summarize_threshold: float = Field(
         default=0.7,
         ge=0.0,
         le=1.0,
-        description="Trigger summarization when context reaches this fraction of max"
+        description="Trigger summarization when context reaches this fraction of max",
     )
     keep_recent_messages: int = Field(
-        default=6,
-        ge=1,
-        description="Number of recent messages to always keep (not summarized)"
+        default=6, ge=1, description="Number of recent messages to always keep (not summarized)"
     )
 
     # ========================================
     # Tool Settings
     # ========================================
     max_tool_steps: int = Field(
-        default=15,
-        ge=1,
-        description="Maximum number of tool execution steps per turn"
+        default=15, ge=1, description="Maximum number of tool execution steps per turn"
     )
     tool_timeout: float = Field(
-        default=300.0,
-        gt=0,
-        description="Default timeout for tool execution in seconds"
+        default=300.0, gt=0, description="Default timeout for tool execution in seconds"
     )
     enable_hitl: bool = Field(
-        default=True,
-        description="Enable Human-in-the-Loop approval for sensitive tools"
+        default=True, description="Enable Human-in-the-Loop approval for sensitive tools"
     )
 
     # ========================================
     # Checkpoint Settings
     # ========================================
     checkpoint_enabled: bool = Field(
-        default=True,
-        description="Enable automatic file checkpoints before modifications"
+        default=True, description="Enable automatic file checkpoints before modifications"
     )
     checkpoint_retention_days: int = Field(
-        default=30,
-        ge=1,
-        description="Number of days to retain checkpoints"
+        default=30, ge=1, description="Number of days to retain checkpoints"
     )
     max_checkpoints_per_file: int = Field(
-        default=10,
-        ge=1,
-        description="Maximum number of checkpoints to keep per file"
+        default=10, ge=1, description="Maximum number of checkpoints to keep per file"
     )
 
     # ========================================
     # Budget Settings
     # ========================================
     daily_budget_usd: float | None = Field(
-        default=None,
-        ge=0,
-        description="Daily spending budget in USD (None = unlimited)"
+        default=None, ge=0, description="Daily spending budget in USD (None = unlimited)"
     )
     session_budget_usd: float | None = Field(
-        default=None,
-        ge=0,
-        description="Per-session spending budget in USD (None = unlimited)"
+        default=None, ge=0, description="Per-session spending budget in USD (None = unlimited)"
     )
 
     # ========================================
     # Logging Settings
     # ========================================
     log_level: str = Field(
-        default="INFO",
-        description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+        default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
     )
-    log_file: str | None = Field(
-        default=None,
-        description="Path to log file (None = console only)"
-    )
+    log_file: str | None = Field(default=None, description="Path to log file (None = console only)")
 
     # ========================================
     # Performance Settings
     # ========================================
     enable_caching: bool = Field(
-        default=True,
-        description="Enable result caching for read operations"
+        default=True, description="Enable result caching for read operations"
     )
-    cache_ttl_seconds: int = Field(
-        default=300,
-        ge=0,
-        description="Cache time-to-live in seconds"
-    )
+    cache_ttl_seconds: int = Field(default=300, ge=0, description="Cache time-to-live in seconds")
 
     @field_validator("log_level")
     @classmethod
@@ -143,9 +113,7 @@ class UnifiedConfig(BaseModel):
 
     @classmethod
     def from_env_and_file(
-        cls,
-        config_path: str | Path | None = None,
-        validate: bool = True
+        cls, config_path: str | Path | None = None, validate: bool = True
     ) -> "UnifiedConfig":
         """
         Load configuration from config file plus non-model environment overrides.
@@ -179,40 +147,31 @@ class UnifiedConfig(BaseModel):
         # Environment variable overrides for non-model runtime knobs.
         env_overrides = {
             "temperature": _parse_float(os.getenv("AGENT_TEMPERATURE")),
-
             # Context settings
             "max_context_tokens": _parse_int(os.getenv("AGENT_MAX_CONTEXT_TOKENS")),
             "summarize_threshold": _parse_float(os.getenv("AGENT_SUMMARIZE_THRESHOLD")),
             "keep_recent_messages": _parse_int(os.getenv("AGENT_KEEP_RECENT_MESSAGES")),
-
             # Tool settings
             "max_tool_steps": _parse_int(os.getenv("AGENT_MAX_TOOL_STEPS")),
             "tool_timeout": _parse_float(os.getenv("AGENT_TOOL_TIMEOUT")),
             "enable_hitl": _parse_bool(os.getenv("AGENT_ENABLE_HITL")),
-
             # Checkpoint settings
             "checkpoint_enabled": _parse_bool(os.getenv("AGENT_CHECKPOINT_ENABLED")),
             "checkpoint_retention_days": _parse_int(os.getenv("AGENT_CHECKPOINT_RETENTION_DAYS")),
             "max_checkpoints_per_file": _parse_int(os.getenv("AGENT_MAX_CHECKPOINTS_PER_FILE")),
-
             # Budget settings
             "daily_budget_usd": _parse_float(os.getenv("AGENT_DAILY_BUDGET")),
             "session_budget_usd": _parse_float(os.getenv("AGENT_SESSION_BUDGET")),
-
             # Logging settings
             "log_level": os.getenv("AGENT_LOG_LEVEL"),
             "log_file": os.getenv("AGENT_LOG_FILE"),
-
             # Performance settings
             "enable_caching": _parse_bool(os.getenv("AGENT_ENABLE_CACHING")),
             "cache_ttl_seconds": _parse_int(os.getenv("AGENT_CACHE_TTL")),
         }
 
         # Merge: env > file > defaults (filter out None values from env)
-        config_dict = {
-            **file_config,
-            **{k: v for k, v in env_overrides.items() if v is not None}
-        }
+        config_dict = {**file_config, **{k: v for k, v in env_overrides.items() if v is not None}}
 
         # Create and validate
         if validate:
@@ -237,6 +196,7 @@ class UnifiedConfig(BaseModel):
 # ========================================
 # Helper Functions
 # ========================================
+
 
 def _parse_int(value: str | None) -> int | None:
     """Parse integer from environment variable."""

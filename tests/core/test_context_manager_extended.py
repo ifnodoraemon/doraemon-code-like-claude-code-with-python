@@ -1,6 +1,7 @@
 """Extended tests for context_manager.py"""
-import pytest
+
 from src.core.context_manager import ContextConfig, ContextManager
+
 
 class TestContextManagerExtended:
     def test_add_user_message(self):

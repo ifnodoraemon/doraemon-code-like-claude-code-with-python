@@ -386,10 +386,12 @@ class ProxyManager:
         try:
             import urllib.request
 
-            proxy_handler = urllib.request.ProxyHandler({
-                "http": proxy.to_url(),
-                "https": proxy.to_url(),
-            })
+            proxy_handler = urllib.request.ProxyHandler(
+                {
+                    "http": proxy.to_url(),
+                    "https": proxy.to_url(),
+                }
+            )
 
             opener = urllib.request.build_opener(proxy_handler)
             opener.open(test_url, timeout=10)

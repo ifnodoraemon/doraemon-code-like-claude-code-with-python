@@ -5,18 +5,18 @@
 """
 
 import json
-import os
 import sqlite3
 import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 @dataclass
 class EvaluationRecord:
     """评估记录"""
+
     id: str
     version: str
     timestamp: datetime
@@ -25,11 +25,11 @@ class EvaluationRecord:
     avg_latency: float
     pass_at_1: float = 0.0
     pass_at_3: float = 0.0
-    by_difficulty: Dict[str, float] = field(default_factory=dict)
-    by_category: Dict[str, float] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    by_difficulty: dict[str, float] = field(default_factory=dict)
+    by_category: dict[str, float] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "version": self.version,
@@ -45,7 +45,7 @@ class EvaluationRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "EvaluationRecord":
+    def from_dict(cls, data: dict) -> "EvaluationRecord":
         return cls(
             id=data["id"],
             version=data["version"],
@@ -64,6 +64,7 @@ class EvaluationRecord:
 @dataclass
 class TrendResult:
     """趋势分析结果"""
+
     metric: str
     direction: str  # "up", "down", "stable"
     change_percent: float
@@ -76,6 +77,7 @@ class TrendResult:
 @dataclass
 class RegressionResult:
     """回归检测结果"""
+
     has_regression: bool
     metric: str
     baseline_value: float
@@ -133,29 +135,32 @@ class EvaluationStore:
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO evaluations
             (id, version, timestamp, success_rate, total_tasks, avg_latency,
              pass_at_1, pass_at_3, by_difficulty, by_category, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            record.id,
-            record.version,
-            record.timestamp.isoformat(),
-            record.success_rate,
-            record.total_tasks,
-            record.avg_latency,
-            record.pass_at_1,
-            record.pass_at_3,
-            json.dumps(record.by_difficulty),
-            json.dumps(record.by_category),
-            json.dumps(record.metadata),
-        ))
+        """,
+            (
+                record.id,
+                record.version,
+                record.timestamp.isoformat(),
+                record.success_rate,
+                record.total_tasks,
+                record.avg_latency,
+                record.pass_at_1,
+                record.pass_at_3,
+                json.dumps(record.by_difficulty),
+                json.dumps(record.by_category),
+                json.dumps(record.metadata),
+            ),
+        )
 
         conn.commit()
         conn.close()
 
-    def get_evaluation(self, eval_id: str) -> Optional[EvaluationRecord]:
+    def get_evaluation(self, eval_id: str) -> EvaluationRecord | None:
         """获取单个评估记录"""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
@@ -168,14 +173,13 @@ class EvaluationStore:
             return self._row_to_record(row)
         return None
 
-    def get_evaluations_by_version(self, version: str) -> List[EvaluationRecord]:
+    def get_evaluations_by_version(self, version: str) -> list[EvaluationRecord]:
         """获取指定版本的所有评估"""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT * FROM evaluations WHERE version = ? ORDER BY timestamp DESC",
-            (version,)
+            "SELECT * FROM evaluations WHERE version = ? ORDER BY timestamp DESC", (version,)
         )
         rows = cursor.fetchall()
         conn.close()
@@ -183,10 +187,8 @@ class EvaluationStore:
         return [self._row_to_record(row) for row in rows]
 
     def get_evaluations_in_range(
-        self,
-        start_date: datetime,
-        end_date: datetime
-    ) -> List[EvaluationRecord]:
+        self, start_date: datetime, end_date: datetime
+    ) -> list[EvaluationRecord]:
         """获取时间范围内的评估"""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
@@ -195,20 +197,20 @@ class EvaluationStore:
             """SELECT * FROM evaluations
                WHERE timestamp BETWEEN ? AND ?
                ORDER BY timestamp ASC""",
-            (start_date.isoformat(), end_date.isoformat())
+            (start_date.isoformat(), end_date.isoformat()),
         )
         rows = cursor.fetchall()
         conn.close()
 
         return [self._row_to_record(row) for row in rows]
 
-    def get_recent_evaluations(self, days: int = 30) -> List[EvaluationRecord]:
+    def get_recent_evaluations(self, days: int = 30) -> list[EvaluationRecord]:
         """获取最近 N 天的评估"""
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
         return self.get_evaluations_in_range(start_date, end_date)
 
-    def get_latest_evaluation(self, version: Optional[str] = None) -> Optional[EvaluationRecord]:
+    def get_latest_evaluation(self, version: str | None = None) -> EvaluationRecord | None:
         """获取最新的评估记录"""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
@@ -216,12 +218,10 @@ class EvaluationStore:
         if version:
             cursor.execute(
                 "SELECT * FROM evaluations WHERE version = ? ORDER BY timestamp DESC LIMIT 1",
-                (version,)
+                (version,),
             )
         else:
-            cursor.execute(
-                "SELECT * FROM evaluations ORDER BY timestamp DESC LIMIT 1"
-            )
+            cursor.execute("SELECT * FROM evaluations ORDER BY timestamp DESC LIMIT 1")
 
         row = cursor.fetchone()
         conn.close()
@@ -258,11 +258,8 @@ class TrendAnalyzer:
         self.store = store
 
     def analyze_trend(
-        self,
-        metric: str = "success_rate",
-        days: int = 30,
-        min_data_points: int = 3
-    ) -> Optional[TrendResult]:
+        self, metric: str = "success_rate", days: int = 30, min_data_points: int = 3
+    ) -> TrendResult | None:
         """
         分析指标趋势
 
@@ -308,9 +305,9 @@ class TrendAnalyzer:
             try:
                 variance = statistics.variance(values)
                 mean = statistics.mean(values)
-                cv = (variance ** 0.5) / mean if mean > 0 else 1
+                cv = (variance**0.5) / mean if mean > 0 else 1
                 confidence = max(0.5, 1 - cv)
-            except:
+            except Exception:
                 confidence = 0.5
         else:
             confidence = 0.3 + (len(values) * 0.1)
@@ -330,8 +327,8 @@ class TrendAnalyzer:
         baseline_version: str,
         current_version: str,
         threshold: float = 0.05,
-        metrics: Optional[List[str]] = None
-    ) -> List[RegressionResult]:
+        metrics: list[str] | None = None,
+    ) -> list[RegressionResult]:
         """
         检测性能回归
 
@@ -351,15 +348,17 @@ class TrendAnalyzer:
         current = self.store.get_latest_evaluation(current_version)
 
         if not baseline or not current:
-            return [RegressionResult(
-                has_regression=False,
-                metric="all",
-                baseline_value=0,
-                current_value=0,
-                change_percent=0,
-                threshold=threshold,
-                message="无法获取基线或当前版本的评估数据",
-            )]
+            return [
+                RegressionResult(
+                    has_regression=False,
+                    metric="all",
+                    baseline_value=0,
+                    current_value=0,
+                    change_percent=0,
+                    threshold=threshold,
+                    message="无法获取基线或当前版本的评估数据",
+                )
+            ]
 
         results = []
         for metric in metrics:
@@ -381,24 +380,22 @@ class TrendAnalyzer:
                 metric, has_regression, change_percent, threshold
             )
 
-            results.append(RegressionResult(
-                has_regression=has_regression,
-                metric=metric,
-                baseline_value=baseline_value,
-                current_value=current_value,
-                change_percent=change_percent * 100,
-                threshold=threshold * 100,
-                message=message,
-            ))
+            results.append(
+                RegressionResult(
+                    has_regression=has_regression,
+                    metric=metric,
+                    baseline_value=baseline_value,
+                    current_value=current_value,
+                    change_percent=change_percent * 100,
+                    threshold=threshold * 100,
+                    message=message,
+                )
+            )
 
         return results
 
     def _generate_regression_message(
-        self,
-        metric: str,
-        has_regression: bool,
-        change: float,
-        threshold: float
+        self, metric: str, has_regression: bool, change: float, threshold: float
     ) -> str:
         """生成回归消息"""
         metric_names = {
@@ -410,16 +407,13 @@ class TrendAnalyzer:
         name = metric_names.get(metric, metric)
 
         if has_regression:
-            return f"⚠️ {name} 回归: {change*100:+.1f}% (阈值: {threshold*100:.1f}%)"
+            return f"⚠️ {name} 回归: {change * 100:+.1f}% (阈值: {threshold * 100:.1f}%)"
         else:
-            return f"✅ {name} 正常: {change*100:+.1f}%"
+            return f"✅ {name} 正常: {change * 100:+.1f}%"
 
     def detect_anomaly(
-        self,
-        metric: str = "success_rate",
-        days: int = 30,
-        std_threshold: float = 2.0
-    ) -> Optional[Dict]:
+        self, metric: str = "success_rate", days: int = 30, std_threshold: float = 2.0
+    ) -> dict | None:
         """
         检测异常值
 
@@ -480,7 +474,7 @@ class TrendAnalyzer:
 
         report = f"""# 评估趋势报告
 
-生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 分析周期: 最近 {days} 天
 数据点数: {len(records)}
 
@@ -505,7 +499,7 @@ class TrendAnalyzer:
                 }
                 report += f"""### {metric_names.get(metric, metric)}
 
-- 方向: {direction_emoji.get(trend.direction, '')} {trend.direction}
+- 方向: {direction_emoji.get(trend.direction, "")} {trend.direction}
 - 变化: {trend.change_percent:+.1f}%
 - 当前值: {trend.current_value:.3f}
 - 基线值: {trend.previous_value:.3f}
@@ -538,7 +532,7 @@ class TrendAnalyzer:
 
         return report
 
-    def get_performance_summary(self, days: int = 7) -> Dict:
+    def get_performance_summary(self, days: int = 7) -> dict:
         """
         获取性能摘要
 
@@ -579,10 +573,7 @@ class TrendAnalyzer:
 
 
 # 便捷函数
-def create_evaluation_record(
-    eval_result: Dict,
-    version: str = "unknown"
-) -> EvaluationRecord:
+def create_evaluation_record(eval_result: dict, version: str = "unknown") -> EvaluationRecord:
     """从评估结果创建记录"""
     return EvaluationRecord(
         id=f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
@@ -611,7 +602,7 @@ if __name__ == "__main__":
         record = EvaluationRecord(
             id=f"test_{i}",
             version="1.0.0",
-            timestamp=datetime.now() - timedelta(days=5-i),
+            timestamp=datetime.now() - timedelta(days=5 - i),
             success_rate=0.8 + i * 0.02,
             total_tasks=100,
             avg_latency=1.5 - i * 0.1,

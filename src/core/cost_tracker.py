@@ -19,8 +19,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from .paths import usage_dir
-
 logger = logging.getLogger(__name__)
 
 
@@ -35,17 +33,14 @@ MODEL_PRICING = {
     "gemini-3-pro-preview": {"input": 2.00, "output": 12.00},
     "gemini-3-flash": {"input": 0.50, "output": 3.00},
     "gemini-3-flash-preview": {"input": 0.50, "output": 3.00},
-
     # ========== OpenAI GPT-5 Series (Latest) ==========
     "gpt-5": {"input": 5.00, "output": 15.00},
     "gpt-5-pro": {"input": 10.00, "output": 30.00},
     "gpt-5.2": {"input": 5.00, "output": 15.00},
     "gpt-5-mini": {"input": 2.50, "output": 2.00},
-
     # ========== Anthropic Claude 4.5 Series (Latest) ==========
     "claude-opus-4.5": {"input": 5.00, "output": 25.00},
     "claude-sonnet-4.5": {"input": 3.00, "output": 15.00},
-
     # Default fallback
     "default": {"input": 0.50, "output": 2.00},
 }
@@ -206,9 +201,7 @@ class CostTracker:
         if path.exists():
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                self._today_records = [
-                    UsageRecord.from_dict(r) for r in data.get("records", [])
-                ]
+                self._today_records = [UsageRecord.from_dict(r) for r in data.get("records", [])]
             except Exception as e:
                 logger.error(f"Failed to load usage records: {e}")
 
@@ -221,9 +214,7 @@ class CostTracker:
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-    def calculate_cost(
-        self, model: str, input_tokens: int, output_tokens: int
-    ) -> float:
+    def calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
         """
         Calculate cost for token usage.
 
@@ -295,9 +286,7 @@ class CostTracker:
         # Save to disk
         self._save_today_records()
 
-        logger.debug(
-            f"Tracked usage: {input_tokens}+{output_tokens} tokens, ${cost:.4f}"
-        )
+        logger.debug(f"Tracked usage: {input_tokens}+{output_tokens} tokens, ${cost:.4f}")
 
         return record
 
@@ -424,7 +413,7 @@ class CostTracker:
             elif daily_pct >= self.budget.warning_threshold:
                 result["warning"] = (
                     f"Approaching daily budget: ${daily_stats.total_cost_usd:.2f} / "
-                    f"${self.budget.daily_limit_usd:.2f} ({daily_pct*100:.0f}%)"
+                    f"${self.budget.daily_limit_usd:.2f} ({daily_pct * 100:.0f}%)"
                 )
 
         # Check session limit
@@ -437,13 +426,10 @@ class CostTracker:
                     f"Session budget exceeded: ${session_stats.total_cost_usd:.2f} / "
                     f"${self.budget.session_limit_usd:.2f}"
                 )
-            elif (
-                session_pct >= self.budget.warning_threshold
-                and not result["warning"]
-            ):
+            elif session_pct >= self.budget.warning_threshold and not result["warning"]:
                 result["warning"] = (
                     f"Approaching session budget: ${session_stats.total_cost_usd:.2f} / "
-                    f"${self.budget.session_limit_usd:.2f} ({session_pct*100:.0f}%)"
+                    f"${self.budget.session_limit_usd:.2f} ({session_pct * 100:.0f}%)"
                 )
 
         return result
@@ -474,9 +460,7 @@ class CostTracker:
             "today": daily_stats.to_dict(),
             "budget": budget_status,
             "model_breakdown": model_usage,
-            "session_duration_minutes": round(
-                (time.time() - self._session_start) / 60, 1
-            ),
+            "session_duration_minutes": round((time.time() - self._session_start) / 60, 1),
         }
 
     def format_summary(self) -> str:

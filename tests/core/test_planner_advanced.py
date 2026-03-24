@@ -38,12 +38,7 @@ class TestTaskAdvanced:
     def test_task_to_dict_with_subtasks(self):
         """Test to_dict includes subtasks."""
         subtask = Task(id="st1", title="Subtask", description="Sub")
-        task = Task(
-            id="t1",
-            title="Parent",
-            description="Parent task",
-            subtasks=[subtask]
-        )
+        task = Task(id="t1", title="Parent", description="Parent task", subtasks=[subtask])
         data = task.to_dict()
         assert len(data["subtasks"]) == 1
         assert data["subtasks"][0]["title"] == "Subtask"
@@ -57,8 +52,8 @@ class TestTaskAdvanced:
             "risk": {
                 "level": "high",
                 "factors": ["Factor 1", "Factor 2"],
-                "mitigations": ["Mit 1"]
-            }
+                "mitigations": ["Mit 1"],
+            },
         }
         task = Task.from_dict(data)
         assert task.risk is not None
@@ -71,14 +66,7 @@ class TestTaskAdvanced:
             "id": "t1",
             "title": "Parent",
             "description": "Parent",
-            "subtasks": [
-                {
-                    "id": "st1",
-                    "title": "Subtask",
-                    "description": "Sub",
-                    "subtasks": []
-                }
-            ]
+            "subtasks": [{"id": "st1", "title": "Subtask", "description": "Sub", "subtasks": []}],
         }
         task = Task.from_dict(data)
         assert len(task.subtasks) == 1
@@ -91,7 +79,7 @@ class TestTaskAdvanced:
             "title": "Test",
             "description": "Desc",
             "status": "in_progress",
-            "priority": "high"
+            "priority": "high",
         }
         task = Task.from_dict(data)
         assert task.status == TaskStatus.IN_PROGRESS
@@ -111,13 +99,9 @@ class TestTaskAdvanced:
                 {"task_id": "t0", "type": "requires", "reason": "Must complete first"}
             ],
             "subtasks": [],
-            "risk": {
-                "level": "medium",
-                "factors": ["Factor"],
-                "mitigations": ["Mitigation"]
-            },
+            "risk": {"level": "medium", "factors": ["Factor"], "mitigations": ["Mitigation"]},
             "files_affected": ["file1.py", "file2.py"],
-            "checkpoint_recommended": True
+            "checkpoint_recommended": True,
         }
         task = Task.from_dict(data)
         assert task.complexity == 5
@@ -139,7 +123,7 @@ class TestExecutionPlanAdvanced:
             tasks=[task],
             total_estimated_minutes=60,
             total_complexity=3,
-            high_risk_count=1
+            high_risk_count=1,
         )
         data = plan.to_dict()
         assert data["id"] == "plan1"
@@ -155,7 +139,7 @@ class TestExecutionPlanAdvanced:
             tasks=[],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         markdown = plan.to_markdown()
         assert "# Execution Plan" in markdown
@@ -170,7 +154,7 @@ class TestExecutionPlanAdvanced:
             description="Implement feature",
             complexity=3,
             estimated_minutes=30,
-            priority=TaskPriority.HIGH
+            priority=TaskPriority.HIGH,
         )
         plan = ExecutionPlan(
             id="plan1",
@@ -178,7 +162,7 @@ class TestExecutionPlanAdvanced:
             tasks=[task],
             total_estimated_minutes=30,
             total_complexity=3,
-            high_risk_count=0
+            high_risk_count=0,
         )
         markdown = plan.to_markdown()
         assert "Implementation" in markdown
@@ -192,7 +176,7 @@ class TestExecutionPlanAdvanced:
             id="t2",
             title="Task 2",
             description="Second",
-            dependencies=[TaskDependency("t1", "requires")]
+            dependencies=[TaskDependency("t1", "requires")],
         )
         plan = ExecutionPlan(
             id="plan1",
@@ -200,7 +184,7 @@ class TestExecutionPlanAdvanced:
             tasks=[task1, task2],
             total_estimated_minutes=60,
             total_complexity=3,
-            high_risk_count=0
+            high_risk_count=0,
         )
         markdown = plan.to_markdown()
         assert "Depends on:" in markdown
@@ -211,21 +195,16 @@ class TestExecutionPlanAdvanced:
         risk = RiskAssessment(
             level=RiskLevel.HIGH,
             factors=["Destructive", "Production"],
-            mitigations=["Backup", "Test"]
+            mitigations=["Backup", "Test"],
         )
-        task = Task(
-            id="t1",
-            title="Risky Task",
-            description="High risk",
-            risk=risk
-        )
+        task = Task(id="t1", title="Risky Task", description="High risk", risk=risk)
         plan = ExecutionPlan(
             id="plan1",
             goal="Risky operation",
             tasks=[task],
             total_estimated_minutes=60,
             total_complexity=5,
-            high_risk_count=1
+            high_risk_count=1,
         )
         markdown = plan.to_markdown()
         assert "Risk:" in markdown or "HIGH" in markdown
@@ -233,19 +212,14 @@ class TestExecutionPlanAdvanced:
     def test_execution_plan_to_markdown_with_subtasks(self):
         """Test markdown includes subtasks."""
         subtask = Task(id="st1", title="Subtask", description="Sub")
-        task = Task(
-            id="t1",
-            title="Parent",
-            description="Parent task",
-            subtasks=[subtask]
-        )
+        task = Task(id="t1", title="Parent", description="Parent task", subtasks=[subtask])
         plan = ExecutionPlan(
             id="plan1",
             goal="With subtasks",
             tasks=[task],
             total_estimated_minutes=60,
             total_complexity=3,
-            high_risk_count=0
+            high_risk_count=0,
         )
         markdown = plan.to_markdown()
         assert "Subtasks:" in markdown
@@ -423,7 +397,7 @@ class TestTaskPlannerCheckpoints:
             id="t1",
             title="Multi-file",
             description="Desc",
-            files_affected=["f1.py", "f2.py", "f3.py"]
+            files_affected=["f1.py", "f2.py", "f3.py"],
         )
         tasks = [task]
         planner._analyzer.recommend_checkpoints(tasks)
@@ -437,7 +411,7 @@ class TestTaskPlannerCheckpoints:
             title="Simple",
             description="Desc",
             complexity=1,
-            risk=RiskAssessment(level=RiskLevel.LOW)
+            risk=RiskAssessment(level=RiskLevel.LOW),
         )
         tasks = [task]
         planner._analyzer.recommend_checkpoints(tasks)
@@ -457,7 +431,7 @@ class TestTaskPlannerTaskManagement:
             tasks=[task],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         result = planner.update_task_status(plan, "t1", TaskStatus.COMPLETED)
         assert result is True
@@ -474,7 +448,7 @@ class TestTaskPlannerTaskManagement:
             tasks=[task],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         result = planner.update_task_status(plan, "t999", TaskStatus.COMPLETED)
         assert result is False
@@ -483,19 +457,14 @@ class TestTaskPlannerTaskManagement:
         """Test updating subtask status."""
         planner = TaskPlanner()
         subtask = Task(id="st1", title="Subtask", description="Sub")
-        task = Task(
-            id="t1",
-            title="Parent",
-            description="Desc",
-            subtasks=[subtask]
-        )
+        task = Task(id="t1", title="Parent", description="Desc", subtasks=[subtask])
         plan = ExecutionPlan(
             id="plan1",
             goal="Test",
             tasks=[task],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         result = planner.update_task_status(plan, "st1", TaskStatus.COMPLETED)
         assert result is True
@@ -516,7 +485,7 @@ class TestTaskPlannerNextTasks:
             tasks=[t1, t2],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         next_tasks = planner.get_next_tasks(plan)
         assert len(next_tasks) == 2
@@ -529,7 +498,7 @@ class TestTaskPlannerNextTasks:
             id="t2",
             title="Task 2",
             description="Desc",
-            dependencies=[TaskDependency("t1", "requires")]
+            dependencies=[TaskDependency("t1", "requires")],
         )
         plan = ExecutionPlan(
             id="plan1",
@@ -537,7 +506,7 @@ class TestTaskPlannerNextTasks:
             tasks=[t1, t2],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         next_tasks = planner.get_next_tasks(plan)
         assert len(next_tasks) == 1
@@ -551,7 +520,7 @@ class TestTaskPlannerNextTasks:
             id="t2",
             title="Task 2",
             description="Desc",
-            dependencies=[TaskDependency("t1", "requires")]
+            dependencies=[TaskDependency("t1", "requires")],
         )
         plan = ExecutionPlan(
             id="plan1",
@@ -559,7 +528,7 @@ class TestTaskPlannerNextTasks:
             tasks=[t1, t2],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         next_tasks = planner.get_next_tasks(plan)
         assert len(next_tasks) == 1
@@ -577,7 +546,7 @@ class TestTaskPlannerNextTasks:
             tasks=[t1, t2, t3],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         next_tasks = planner.get_next_tasks(plan)
         assert next_tasks[0].priority == TaskPriority.CRITICAL
@@ -596,7 +565,7 @@ class TestTaskPlannerNextTasks:
             tasks=[t1, t2, t3],
             total_estimated_minutes=0,
             total_complexity=0,
-            high_risk_count=0
+            high_risk_count=0,
         )
         next_tasks = planner.get_next_tasks(plan)
         assert len(next_tasks) == 1

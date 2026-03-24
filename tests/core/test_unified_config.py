@@ -5,14 +5,12 @@ Tests configuration loading, validation, and precedence.
 """
 
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
 from src.core.unified_config import UnifiedConfig
-
 
 BASE_CONFIG = {"model": "test-model"}
 
@@ -37,11 +35,7 @@ class TestUnifiedConfig:
 
     def test_custom_values(self):
         """Test setting custom values."""
-        config = UnifiedConfig(
-            model="custom-model",
-            temperature=0.5,
-            max_tool_steps=20
-        )
+        config = UnifiedConfig(model="custom-model", temperature=0.5, max_tool_steps=20)
 
         assert config.model == "custom-model"
         assert config.temperature == 0.5
@@ -97,10 +91,7 @@ class TestUnifiedConfig:
         config_file = tmp_path / ".agent" / "config.json"
         config_file.parent.mkdir(parents=True)
 
-        config_data = {
-            "model": "file-model",
-            "max_tool_steps": 25
-        }
+        config_data = {"model": "file-model", "max_tool_steps": 25}
 
         with open(config_file, "w") as f:
             json.dump(config_data, f)

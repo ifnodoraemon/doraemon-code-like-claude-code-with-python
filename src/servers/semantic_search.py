@@ -56,18 +56,46 @@ class SearchConfig:
     # File patterns to index
     include_patterns: list[str] = field(
         default_factory=lambda: [
-            "*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.java", "*.go", "*.rs",
-            "*.c", "*.cpp", "*.h", "*.rb", "*.php", "*.swift", "*.kt", "*.md",
-            "*.txt", "*.json", "*.yaml", "*.yml"
+            "*.py",
+            "*.js",
+            "*.ts",
+            "*.jsx",
+            "*.tsx",
+            "*.java",
+            "*.go",
+            "*.rs",
+            "*.c",
+            "*.cpp",
+            "*.h",
+            "*.rb",
+            "*.php",
+            "*.swift",
+            "*.kt",
+            "*.md",
+            "*.txt",
+            "*.json",
+            "*.yaml",
+            "*.yml",
         ]
     )
 
     # Directories to exclude
     exclude_dirs: list[str] = field(
         default_factory=lambda: [
-            "node_modules", ".git", "__pycache__", ".venv", "venv", "dist",
-            "build", ".next", ".nuxt", "target", ".idea", ".vscode", "coverage",
-            ".pytest_cache"
+            "node_modules",
+            ".git",
+            "__pycache__",
+            ".venv",
+            "venv",
+            "dist",
+            "build",
+            ".next",
+            ".nuxt",
+            "target",
+            ".idea",
+            ".vscode",
+            "coverage",
+            ".pytest_cache",
         ]
     )
 
@@ -83,9 +111,11 @@ DEFAULT_CONFIG = SearchConfig()
 # Code Chunking
 # ========================================
 
+
 @dataclass
 class CodeChunk:
     """A chunk of code for indexing."""
+
     file_path: str
     start_line: int
     end_line: int
@@ -105,9 +135,17 @@ def _get_language(file_path: str) -> str:
     """Detect language from file extension."""
     ext = Path(file_path).suffix.lower()
     mapping = {
-        ".py": "python", ".js": "javascript", ".ts": "typescript", ".tsx": "typescript",
-        ".java": "java", ".go": "go", ".rs": "rust", ".c": "c", ".cpp": "cpp",
-        ".md": "markdown", ".json": "json"
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".java": "java",
+        ".go": "go",
+        ".rs": "rust",
+        ".c": "c",
+        ".cpp": "cpp",
+        ".md": "markdown",
+        ".json": "json",
     }
     return mapping.get(ext, "text")
 
@@ -140,7 +178,7 @@ def _chunk_file(file_path: str, config: SearchConfig = DEFAULT_CONFIG) -> list[C
                 end_line=end,
                 content=content,
                 language=language,
-                signature=None # Simplified for now, can perform regex extraction if needed
+                signature=None,  # Simplified for now, can perform regex extraction if needed
             )
             chunks.append(chunk)
 
@@ -159,6 +197,7 @@ def _should_include_file(file_path: str, config: SearchConfig = DEFAULT_CONFIG) 
             return False
 
     import fnmatch
+
     for pattern in config.include_patterns:
         if fnmatch.fnmatch(path.name, pattern):
             return True
@@ -169,6 +208,7 @@ def _should_include_file(file_path: str, config: SearchConfig = DEFAULT_CONFIG) 
 # ========================================
 # Search Tools
 # ========================================
+
 
 @mcp.tool()
 def semantic_search(
@@ -208,12 +248,21 @@ def semantic_search(
         metas = results.get("metadatas")
         distances = results.get("distances")
 
-        if not docs or not docs[0] or not metas or not metas[0] or not distances or not distances[0]:
+        if (
+            not docs
+            or not docs[0]
+            or not metas
+            or not metas[0]
+            or not distances
+            or not distances[0]
+        ):
             return f"No relevant results found for: {query}"
 
         output_lines = [f'Found {len(docs[0])} relevant result(s) for: "{query}"\n']
 
-        for i, (doc, meta, score) in enumerate(zip(docs[0], metas[0], distances[0], strict=True), 1):
+        for i, (doc, meta, score) in enumerate(
+            zip(docs[0], metas[0], distances[0], strict=True), 1
+        ):
             file_path = str(meta.get("file_path", "unknown"))
 
             # Simple path filtering
@@ -302,18 +351,21 @@ def index_codebase(path: str = ".") -> str:
 
         ids = [c.id for c in batch]
         documents = [c.content for c in batch]
-        metadatas: list[dict[str, Any]] = [{
-            "file_path": c.file_path,
-            "start_line": c.start_line,
-            "end_line": c.end_line,
-            "language": c.language
-        } for c in batch]
+        metadatas: list[dict[str, Any]] = [
+            {
+                "file_path": c.file_path,
+                "start_line": c.start_line,
+                "end_line": c.end_line,
+                "language": c.language,
+            }
+            for c in batch
+        ]
 
         try:
             collection.upsert(
                 ids=ids,
                 documents=documents,
-                metadatas=metadatas # type: ignore
+                metadatas=metadatas,  # type: ignore
             )
             total_added += len(batch)
             # Small sleep to be nice to rate limits

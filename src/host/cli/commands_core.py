@@ -209,6 +209,7 @@ class CoreCommandHandler:
             return
 
         from rich.prompt import Confirm
+
         if not Confirm.ask("Proceed with commit?", default=True):
             console.print("[yellow]Commit cancelled.[/yellow]")
             return
@@ -307,25 +308,32 @@ class CoreCommandHandler:
         """Display conversation history with turn numbers."""
 
         if limit:
-            display_messages = messages[-limit * 2:]  # 2 messages per turn (user + assistant)
+            display_messages = messages[-limit * 2 :]  # 2 messages per turn (user + assistant)
             start_idx = max(0, len(messages) - limit * 2)
         else:
             display_messages = messages
             start_idx = 0
 
-        console.print(f"\n[bold cyan]Conversation History[/bold cyan] ({len(messages)} messages total)\n")
+        console.print(
+            f"\n[bold cyan]Conversation History[/bold cyan] ({len(messages)} messages total)\n"
+        )
 
         turn_num = start_idx // 2 + 1
         for _i, msg in enumerate(display_messages):
             from datetime import datetime as dt
+
             timestamp = dt.fromtimestamp(msg.timestamp).strftime("%H:%M:%S")
 
             if msg.role == "user":
                 console.print(f"[bold yellow]Turn {turn_num}[/bold yellow] [dim]{timestamp}[/dim]")
-                console.print(f"[cyan]You:[/cyan] {msg.content[:200]}{'...' if len(msg.content) > 200 else ''}")
+                console.print(
+                    f"[cyan]You:[/cyan] {msg.content[:200]}{'...' if len(msg.content) > 200 else ''}"
+                )
             elif msg.role in ("assistant", "model"):
                 content_preview = msg.content[:300] if msg.content else "(no content)"
-                console.print(f"[green]AI:[/green] {content_preview}{'...' if len(msg.content) > 300 else ''}")
+                console.print(
+                    f"[green]AI:[/green] {content_preview}{'...' if len(msg.content) > 300 else ''}"
+                )
                 console.print()
                 turn_num += 1
 
@@ -341,7 +349,9 @@ class CoreCommandHandler:
         target_idx = target_turn * 2
 
         if target_idx > len(messages):
-            console.print(f"[red]Turn {target_turn} doesn't exist. Max turn: {len(messages) // 2}[/red]")
+            console.print(
+                f"[red]Turn {target_turn} doesn't exist. Max turn: {len(messages) // 2}[/red]"
+            )
             return CommandResult()
 
         if target_idx <= 0:
@@ -349,6 +359,7 @@ class CoreCommandHandler:
             return CommandResult()
 
         from rich.prompt import Confirm
+
         msgs_to_remove = len(messages) - target_idx
         if msgs_to_remove > 0:
             if not Confirm.ask(
@@ -381,7 +392,9 @@ class CoreCommandHandler:
             console.print(f"[yellow]No matches found for '{query}'[/yellow]")
             return
 
-        console.print(f"\n[bold cyan]Search Results for '{query}'[/bold cyan] ({len(results)} matches)\n")
+        console.print(
+            f"\n[bold cyan]Search Results for '{query}'[/bold cyan] ({len(results)} matches)\n"
+        )
 
         for turn_num, msg in results[:20]:  # Limit to 20 results
             role_color = "cyan" if msg.role == "user" else "green"
@@ -401,7 +414,9 @@ class CoreCommandHandler:
             else:
                 snippet = content[:100]
 
-            console.print(f"[bold]Turn {turn_num}[/bold] [{role_color}]{role_name}[/{role_color}]: {snippet}")
+            console.print(
+                f"[bold]Turn {turn_num}[/bold] [{role_color}]{role_name}[/{role_color}]: {snippet}"
+            )
 
         console.print("\n[dim]Use /review goto <turn> to jump to a specific turn[/dim]")
 

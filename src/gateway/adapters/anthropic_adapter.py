@@ -135,9 +135,7 @@ class AnthropicAdapter(BaseAdapter):
         response = await self._client.messages.create(**kwargs)
         return self._convert_response(response, request.model)
 
-    async def chat_stream(
-        self, request: ChatRequest
-    ) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[StreamChunk]:
         """Stream chat response from Claude."""
         system = None
         messages = []
@@ -193,9 +191,7 @@ class AnthropicAdapter(BaseAdapter):
                     if hasattr(event, "usage"):
                         output_tokens = event.usage.output_tokens
                     if event.delta.stop_reason:
-                        finish_reason = self._convert_finish_reason(
-                            event.delta.stop_reason
-                        )
+                        finish_reason = self._convert_finish_reason(event.delta.stop_reason)
 
                 elif event.type == "message_start":
                     if hasattr(event.message, "usage"):
@@ -245,12 +241,14 @@ class AnthropicAdapter(BaseAdapter):
 
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                content.append({
-                    "type": "tool_use",
-                    "id": tc.id,
-                    "name": tc.name,
-                    "input": tc.arguments,
-                })
+                content.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": tc.arguments,
+                    }
+                )
 
         return {
             "role": "assistant" if role == "assistant" else "user",

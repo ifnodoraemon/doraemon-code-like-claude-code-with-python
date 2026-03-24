@@ -26,8 +26,6 @@ from src.core.logger import configure_root_logger
 from src.core.security import validate_path
 from src.core.shell_security import (
     DEFAULT_CONFIG,
-    BackgroundProcess,
-    ShellConfig,
     check_git_safety,
     cleanup_finished_processes,
     get_background_processes,
@@ -253,7 +251,7 @@ def execute_command_background(
     try:
         # Capture stdout/stderr to temp files so get_process_output can read them
         stdout_file = tempfile.NamedTemporaryFile(
-            mode='w', prefix='doraemon_bg_', suffix='.log', delete=False
+            mode="w", prefix="doraemon_bg_", suffix=".log", delete=False
         )
         log_file_path = stdout_file.name
         proc = subprocess.Popen(
@@ -392,9 +390,7 @@ def get_process_output(pid: int, max_lines: int = 100) -> str:
             if lines:
                 return "".join(lines)
 
-            status = (
-                "running" if bp.process.poll() is None else f"exited ({bp.process.returncode})"
-            )
+            status = "running" if bp.process.poll() is None else f"exited ({bp.process.returncode})"
             return f"No new output available. Process status: {status}"
 
         except Exception as e:

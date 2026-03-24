@@ -1,8 +1,6 @@
 """Comprehensive tests for mcp_client.py"""
-import pytest
-from src.core.mcp_client import (
-    MCPTransport, MCPServerConfig, MCPTool, MCPResource, MCPPrompt
-)
+
+from src.core.mcp_client import MCPPrompt, MCPResource, MCPServerConfig, MCPTool, MCPTransport
 
 
 class TestMCPTransport:
@@ -24,10 +22,7 @@ class TestMCPServerConfig:
 
     def test_creation_minimal(self):
         """Test creating minimal server config."""
-        config = MCPServerConfig(
-            name="test_server",
-            command="python"
-        )
+        config = MCPServerConfig(name="test_server", command="python")
         assert config.name == "test_server"
         assert config.command == "python"
         assert config.args == []
@@ -38,9 +33,7 @@ class TestMCPServerConfig:
     def test_creation_with_args(self):
         """Test creating config with arguments."""
         config = MCPServerConfig(
-            name="server_with_args",
-            command="python",
-            args=["-m", "server", "--port", "8000"]
+            name="server_with_args", command="python", args=["-m", "server", "--port", "8000"]
         )
         assert len(config.args) == 4
         assert config.args[0] == "-m"
@@ -49,21 +42,14 @@ class TestMCPServerConfig:
     def test_creation_with_env(self):
         """Test creating config with environment variables."""
         env = {"API_KEY": "secret", "DEBUG": "true"}
-        config = MCPServerConfig(
-            name="server_with_env",
-            command="node",
-            env=env
-        )
+        config = MCPServerConfig(name="server_with_env", command="node", env=env)
         assert config.env["API_KEY"] == "secret"
         assert config.env["DEBUG"] == "true"
 
     def test_creation_http_transport(self):
         """Test creating config with HTTP transport."""
         config = MCPServerConfig(
-            name="http_server",
-            command="",
-            transport=MCPTransport.HTTP,
-            url="http://localhost:8000"
+            name="http_server", command="", transport=MCPTransport.HTTP, url="http://localhost:8000"
         )
         assert config.transport == MCPTransport.HTTP
         assert config.url == "http://localhost:8000"
@@ -74,18 +60,14 @@ class TestMCPServerConfig:
             name="ws_server",
             command="",
             transport=MCPTransport.WEBSOCKET,
-            url="ws://localhost:9000"
+            url="ws://localhost:9000",
         )
         assert config.transport == MCPTransport.WEBSOCKET
         assert config.url == "ws://localhost:9000"
 
     def test_custom_timeout(self):
         """Test creating config with custom timeout."""
-        config = MCPServerConfig(
-            name="slow_server",
-            command="python",
-            timeout=120.0
-        )
+        config = MCPServerConfig(name="slow_server", command="python", timeout=120.0)
         assert config.timeout == 120.0
 
     def test_to_dict(self):
@@ -97,7 +79,7 @@ class TestMCPServerConfig:
             env={"KEY": "value"},
             transport=MCPTransport.HTTP,
             url="http://localhost:8000",
-            timeout=60.0
+            timeout=60.0,
         )
         data = config.to_dict()
         assert data["name"] == "test_server"
@@ -123,17 +105,14 @@ class TestMCPTool:
         """Test creating MCP tool."""
         schema = {
             "type": "object",
-            "properties": {
-                "file": {"type": "string"},
-                "content": {"type": "string"}
-            },
-            "required": ["file"]
+            "properties": {"file": {"type": "string"}, "content": {"type": "string"}},
+            "required": ["file"],
         }
         tool = MCPTool(
             name="write_file",
             description="Write content to a file",
             input_schema=schema,
-            server_name="filesystem"
+            server_name="filesystem",
         )
         assert tool.name == "write_file"
         assert tool.description == "Write content to a file"
@@ -147,7 +126,7 @@ class TestMCPTool:
             name="test_tool",
             description="Test tool",
             input_schema=schema,
-            server_name="test_server"
+            server_name="test_server",
         )
         data = tool.to_dict()
         assert data["name"] == "test_tool"
@@ -162,18 +141,15 @@ class TestMCPTool:
             "properties": {
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "default": 10},
-                "filters": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                }
+                "filters": {"type": "array", "items": {"type": "string"}},
             },
-            "required": ["query"]
+            "required": ["query"],
         }
         tool = MCPTool(
             name="search",
             description="Search with filters",
             input_schema=schema,
-            server_name="search_server"
+            server_name="search_server",
         )
         assert "filters" in tool.input_schema["properties"]
         assert tool.input_schema["required"] == ["query"]
@@ -184,11 +160,7 @@ class TestMCPResource:
 
     def test_creation_minimal(self):
         """Test creating minimal resource."""
-        resource = MCPResource(
-            uri="file:///test.txt",
-            name="test.txt",
-            description="Test file"
-        )
+        resource = MCPResource(uri="file:///test.txt", name="test.txt", description="Test file")
         assert resource.uri == "file:///test.txt"
         assert resource.name == "test.txt"
         assert resource.description == "Test file"
@@ -201,7 +173,7 @@ class TestMCPResource:
             uri="file:///document.pdf",
             name="document.pdf",
             description="PDF document",
-            mime_type="application/pdf"
+            mime_type="application/pdf",
         )
         assert resource.mime_type == "application/pdf"
 
@@ -211,7 +183,7 @@ class TestMCPResource:
             uri="db://users/123",
             name="User 123",
             description="User record",
-            server_name="database_server"
+            server_name="database_server",
         )
         assert resource.server_name == "database_server"
 
@@ -222,7 +194,7 @@ class TestMCPResource:
             name="API Data",
             description="Data from API",
             mime_type="application/json",
-            server_name="api_server"
+            server_name="api_server",
         )
         data = resource.to_dict()
         assert data["uri"] == "http://example.com/api/data"
@@ -234,19 +206,13 @@ class TestMCPResource:
     def test_various_uri_schemes(self):
         """Test resources with different URI schemes."""
         file_resource = MCPResource(
-            uri="file:///path/to/file",
-            name="file",
-            description="File resource"
+            uri="file:///path/to/file", name="file", description="File resource"
         )
         http_resource = MCPResource(
-            uri="http://example.com/resource",
-            name="http",
-            description="HTTP resource"
+            uri="http://example.com/resource", name="http", description="HTTP resource"
         )
         custom_resource = MCPResource(
-            uri="custom://resource/id",
-            name="custom",
-            description="Custom resource"
+            uri="custom://resource/id", name="custom", description="Custom resource"
         )
         assert file_resource.uri.startswith("file://")
         assert http_resource.uri.startswith("http://")
@@ -258,11 +224,7 @@ class TestMCPPrompt:
 
     def test_creation(self):
         """Test creating MCP prompt."""
-        prompt = MCPPrompt(
-            name="code_review",
-            description="Review code for issues",
-            arguments=[]
-        )
+        prompt = MCPPrompt(name="code_review", description="Review code for issues", arguments=[])
         assert prompt.name == "code_review"
         assert prompt.description == "Review code for issues"
         assert prompt.arguments == []
@@ -271,13 +233,9 @@ class TestMCPPrompt:
         """Test creating prompt with arguments."""
         args = [
             {"name": "code", "type": "string", "required": True},
-            {"name": "language", "type": "string", "required": False}
+            {"name": "language", "type": "string", "required": False},
         ]
-        prompt = MCPPrompt(
-            name="analyze",
-            description="Analyze code",
-            arguments=args
-        )
+        prompt = MCPPrompt(name="analyze", description="Analyze code", arguments=args)
         assert len(prompt.arguments) == 2
         assert prompt.arguments[0]["name"] == "code"
 
@@ -287,7 +245,7 @@ class TestMCPPrompt:
             name="test_prompt",
             description="Test",
             arguments=[{"name": "arg1", "type": "string"}],
-            server_name="test_server"
+            server_name="test_server",
         )
         data = prompt.to_dict()
         assert data["name"] == "test_prompt"
@@ -312,9 +270,7 @@ class TestMCPIntegration:
     def test_server_with_multiple_tools(self):
         """Test server configuration with multiple tools."""
         config = MCPServerConfig(
-            name="filesystem_server",
-            command="python",
-            args=["-m", "mcp_filesystem"]
+            name="filesystem_server", command="python", args=["-m", "mcp_filesystem"]
         )
 
         tools = [
@@ -322,13 +278,13 @@ class TestMCPIntegration:
                 name="read_file",
                 description="Read file",
                 input_schema={"type": "object"},
-                server_name=config.name
+                server_name=config.name,
             ),
             MCPTool(
                 name="write_file",
                 description="Write file",
                 input_schema={"type": "object"},
-                server_name=config.name
+                server_name=config.name,
             ),
         ]
 
@@ -337,24 +293,20 @@ class TestMCPIntegration:
 
     def test_server_with_resources(self):
         """Test server with resources."""
-        config = MCPServerConfig(
-            name="docs_server",
-            command="python",
-            args=["-m", "mcp_docs"]
-        )
+        config = MCPServerConfig(name="docs_server", command="python", args=["-m", "mcp_docs"])
 
         resources = [
             MCPResource(
                 uri="docs://api/reference",
                 name="API Reference",
                 description="API documentation",
-                server_name=config.name
+                server_name=config.name,
             ),
             MCPResource(
                 uri="docs://guides/quickstart",
                 name="Quickstart",
                 description="Getting started guide",
-                server_name=config.name
+                server_name=config.name,
             ),
         ]
 
@@ -369,28 +321,24 @@ class TestMCPIntegration:
             env={"PORT": "8000"},
             transport=MCPTransport.HTTP,
             url="http://localhost:8000",
-            timeout=45.0
+            timeout=45.0,
         )
 
         tool = MCPTool(
             name="process_data",
             description="Process data",
             input_schema={"type": "object"},
-            server_name=config.name
+            server_name=config.name,
         )
 
         resource = MCPResource(
             uri="data://processed/results",
             name="Results",
             description="Processed results",
-            server_name=config.name
+            server_name=config.name,
         )
 
-        prompt = MCPPrompt(
-            name="analyze",
-            description="Analyze data",
-            arguments=[]
-        )
+        prompt = MCPPrompt(name="analyze", description="Analyze data", arguments=[])
 
         # Verify all components are properly configured
         assert config.transport == MCPTransport.HTTP

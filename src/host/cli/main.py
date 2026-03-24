@@ -92,12 +92,9 @@ def interactive_session_picker(project: str = "default") -> str | None:
     console.print()
 
     # Get user selection
-    choice = Prompt.ask(
-        "Select session (number, ID, or 'q' to cancel)",
-        default="1"
-    )
+    choice = Prompt.ask("Select session (number, ID, or 'q' to cancel)", default="1")
 
-    if choice.lower() in ('q', 'quit', 'cancel', ''):
+    if choice.lower() in ("q", "quit", "cancel", ""):
         return None
 
     # Try as number
@@ -127,12 +124,20 @@ def get_most_recent_session(project: str = "default") -> str | None:
 @app.command()
 def start(
     project: str = typer.Option("default", "--project", "-p", help="Project name"),
-    resume: str = typer.Option(None, "--resume", "-r", help="Resume session (ID, name, or empty for picker)"),
-    continue_session: bool = typer.Option(False, "--continue", "-c", help="Continue most recent session"),
+    resume: str = typer.Option(
+        None, "--resume", "-r", help="Resume session (ID, name, or empty for picker)"
+    ),
+    continue_session: bool = typer.Option(
+        False, "--continue", "-c", help="Continue most recent session"
+    ),
     name: str = typer.Option(None, "--name", "-n", help="Name for new session"),
     prompt: str = typer.Option(None, "--prompt", "-P", help="Initial prompt"),
-    print_mode: bool = typer.Option(False, "--print", help="Print mode (non-interactive, exit after response)"),
-    max_turns: int = typer.Option(0, "--max-turns", help="Maximum conversation turns (0 = unlimited)"),
+    print_mode: bool = typer.Option(
+        False, "--print", help="Print mode (non-interactive, exit after response)"
+    ),
+    max_turns: int = typer.Option(
+        0, "--max-turns", help="Maximum conversation turns (0 = unlimited)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """Start the code agent CLI."""
@@ -152,14 +157,16 @@ def start(
         if not resume:
             console.print("[dim]Starting new session.[/dim]")
 
-    asyncio.run(chat_loop(
-        project=project,
-        resume_session=resume,
-        session_name=name,
-        prompt=prompt,
-        print_mode=print_mode,
-        max_turns=max_turns if max_turns > 0 else None,
-    ))
+    asyncio.run(
+        chat_loop(
+            project=project,
+            resume_session=resume,
+            session_name=name,
+            prompt=prompt,
+            print_mode=print_mode,
+            max_turns=max_turns if max_turns > 0 else None,
+        )
+    )
 
 
 @app.command()
@@ -206,6 +213,7 @@ def config(
     # Load existing config
     if config_file.exists():
         import json
+
         config_data = json.loads(config_file.read_text())
     else:
         config_data = get_default_config()
@@ -234,6 +242,7 @@ def config(
         if key and value:
             config_data[key] = value
             import json
+
             config_file.write_text(json.dumps(config_data, indent=2))
             console.print(f"[green]Set {key} = {value}[/green]")
         else:
@@ -247,6 +256,7 @@ def config(
             if isinstance(config_data[key], list):
                 config_data[key].append(value)
                 import json
+
                 config_file.write_text(json.dumps(config_data, indent=2))
                 console.print(f"[green]Added {value} to {key}[/green]")
             else:
@@ -259,6 +269,7 @@ def config(
                 if value in config_data[key]:
                     config_data[key].remove(value)
                     import json
+
                     config_file.write_text(json.dumps(config_data, indent=2))
                     console.print(f"[green]Removed {value} from {key}[/green]")
                 else:
@@ -272,7 +283,9 @@ def config(
 def version():
     """Show version information."""
     console.print("[bold]🤖 Code Agent v0.9.0[/bold]")
-    console.print("[dim]Features: Web UI, Gateway, checkpointing, subagents, hooks, cost tracking[/dim]")
+    console.print(
+        "[dim]Features: Web UI, Gateway, checkpointing, subagents, hooks, cost tracking[/dim]"
+    )
     gateway_url = load_config(validate=False).get("gateway_url")
     if gateway_url:
         console.print(f"[cyan]Mode: Gateway ({gateway_url})[/cyan]")
@@ -290,7 +303,9 @@ def doctor():
     # Check Python version
     py_version = sys.version_info
     py_ok = py_version >= (3, 10)
-    checks.append(("Python version", f"{py_version.major}.{py_version.minor}.{py_version.micro}", py_ok))
+    checks.append(
+        ("Python version", f"{py_version.major}.{py_version.minor}.{py_version.micro}", py_ok)
+    )
 
     config_data = load_config(validate=False)
     model = config_data.get("model")
@@ -306,20 +321,31 @@ def doctor():
     else:
         checks.append(("google_api_key", "✓ Set" if google_key else "✗ Not set", google_key))
         checks.append(("openai_api_key", "✓ Set" if openai_key else "✗ Not set", openai_key))
-        checks.append(("anthropic_api_key", "✓ Set" if anthropic_key else "✗ Not set", anthropic_key))
+        checks.append(
+            ("anthropic_api_key", "✓ Set" if anthropic_key else "✗ Not set", anthropic_key)
+        )
 
         if not any([google_key, openai_key, anthropic_key]):
             checks.append(("API Keys", "⚠ No API keys configured in .agent/config.json", False))
 
     # Check directories
     agent_dir = Path(".agent")
-    checks.append((".agent directory", "✓ Exists" if agent_dir.exists() else "Will be created", True))
+    checks.append(
+        (".agent directory", "✓ Exists" if agent_dir.exists() else "Will be created", True)
+    )
 
     agents_md = Path("AGENTS.md")
-    checks.append(("AGENTS.md", "✓ Found" if agents_md.exists() else "Not found (use /init)", agents_md.exists()))
+    checks.append(
+        (
+            "AGENTS.md",
+            "✓ Found" if agents_md.exists() else "Not found (use /init)",
+            agents_md.exists(),
+        )
+    )
 
     # Check git
     import subprocess
+
     try:
         result = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
         git_ok = result.returncode == 0

@@ -257,8 +257,7 @@ class DoraemonAgentAdapter(AgentAdapter):
         except ImportError as e:
             logger.error(f"Failed to import Doraemon components: {e}")
             raise RuntimeError(
-                "Doraemon Code components not available. "
-                "Ensure the project is properly installed."
+                "Doraemon Code components not available. Ensure the project is properly installed."
             ) from e
 
     def execute(self, prompt: str) -> AgentResponse:
@@ -280,9 +279,7 @@ class DoraemonAgentAdapter(AgentAdapter):
         success = False
 
         # Record user turn
-        self._record_conversation_turn(
-            ConversationTurn(role="user", content=prompt)
-        )
+        self._record_conversation_turn(ConversationTurn(role="user", content=prompt))
 
         for attempt in range(self.max_retries):
             try:
@@ -538,9 +535,7 @@ class MockAgentAdapter(AgentAdapter):
         self._total_token_usage = self._total_token_usage + token_usage
 
         # Record conversation turns
-        self._record_conversation_turn(
-            ConversationTurn(role="user", content=prompt)
-        )
+        self._record_conversation_turn(ConversationTurn(role="user", content=prompt))
         self._record_conversation_turn(
             ConversationTurn(role="assistant", content=output, tool_calls=tool_calls)
         )
@@ -621,8 +616,7 @@ class AgentFactory:
         """
         if agent_type not in cls._registry:
             raise ValueError(
-                f"Unknown agent type: {agent_type}. "
-                f"Available types: {list(cls._registry.keys())}"
+                f"Unknown agent type: {agent_type}. Available types: {list(cls._registry.keys())}"
             )
 
         return cls._registry[agent_type](**kwargs)

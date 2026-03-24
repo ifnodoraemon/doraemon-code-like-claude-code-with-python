@@ -314,13 +314,9 @@ class ModelManager:
         model = self.get_current_model_info()
         return model is not None and capability in model.capabilities
 
-    def get_models_with_capability(
-        self, capability: ModelCapability
-    ) -> list[ModelInfo]:
+    def get_models_with_capability(self, capability: ModelCapability) -> list[ModelInfo]:
         """Get all models with a specific capability."""
-        return [
-            m for m in AVAILABLE_MODELS.values() if capability in m.capabilities
-        ]
+        return [m for m in AVAILABLE_MODELS.values() if capability in m.capabilities]
 
     def format_model_list(self) -> str:
         """Format model list for display."""
@@ -339,9 +335,7 @@ class ModelManager:
                 current = "→ " if model.id == self._current_model else "  "
                 price = f"${model.input_price}/${model.output_price}"
                 aliases = f" ({', '.join(model.aliases)})" if model.aliases else ""
-                lines.append(
-                    f"{current}{model.id}: {model.name} - {price}{aliases}"
-                )
+                lines.append(f"{current}{model.id}: {model.name} - {price}{aliases}")
 
         return "\n".join(lines)
 

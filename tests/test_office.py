@@ -9,6 +9,7 @@ from src.services import document, office
 def temp_dir(tmp_path):
     return str(tmp_path)
 
+
 def test_create_read_docx(temp_dir):
     path = os.path.join(temp_dir, "test.docx")
     content = "Hello World\nThis is a test."
@@ -25,6 +26,7 @@ def test_create_read_docx(temp_dir):
     assert "Hello World" in text
     assert "This is a test" in text
 
+
 def test_create_read_xlsx(temp_dir):
     path = os.path.join(temp_dir, "test.xlsx")
     data = [["Name", "Age"], ["Alice", 30], ["Bob", 25]]
@@ -40,6 +42,7 @@ def test_create_read_xlsx(temp_dir):
     assert "Name\tAge" in text
     assert "Alice\t30" in text
 
+
 def test_add_sheet_xlsx(temp_dir):
     path = os.path.join(temp_dir, "test_multi.xlsx")
     data1 = [["A", "B"], [1, 2]]
@@ -54,11 +57,12 @@ def test_add_sheet_xlsx(temp_dir):
     assert "Sheet: Sheet2" in text
     assert "X\tY" in text
 
+
 def test_create_read_pptx(temp_dir):
     path = os.path.join(temp_dir, "test.pptx")
     slides = [
         {"title": "Slide 1", "content": "Content 1"},
-        {"title": "Slide 2", "content": "Point A\nPoint B"}
+        {"title": "Slide 2", "content": "Point A\nPoint B"},
     ]
 
     # Create

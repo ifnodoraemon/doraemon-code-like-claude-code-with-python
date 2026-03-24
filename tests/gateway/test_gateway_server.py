@@ -1,6 +1,5 @@
 """Tests for the Gateway server."""
 
-
 import pytest
 
 # Note: These tests require fastapi and httpx
@@ -33,14 +32,13 @@ class TestGatewaySchema:
         msg = Message(
             role="assistant",
             content=None,
-            tool_calls=[{
-                "id": "call_1",
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "arguments": '{"path": "/test"}'
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read_file", "arguments": '{"path": "/test"}'},
                 }
-            }],
+            ],
         )
         assert msg.role == "assistant"
         assert len(msg.tool_calls) == 1
@@ -61,17 +59,19 @@ class TestGatewaySchema:
         request = ChatRequest(
             model="gpt-4",
             messages=[Message(role="user", content="Read file")],
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "description": "Read a file",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"path": {"type": "string"}},
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "Read a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"path": {"type": "string"}},
+                        },
                     },
-                },
-            }],
+                }
+            ],
         )
         assert len(request.tools) == 1
 
@@ -80,11 +80,13 @@ class TestGatewaySchema:
         response = ChatResponse(
             id="resp_123",
             model="gemini-2.5-flash",
-            choices=[{
-                "index": 0,
-                "message": Message(role="assistant", content="Hello!"),
-                "finish_reason": "stop",
-            }],
+            choices=[
+                {
+                    "index": 0,
+                    "message": Message(role="assistant", content="Hello!"),
+                    "finish_reason": "stop",
+                }
+            ],
             usage=Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
         )
         assert response.id == "resp_123"

@@ -5,10 +5,11 @@ These tests establish performance baselines and detect regressions.
 Run with: pytest tests/benchmarks/ -v --benchmark
 """
 
-import time
-import pytest
-from pathlib import Path
 import sys
+import time
+from pathlib import Path
+
+import pytest
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -101,8 +102,9 @@ class TestMemoryBenchmarks:
 
     def test_memory_usage_baseline(self):
         """Benchmark: Baseline memory usage should be < 500MB"""
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         memory_mb = process.memory_info().rss / 1024 / 1024
@@ -111,8 +113,9 @@ class TestMemoryBenchmarks:
 
     def test_memory_growth_after_100_queries(self):
         """Benchmark: Memory should not grow > 50% after 100 queries"""
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss
@@ -130,7 +133,7 @@ class TestMemoryBenchmarks:
         final_memory = process.memory_info().rss
         growth = (final_memory - initial_memory) / initial_memory
 
-        assert growth < 0.5, f"Memory grew by {growth*100:.1f}%, expected < 50%"
+        assert growth < 0.5, f"Memory grew by {growth * 100:.1f}%, expected < 50%"
 
 
 @pytest.mark.benchmark

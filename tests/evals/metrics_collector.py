@@ -152,9 +152,7 @@ class MetricsCollector:
             self.metrics["llm_task_completion"].append(
                 llm_eval.get("task_completion", {}).get("score", 0)
             )
-            self.metrics["llm_tool_usage"].append(
-                llm_eval.get("tool_usage", {}).get("score", 0)
-            )
+            self.metrics["llm_tool_usage"].append(llm_eval.get("tool_usage", {}).get("score", 0))
             self.metrics["llm_code_quality"].append(
                 llm_eval.get("code_quality", {}).get("score", 0)
             )
@@ -214,9 +212,7 @@ class MetricsCollector:
 
         return {
             "total_tool_calls": total_calls,
-            "avg_tool_calls_per_task": total_calls / total_tasks
-            if total_tasks > 0
-            else 0,
+            "avg_tool_calls_per_task": total_calls / total_tasks if total_tasks > 0 else 0,
             "max_tool_calls": max(self.metrics["tool_call_count"])
             if self.metrics["tool_call_count"]
             else 0,
@@ -224,9 +220,7 @@ class MetricsCollector:
             if self.metrics["tool_call_count"]
             else 0,
             "tool_usage_distribution": dict(tool_counts),
-            "most_used_tools": sorted(
-                tool_counts.items(), key=lambda x: x[1], reverse=True
-            )[:5],
+            "most_used_tools": sorted(tool_counts.items(), key=lambda x: x[1], reverse=True)[:5],
         }
 
     def _calculate_difficulty_metrics(self) -> dict:
@@ -249,9 +243,7 @@ class MetricsCollector:
             difficulty_stats[difficulty] = {
                 "total_tasks": stats["total"],
                 "successful_tasks": stats["success"],
-                "success_rate": stats["success"] / stats["total"]
-                if stats["total"] > 0
-                else 0,
+                "success_rate": stats["success"] / stats["total"] if stats["total"] > 0 else 0,
                 "avg_execution_time": sum(stats["times"]) / len(stats["times"])
                 if stats["times"]
                 else 0,
@@ -265,8 +257,7 @@ class MetricsCollector:
         ]
 
         return {
-            "avg_difficulty": sum(numeric_difficulties)
-            / len(numeric_difficulties)
+            "avg_difficulty": sum(numeric_difficulties) / len(numeric_difficulties)
             if numeric_difficulties
             else 0,
             "by_difficulty": difficulty_stats,
@@ -292,9 +283,7 @@ class MetricsCollector:
             category_stats[category] = {
                 "total_tasks": stats["total"],
                 "successful_tasks": stats["success"],
-                "success_rate": stats["success"] / stats["total"]
-                if stats["total"] > 0
-                else 0,
+                "success_rate": stats["success"] / stats["total"] if stats["total"] > 0 else 0,
                 "avg_execution_time": sum(stats["times"]) / len(stats["times"])
                 if stats["times"]
                 else 0,
@@ -466,9 +455,7 @@ class MetricsCollector:
         # pass^k = success_rate^k
         return math.pow(success_rate, k)
 
-    def calculate_latency_distribution(
-        self, results: list[dict[str, Any]]
-    ) -> dict[str, float]:
+    def calculate_latency_distribution(self, results: list[dict[str, Any]]) -> dict[str, float]:
         """
         计算延迟分布指标
 
@@ -676,9 +663,7 @@ class MetricsCollector:
                 error_by_category[category]["failed"] += 1
 
         for _category, stats in error_by_category.items():
-            stats["error_rate"] = (
-                stats["failed"] / stats["total"] if stats["total"] > 0 else 0.0
-            )
+            stats["error_rate"] = stats["failed"] / stats["total"] if stats["total"] > 0 else 0.0
 
         # 按难度统计错误
         error_by_difficulty: dict[int | str, dict[str, Any]] = defaultdict(
@@ -691,9 +676,7 @@ class MetricsCollector:
                 error_by_difficulty[difficulty]["failed"] += 1
 
         for _difficulty, stats in error_by_difficulty.items():
-            stats["error_rate"] = (
-                stats["failed"] / stats["total"] if stats["total"] > 0 else 0.0
-            )
+            stats["error_rate"] = stats["failed"] / stats["total"] if stats["total"] > 0 else 0.0
 
         return {
             "error_rate": error_rate,
@@ -702,9 +685,7 @@ class MetricsCollector:
             "error_by_difficulty": dict(error_by_difficulty),
         }
 
-    def generate_anthropic_style_report(
-        self, results: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def generate_anthropic_style_report(self, results: list[dict[str, Any]]) -> dict[str, Any]:
         """
         生成符合 Anthropic 标准的评估报告
 
@@ -811,9 +792,7 @@ class MetricsCollector:
 
         # 计算统计值
         for _key, stats in aggregated.items():
-            stats["success_rate"] = (
-                stats["success"] / stats["total"] if stats["total"] > 0 else 0.0
-            )
+            stats["success_rate"] = stats["success"] / stats["total"] if stats["total"] > 0 else 0.0
             stats["avg_latency"] = (
                 statistics.mean(stats["latencies"]) if stats["latencies"] else 0.0
             )
@@ -850,15 +829,15 @@ class MetricsCollector:
         # 成功率建议
         if success_rate < 0.5:
             recommendations.append(
-                f"[Critical] 成功率过低 ({success_rate*100:.1f}%)，建议检查任务定义和模型能力匹配度"
+                f"[Critical] 成功率过低 ({success_rate * 100:.1f}%)，建议检查任务定义和模型能力匹配度"
             )
         elif success_rate < 0.7:
             recommendations.append(
-                f"[Warning] 成功率偏低 ({success_rate*100:.1f}%)，建议优化 prompt 或增加示例"
+                f"[Warning] 成功率偏低 ({success_rate * 100:.1f}%)，建议优化 prompt 或增加示例"
             )
         elif success_rate < 0.9:
             recommendations.append(
-                f"[Info] 成功率良好 ({success_rate*100:.1f}%)，可考虑针对失败案例进行优化"
+                f"[Info] 成功率良好 ({success_rate * 100:.1f}%)，可考虑针对失败案例进行优化"
             )
 
         # 延迟建议
@@ -867,9 +846,7 @@ class MetricsCollector:
                 f"[Warning] P95 延迟过高 ({latency_dist['p95']:.1f}s)，建议优化任务复杂度或增加超时处理"
             )
         if latency_dist.get("std", 0) > latency_dist.get("mean", 1) * 0.5:
-            recommendations.append(
-                "[Info] 延迟波动较大，建议检查是否存在异常任务"
-            )
+            recommendations.append("[Info] 延迟波动较大，建议检查是否存在异常任务")
 
         # 成本建议
         if cost_metrics.get("cost_per_success", 0) > 0.1:
@@ -891,7 +868,8 @@ class MetricsCollector:
 
         # 类别建议
         weak_categories = [
-            cat for cat, stats in by_category.items()
+            cat
+            for cat, stats in by_category.items()
             if stats.get("success_rate", 1.0) < 0.5 and stats.get("total", 0) >= 3
         ]
         if weak_categories:
@@ -903,7 +881,7 @@ class MetricsCollector:
         for diff, stats in by_difficulty.items():
             if stats.get("success_rate", 1.0) < 0.3 and stats.get("total", 0) >= 3:
                 recommendations.append(
-                    f"[Warning] 难度 {diff} 的任务成功率过低 ({stats['success_rate']*100:.1f}%)，"
+                    f"[Warning] 难度 {diff} 的任务成功率过低 ({stats['success_rate'] * 100:.1f}%)，"
                     "建议降低难度或增强模型能力"
                 )
 
@@ -961,17 +939,17 @@ class MetricsCollector:
         print("\n[Summary]")
         print(f"  Model: {summary['model_name']}")
         print(f"  Total Tasks: {summary['total_tasks']}")
-        print(f"  Success Rate: {summary['success_rate']*100:.1f}%")
+        print(f"  Success Rate: {summary['success_rate'] * 100:.1f}%")
         print(f"  Timestamp: {summary['timestamp']}")
 
         # Pass Metrics
         pass_metrics = report["pass_metrics"]
         print("\n[Pass Metrics]")
-        print(f"  pass@1: {pass_metrics['pass_at_1']*100:.1f}%")
-        print(f"  pass@3: {pass_metrics['pass_at_3']*100:.1f}%")
-        print(f"  pass@5: {pass_metrics['pass_at_5']*100:.1f}%")
-        print(f"  pass^3 (reliability): {pass_metrics['pass_power_3']*100:.1f}%")
-        print(f"  pass^5 (reliability): {pass_metrics['pass_power_5']*100:.1f}%")
+        print(f"  pass@1: {pass_metrics['pass_at_1'] * 100:.1f}%")
+        print(f"  pass@3: {pass_metrics['pass_at_3'] * 100:.1f}%")
+        print(f"  pass@5: {pass_metrics['pass_at_5'] * 100:.1f}%")
+        print(f"  pass^3 (reliability): {pass_metrics['pass_power_3'] * 100:.1f}%")
+        print(f"  pass^5 (reliability): {pass_metrics['pass_power_5'] * 100:.1f}%")
 
         # Latency
         latency = report["latency"]
@@ -995,7 +973,7 @@ class MetricsCollector:
         # Errors
         errors = report["errors"]
         print("\n[Error Analysis]")
-        print(f"  Error Rate: {errors['error_rate']*100:.1f}%")
+        print(f"  Error Rate: {errors['error_rate'] * 100:.1f}%")
         if errors["error_types"]:
             print("  Error Types:")
             for error_type, count in sorted(
@@ -1013,7 +991,7 @@ class MetricsCollector:
             ):
                 print(
                     f"  {category}: {stats['success']}/{stats['total']} "
-                    f"({stats['success_rate']*100:.1f}%) - {stats['avg_latency']:.2f}s avg"
+                    f"({stats['success_rate'] * 100:.1f}%) - {stats['avg_latency']:.2f}s avg"
                 )
 
         # By Difficulty
@@ -1022,7 +1000,7 @@ class MetricsCollector:
             for difficulty, stats in sorted(report["by_difficulty"].items()):
                 print(
                     f"  Level {difficulty}: {stats['success']}/{stats['total']} "
-                    f"({stats['success_rate']*100:.1f}%) - {stats['avg_latency']:.2f}s avg"
+                    f"({stats['success_rate'] * 100:.1f}%) - {stats['avg_latency']:.2f}s avg"
                 )
 
         # Recommendations
@@ -1074,7 +1052,7 @@ class MetricsCollector:
         print(f"  总任务数: {core['total_tasks']}")
         print(f"  成功任务: {core['successful_tasks']}")
         print(f"  失败任务: {core['failed_tasks']}")
-        print(f"  成功率: {core['success_rate']*100:.1f}%")
+        print(f"  成功率: {core['success_rate'] * 100:.1f}%")
         print(f"  平均耗时: {core['avg_execution_time']:.2f}s")
         print(f"  总耗时: {core['total_execution_time']:.2f}s")
 
@@ -1091,12 +1069,10 @@ class MetricsCollector:
         # 难度指标
         if metrics.get("difficulty_metrics"):
             print("\n按难度统计:")
-            for difficulty, stats in sorted(
-                metrics["difficulty_metrics"]["by_difficulty"].items()
-            ):
+            for difficulty, stats in sorted(metrics["difficulty_metrics"]["by_difficulty"].items()):
                 print(
                     f"  难度 {difficulty}: {stats['successful_tasks']}/{stats['total_tasks']} "
-                    f"({stats['success_rate']*100:.1f}%) - {stats['avg_execution_time']:.2f}s"
+                    f"({stats['success_rate'] * 100:.1f}%) - {stats['avg_execution_time']:.2f}s"
                 )
 
         # 类别指标
@@ -1105,7 +1081,7 @@ class MetricsCollector:
             for category, stats in metrics["category_metrics"]["by_category"].items():
                 print(
                     f"  {category}: {stats['successful_tasks']}/{stats['total_tasks']} "
-                    f"({stats['success_rate']*100:.1f}%) - {stats['avg_execution_time']:.2f}s"
+                    f"({stats['success_rate'] * 100:.1f}%) - {stats['avg_execution_time']:.2f}s"
                 )
 
         # LLM 指标
@@ -1133,7 +1109,7 @@ class MetricsCollector:
             err = metrics["error_metrics"]
             print("\n错误统计:")
             print(f"  总错误数: {err['total_errors']}")
-            print(f"  错误率: {err['error_rate']*100:.1f}%")
+            print(f"  错误率: {err['error_rate'] * 100:.1f}%")
             print("  错误类型:")
             for error_type, count in err["error_types"].items():
                 print(f"    - {error_type}: {count}")

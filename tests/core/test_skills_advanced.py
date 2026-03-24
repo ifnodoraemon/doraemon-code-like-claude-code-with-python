@@ -1,10 +1,14 @@
 """Advanced comprehensive tests for skills.py - 20+ tests for improved coverage"""
-import pytest
+
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+
 from src.core.skills import (
-    SkillMetadata, Skill, SkillLoader, SkillManager,
-    create_skill_template, format_skills_for_prompt
+    Skill,
+    SkillLoader,
+    SkillManager,
+    SkillMetadata,
+    create_skill_template,
+    format_skills_for_prompt,
 )
 
 
@@ -30,7 +34,7 @@ class TestSkillMetadataAdvanced:
             "triggers": ["python", "pytest", ".py"],
             "priority": 10,
             "requires": ["git-workflow"],
-            "files": ["style-guide.md", "templates/"]
+            "files": ["style-guide.md", "templates/"],
         }
         metadata = SkillMetadata.from_dict(data)
         assert metadata.name == "Python Dev"
@@ -42,11 +46,7 @@ class TestSkillMetadataAdvanced:
 
     def test_from_dict_with_none_values(self):
         """Test from_dict handles None values."""
-        data = {
-            "name": "Test",
-            "description": None,
-            "triggers": None
-        }
+        data = {"name": "Test", "description": None, "triggers": None}
         metadata = SkillMetadata.from_dict(data)
         # None values are preserved as-is by from_dict
         assert metadata.description is None or metadata.description == ""
@@ -59,21 +59,13 @@ class TestSkillAdvanced:
     def test_skill_name_property(self):
         """Test skill name property."""
         metadata = SkillMetadata(name="Test Skill", description="Test")
-        skill = Skill(
-            metadata=metadata,
-            content="Content",
-            path=Path("/test")
-        )
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         assert skill.name == "Test Skill"
 
     def test_skill_full_content_empty_additional(self):
         """Test full_content with no additional files."""
         metadata = SkillMetadata(name="Test", description="Test")
-        skill = Skill(
-            metadata=metadata,
-            content="Main content",
-            path=Path("/test")
-        )
+        skill = Skill(metadata=metadata, content="Main content", path=Path("/test"))
         assert skill.full_content == "Main content"
 
     def test_skill_full_content_with_additional(self):
@@ -83,10 +75,7 @@ class TestSkillAdvanced:
             metadata=metadata,
             content="Main content",
             path=Path("/test"),
-            additional_content={
-                "guide.md": "Guide content",
-                "examples.md": "Examples"
-            }
+            additional_content={"guide.md": "Guide content", "examples.md": "Examples"},
         )
         full = skill.full_content
         assert "Main content" in full
@@ -97,87 +86,46 @@ class TestSkillAdvanced:
     def test_skill_matches_context_no_triggers(self):
         """Test matches_context with no triggers."""
         metadata = SkillMetadata(name="Test", description="Test", triggers=[])
-        skill = Skill(
-            metadata=metadata,
-            content="Content",
-            path=Path("/test")
-        )
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         score = skill.matches_context("python code")
         assert score == 0.0
 
     def test_skill_matches_context_single_trigger(self):
         """Test matches_context with single trigger."""
-        metadata = SkillMetadata(
-            name="Python",
-            description="Python",
-            triggers=["python"]
-        )
-        skill = Skill(
-            metadata=metadata,
-            content="Content",
-            path=Path("/test")
-        )
+        metadata = SkillMetadata(name="Python", description="Python", triggers=["python"])
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         score = skill.matches_context("write python code")
         assert score > 0.0
 
     def test_skill_matches_context_multiple_triggers(self):
         """Test matches_context with multiple triggers."""
         metadata = SkillMetadata(
-            name="Python",
-            description="Python",
-            triggers=["python", "pytest", ".py"]
+            name="Python", description="Python", triggers=["python", "pytest", ".py"]
         )
-        skill = Skill(
-            metadata=metadata,
-            content="Content",
-            path=Path("/test")
-        )
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         score = skill.matches_context("write python code with pytest")
         assert score > 0.0
 
     def test_skill_matches_context_file_extension(self):
         """Test matches_context recognizes file extensions."""
-        metadata = SkillMetadata(
-            name="Python",
-            description="Python",
-            triggers=[".py"]
-        )
-        skill = Skill(
-            metadata=metadata,
-            content="Content",
-            path=Path("/test")
-        )
+        metadata = SkillMetadata(name="Python", description="Python", triggers=[".py"])
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         score = skill.matches_context("edit main.py")
         assert score > 0.0
 
     def test_skill_matches_context_case_insensitive(self):
         """Test matches_context is case insensitive."""
-        metadata = SkillMetadata(
-            name="Python",
-            description="Python",
-            triggers=["PYTHON"]
-        )
-        skill = Skill(
-            metadata=metadata,
-            content="Content",
-            path=Path("/test")
-        )
+        metadata = SkillMetadata(name="Python", description="Python", triggers=["PYTHON"])
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         score = skill.matches_context("write python code")
         assert score > 0.0
 
     def test_skill_matches_context_with_priority(self):
         """Test matches_context includes priority boost."""
         metadata = SkillMetadata(
-            name="Python",
-            description="Python",
-            triggers=["python"],
-            priority=50
+            name="Python", description="Python", triggers=["python"], priority=50
         )
-        skill = Skill(
-            metadata=metadata,
-            content="Content",
-            path=Path("/test")
-        )
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         score = skill.matches_context("python")
         # Score should be boosted by priority
         assert score > 0.5
@@ -528,15 +476,8 @@ class TestSkillUtilityFunctions:
 
     def test_format_skills_for_prompt_single(self):
         """Test formatting single skill."""
-        metadata = SkillMetadata(
-            name="Python",
-            description="Python development"
-        )
-        skill = Skill(
-            metadata=metadata,
-            content="Python guidelines",
-            path=Path("/test")
-        )
+        metadata = SkillMetadata(name="Python", description="Python development")
+        skill = Skill(metadata=metadata, content="Python guidelines", path=Path("/test"))
         result = format_skills_for_prompt([skill])
         assert "LOADED SKILLS" in result
         assert "Python" in result
@@ -546,15 +487,8 @@ class TestSkillUtilityFunctions:
         """Test formatting multiple skills."""
         skills = []
         for i in range(3):
-            metadata = SkillMetadata(
-                name=f"Skill {i}",
-                description=f"Description {i}"
-            )
-            skill = Skill(
-                metadata=metadata,
-                content=f"Content {i}",
-                path=Path("/test")
-            )
+            metadata = SkillMetadata(name=f"Skill {i}", description=f"Description {i}")
+            skill = Skill(metadata=metadata, content=f"Content {i}", path=Path("/test"))
             skills.append(skill)
 
         result = format_skills_for_prompt(skills)

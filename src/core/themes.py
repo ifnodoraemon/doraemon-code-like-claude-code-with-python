@@ -285,14 +285,11 @@ class ThemeManager:
             data = {
                 "current": self._current_theme,
                 "custom_themes": {
-                    name: theme.to_dict()
-                    for name, theme in self._custom_themes.items()
+                    name: theme.to_dict() for name, theme in self._custom_themes.items()
                 },
             }
 
-            self._config_path.write_text(
-                json.dumps(data, indent=2), encoding="utf-8"
-            )
+            self._config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
         except Exception as e:
             logger.warning(f"Failed to save theme config: {e}")

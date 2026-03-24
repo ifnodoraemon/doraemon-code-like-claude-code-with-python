@@ -5,7 +5,6 @@ Tests the isolated environment functionality for evaluation trials.
 """
 
 import os
-import sqlite3
 import subprocess
 import tempfile
 from pathlib import Path
@@ -13,13 +12,11 @@ from pathlib import Path
 import pytest
 
 from tests.evals.isolated_environment import (
-    IsolatedEnvironment,
-    EnvironmentSnapshot,
     EnvironmentDiff,
     FileSnapshot,
-    FileDiff,
-    isolated_trial,
+    IsolatedEnvironment,
     create_fixture_template,
+    isolated_trial,
 )
 
 
@@ -52,6 +49,7 @@ class TestIsolatedEnvironmentBasic:
 
         # Manual cleanup
         import shutil
+
         shutil.rmtree(temp_path)
 
     def test_base_dir_option(self):
@@ -183,7 +181,7 @@ class TestFixtureManagement:
     def test_load_nonexistent_fixture(self):
         """Test loading a non-existent fixture raises error."""
         with pytest.raises(FileNotFoundError, match="Fixture not found"):
-            with IsolatedEnvironment(fixtures=["nonexistent_fixture"]) as env:
+            with IsolatedEnvironment(fixtures=["nonexistent_fixture"]):
                 pass
 
     def test_copy_from_template(self):
@@ -299,14 +297,14 @@ class TestEnvironmentVariables:
 
     def test_env_vars_are_set(self):
         """Test that custom env vars are set."""
-        with IsolatedEnvironment(env_vars={"MY_VAR": "my_value"}) as env:
+        with IsolatedEnvironment(env_vars={"MY_VAR": "my_value"}):
             assert os.environ.get("MY_VAR") == "my_value"
 
     def test_env_vars_are_restored(self):
         """Test that env vars are restored after context exit."""
         original = os.environ.get("MY_VAR")
 
-        with IsolatedEnvironment(env_vars={"MY_VAR": "temp_value"}) as env:
+        with IsolatedEnvironment(env_vars={"MY_VAR": "temp_value"}):
             assert os.environ.get("MY_VAR") == "temp_value"
 
         assert os.environ.get("MY_VAR") == original
@@ -322,7 +320,7 @@ class TestEnvironmentVariables:
         original_isolated = os.environ.get("ISOLATED_ENV")
         original_root = os.environ.get("ISOLATED_ENV_ROOT")
 
-        with IsolatedEnvironment() as env:
+        with IsolatedEnvironment():
             pass
 
         assert os.environ.get("ISOLATED_ENV") == original_isolated
@@ -345,7 +343,7 @@ class TestWorkingDirectory:
         """Test that cwd is not changed when change_cwd=False."""
         original_cwd = Path.cwd()
 
-        with IsolatedEnvironment(change_cwd=False) as env:
+        with IsolatedEnvironment(change_cwd=False):
             assert Path.cwd() == original_cwd
 
     def test_original_cwd_property(self):
@@ -600,10 +598,10 @@ class TestTrialIsolation:
 
     def test_env_vars_isolated_between_trials(self):
         """Test that env vars are isolated between trials."""
-        with IsolatedEnvironment(env_vars={"TRIAL_VAR": "trial1"}) as env1:
+        with IsolatedEnvironment(env_vars={"TRIAL_VAR": "trial1"}):
             assert os.environ.get("TRIAL_VAR") == "trial1"
 
-        with IsolatedEnvironment(env_vars={"TRIAL_VAR": "trial2"}) as env2:
+        with IsolatedEnvironment(env_vars={"TRIAL_VAR": "trial2"}):
             assert os.environ.get("TRIAL_VAR") == "trial2"
 
         # After both trials, var should be restored
@@ -613,10 +611,10 @@ class TestTrialIsolation:
         """Test that cwd is isolated between trials."""
         original_cwd = Path.cwd()
 
-        with IsolatedEnvironment() as env1:
+        with IsolatedEnvironment():
             cwd1 = Path.cwd()
 
-        with IsolatedEnvironment() as env2:
+        with IsolatedEnvironment():
             cwd2 = Path.cwd()
 
         # Each trial should have different cwd

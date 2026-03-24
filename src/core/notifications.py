@@ -207,7 +207,7 @@ class DesktopNotifier:
             return True
         except ImportError:
             # Fallback to PowerShell
-            script = f'''
+            script = f"""
             [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
             [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
             $template = "<toast><visual><binding template='ToastText02'><text id='1'>{notification.title}</text><text id='2'>{notification.message}</text></binding></visual></toast>"
@@ -215,7 +215,7 @@ class DesktopNotifier:
             $xml.LoadXml($template)
             $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
             [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Doraemon").Show($toast)
-            '''
+            """
 
             subprocess.run(
                 ["powershell", "-Command", script],
@@ -306,7 +306,7 @@ class NotificationManager:
         # Add to history
         self._history.append(notification)
         if len(self._history) > self.config.max_history:
-            self._history = self._history[-self.config.max_history:]
+            self._history = self._history[-self.config.max_history :]
 
         # Check DND
         if self.config.do_not_disturb and level != NotificationLevel.CRITICAL:
@@ -329,9 +329,7 @@ class NotificationManager:
 
         return success
 
-    def _send_channel(
-        self, channel: NotificationChannel, notification: Notification
-    ) -> bool:
+    def _send_channel(self, channel: NotificationChannel, notification: Notification) -> bool:
         """Send to a specific channel."""
         if channel == NotificationChannel.DESKTOP:
             if self.config.desktop_enabled:
@@ -379,6 +377,7 @@ class NotificationManager:
                 )
             elif system == "Windows":
                 import winsound
+
                 winsound.MessageBeep()
 
             return True
@@ -440,8 +439,14 @@ class NotificationManager:
     def critical(self, message: str, title: str = "Critical"):
         """Send critical notification."""
         return self.notify(
-            title, message, NotificationLevel.CRITICAL,
-            channels=[NotificationChannel.DESKTOP, NotificationChannel.CONSOLE, NotificationChannel.SOUND]
+            title,
+            message,
+            NotificationLevel.CRITICAL,
+            channels=[
+                NotificationChannel.DESKTOP,
+                NotificationChannel.CONSOLE,
+                NotificationChannel.SOUND,
+            ],
         )
 
     def on_notification(self, callback: Callable[[Notification], None]):

@@ -306,18 +306,12 @@ class LayeredMemory:
 
     def list_layer(self, layer: MemoryLayer) -> list[MemoryEntry]:
         """List all entries in a layer."""
-        return [
-            e for e in self._memory[layer].values()
-            if not e.is_expired()
-        ]
+        return [e for e in self._memory[layer].values() if not e.is_expired()]
 
     def list_keys(self, layer: MemoryLayer | None = None) -> list[str]:
         """List all keys."""
         if layer is not None:
-            return [
-                k for k, v in self._memory[layer].items()
-                if not v.is_expired()
-            ]
+            return [k for k, v in self._memory[layer].items() if not v.is_expired()]
 
         keys = set()
         for layer in MemoryLayer:
@@ -361,17 +355,9 @@ class LayeredMemory:
 
         path = self._get_layer_path(layer)
         if layer in self._simple_layers:
-            data = {
-                k: v.value
-                for k, v in self._memory[layer].items()
-                if not v.is_expired()
-            }
+            data = {k: v.value for k, v in self._memory[layer].items() if not v.is_expired()}
         else:
-            data = {
-                k: v.to_dict()
-                for k, v in self._memory[layer].items()
-                if not v.is_expired()
-            }
+            data = {k: v.to_dict() for k, v in self._memory[layer].items() if not v.is_expired()}
 
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -449,11 +435,7 @@ class LayeredMemory:
 
     def export_layer(self, layer: MemoryLayer) -> dict:
         """Export a layer as dict."""
-        return {
-            k: v.to_dict()
-            for k, v in self._memory[layer].items()
-            if not v.is_expired()
-        }
+        return {k: v.to_dict() for k, v in self._memory[layer].items() if not v.is_expired()}
 
     def get_summary(self) -> dict[str, Any]:
         """Get memory summary."""

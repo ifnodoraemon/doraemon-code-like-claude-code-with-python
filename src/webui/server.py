@@ -52,6 +52,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     return response
 
+
 # Include routers
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
@@ -64,7 +65,7 @@ if dashboard_static_dir.exists():
     app.mount(
         "/dashboard/static",
         StaticFiles(directory=str(dashboard_static_dir)),
-        name="dashboard_static"
+        name="dashboard_static",
     )
 
 # Mount static files (frontend)
@@ -85,6 +86,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, reload: bool = False
         reload=reload,
         log_level="info",
     )
+
 
 if __name__ == "__main__":
     start_server(reload=True)

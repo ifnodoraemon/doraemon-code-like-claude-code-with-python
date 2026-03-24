@@ -1,14 +1,14 @@
 """Comprehensive tests for tool_history.py"""
+
 import json
-import pytest
 import time
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+
+import pytest
+
 from src.core.tool_history import (
     ExecutionStatus,
     ToolExecution,
     ToolHistoryManager,
-    ExecutionRecorder,
     get_tool_history,
 )
 
@@ -542,10 +542,10 @@ class TestToolHistoryManagerQuerying:
     def test_filter_by_tool(self):
         """Test filter() by tool name."""
         manager = ToolHistoryManager()
-        for i in range(5):
+        for _i in range(5):
             exec_id = manager.start("file_read", {})
             manager.complete(exec_id, "result")
-        for i in range(3):
+        for _i in range(3):
             exec_id = manager.start("file_write", {})
             manager.complete(exec_id, "result")
 
@@ -556,14 +556,12 @@ class TestToolHistoryManagerQuerying:
     def test_filter_by_status(self):
         """Test filter() by status."""
         manager = ToolHistoryManager()
-        for i in range(3):
+        for _i in range(3):
             exec_id = manager.start("tool", {})
             manager.complete(exec_id, "result", status=ExecutionStatus.SUCCESS)
-        for i in range(2):
+        for _i in range(2):
             exec_id = manager.start("tool", {})
-            manager.complete(
-                exec_id, None, status=ExecutionStatus.ERROR, error_message="error"
-            )
+            manager.complete(exec_id, None, status=ExecutionStatus.ERROR, error_message="error")
 
         results = manager.filter(status=ExecutionStatus.SUCCESS)
         assert len(results) == 3
@@ -590,7 +588,7 @@ class TestToolHistoryManagerQuerying:
     def test_filter_by_time_range(self):
         """Test filter() by time range."""
         manager = ToolHistoryManager()
-        start_time = time.time()
+        time.time()
 
         exec_id1 = manager.start("tool", {})
         manager.complete(exec_id1, "result")
@@ -609,17 +607,15 @@ class TestToolHistoryManagerQuerying:
     def test_filter_multiple_criteria(self):
         """Test filter() with multiple criteria."""
         manager = ToolHistoryManager()
-        for i in range(5):
+        for _i in range(5):
             exec_id = manager.start("file_read", {})
             manager.complete(exec_id, "result", status=ExecutionStatus.SUCCESS)
-        for i in range(3):
+        for _i in range(3):
             exec_id = manager.start("file_write", {})
             manager.complete(exec_id, "result", status=ExecutionStatus.SUCCESS)
-        for i in range(2):
+        for _i in range(2):
             exec_id = manager.start("file_read", {})
-            manager.complete(
-                exec_id, None, status=ExecutionStatus.ERROR, error_message="error"
-            )
+            manager.complete(exec_id, None, status=ExecutionStatus.ERROR, error_message="error")
 
         results = manager.filter(tool="file_read", status=ExecutionStatus.SUCCESS)
         assert len(results) == 5
@@ -683,10 +679,10 @@ class TestToolHistoryManagerStatistics:
     def test_get_stats_multiple_tools(self):
         """Test get_stats() with multiple tools."""
         manager = ToolHistoryManager()
-        for i in range(3):
+        for _i in range(3):
             exec_id = manager.start("file_read", {})
             manager.complete(exec_id, "result")
-        for i in range(2):
+        for _i in range(2):
             exec_id = manager.start("file_write", {})
             manager.complete(exec_id, "result")
 
@@ -698,14 +694,12 @@ class TestToolHistoryManagerStatistics:
     def test_get_stats_multiple_statuses(self):
         """Test get_stats() with multiple statuses."""
         manager = ToolHistoryManager()
-        for i in range(3):
+        for _i in range(3):
             exec_id = manager.start("tool", {})
             manager.complete(exec_id, "result", status=ExecutionStatus.SUCCESS)
-        for i in range(2):
+        for _i in range(2):
             exec_id = manager.start("tool", {})
-            manager.complete(
-                exec_id, None, status=ExecutionStatus.ERROR, error_message="error"
-            )
+            manager.complete(exec_id, None, status=ExecutionStatus.ERROR, error_message="error")
 
         stats = manager.get_stats()
         assert stats["by_status"]["success"] == 3
@@ -714,7 +708,7 @@ class TestToolHistoryManagerStatistics:
     def test_get_stats_average_duration(self):
         """Test get_stats() calculates average duration."""
         manager = ToolHistoryManager()
-        for i in range(3):
+        for _i in range(3):
             exec_id = manager.start("tool", {})
             time.sleep(0.05)
             manager.complete(exec_id, "result")
@@ -998,17 +992,7 @@ class TestToolHistoryManagerEdgeCases:
     def test_deeply_nested_arguments(self):
         """Test with deeply nested arguments."""
         manager = ToolHistoryManager()
-        nested_args = {
-            "level1": {
-                "level2": {
-                    "level3": {
-                        "level4": {
-                            "value": "deep"
-                        }
-                    }
-                }
-            }
-        }
+        nested_args = {"level1": {"level2": {"level3": {"level4": {"value": "deep"}}}}}
         exec_id = manager.start("tool", nested_args)
         manager.complete(exec_id, "result")
         entry = manager._entries[0]
@@ -1077,6 +1061,7 @@ class TestGlobalToolHistory:
         """Test get_tool_history() creates instance if needed."""
         # Reset global
         import src.core.tool_history as tool_history_module
+
         tool_history_module._tool_history = None
 
         history = get_tool_history()
@@ -1132,7 +1117,7 @@ class TestToolHistoryIntegration:
         manager.complete(parent_id, "parent_result")
 
         # Verify structure
-        parent = manager.get_by_id(parent_id)
+        manager.get_by_id(parent_id)
         children = [e for e in manager._entries if e.parent_id == parent_id]
         assert len(children) == 2
         assert all(c.parent_id == parent_id for c in children)

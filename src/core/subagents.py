@@ -21,12 +21,15 @@ import json
 import logging
 import time
 import uuid
+from collections import defaultdict, deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from src.core.config import get_required_config_value
+from src.core.paths import mailboxes_dir
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,17 @@ class AgentMessage:
             "timestamp": self.timestamp,
             "metadata": self.metadata,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AgentMessage":
+        return cls(
+            sender_id=data["sender_id"],
+            recipient_id=data.get("recipient_id"),
+            message_type=data["message_type"],
+            content=data["content"],
+            timestamp=data.get("timestamp", time.time()),
+            metadata=data.get("metadata", {}),
+        )
 
 
 @dataclass
@@ -181,24 +195,40 @@ class SubagentResult:
 
 
 class AgentMessageQueue:
-    """Thread-safe message queue for inter-agent communication."""
+    """Recipient-aware queue with durable mailbox append logs."""
 
-    def __init__(self):
-        """Initialize message queue."""
-        self._queue: asyncio.Queue[AgentMessage] = asyncio.Queue()
+    def __init__(self, storage_dir: Path | None = None):
+        """Initialize queues and mailbox storage."""
+        self._global_queue: asyncio.Queue[AgentMessage] = asyncio.Queue()
+        self._recipient_queues: dict[str, asyncio.Queue[AgentMessage]] = defaultdict(asyncio.Queue)
         self._subscribers: dict[str, list[Callable[[AgentMessage], None]]] = {}
+        self._storage_dir = storage_dir or mailboxes_dir()
+        self._storage_dir.mkdir(parents=True, exist_ok=True)
 
     async def send(self, message: AgentMessage) -> None:
         """Send a message to the queue."""
-        await self._queue.put(message)
+        await self._global_queue.put(message)
+        if message.recipient_id:
+            await self._recipient_queues[message.recipient_id].put(message)
+            self._append_to_mailbox(message.recipient_id, message)
+        else:
+            self._append_to_mailbox("broadcast", message)
         await self._notify_subscribers(message)
 
-    async def receive(self, timeout: float | None = None) -> AgentMessage | None:
-        """Receive a message from the queue."""
+    async def receive(
+        self,
+        agent_id: str | float | None = None,
+        timeout: float | None = None,
+    ) -> AgentMessage | None:
+        """Receive the next message globally or for a specific recipient."""
+        if isinstance(agent_id, (int, float)) and timeout is None:
+            timeout = float(agent_id)
+            agent_id = None
+        queue = self._recipient_queues[agent_id] if isinstance(agent_id, str) else self._global_queue
         try:
             if timeout:
-                return await asyncio.wait_for(self._queue.get(), timeout=timeout)
-            return await self._queue.get()
+                return await asyncio.wait_for(queue.get(), timeout=timeout)
+            return await queue.get()
         except asyncio.TimeoutError:
             return None
 
@@ -216,6 +246,38 @@ class AgentMessageQueue:
                     callback(message)
                 except Exception as e:
                     logger.error(f"Error in message subscriber: {e}")
+
+    def get_mailbox_path(self, agent_id: str) -> Path:
+        """Return the append-only mailbox path for an agent."""
+        return self._storage_dir / f"{agent_id}.jsonl"
+
+    def get_mailbox_messages(self, agent_id: str, limit: int = 100) -> list[AgentMessage]:
+        """Read recent durable messages for an agent without loading all history."""
+        if limit <= 0:
+            return []
+        path = self.get_mailbox_path(agent_id)
+        if not path.exists():
+            return []
+        recent = deque(maxlen=limit)
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                recent.append(line)
+        messages: list[AgentMessage] = []
+        for line in recent:
+            try:
+                payload = json.loads(line)
+                messages.append(AgentMessage.from_dict(payload))
+            except Exception as exc:
+                logger.warning(f"Skipping invalid mailbox entry in {path}: {exc}")
+        return messages
+
+    def _append_to_mailbox(self, mailbox_id: str, message: AgentMessage) -> None:
+        path = self.get_mailbox_path(mailbox_id)
+        try:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(message.to_dict(), ensure_ascii=False) + "\n")
+        except Exception as exc:
+            logger.error(f"Failed to append mailbox message for {mailbox_id}: {exc}")
 
 
 class AgentStateManager:
@@ -762,13 +824,17 @@ class SubagentManager:
         self, agent_id: str, timeout: float | None = None
     ) -> AgentMessage | None:
         """Receive a message for an agent."""
-        return await self._message_queue.receive(timeout)
+        return await self._message_queue.receive(agent_id=agent_id, timeout=timeout)
 
     def subscribe_to_messages(
         self, agent_id: str, callback: Callable[[AgentMessage], None]
     ) -> None:
         """Subscribe to messages for an agent."""
         self._message_queue.subscribe(agent_id, callback)
+
+    def get_mailbox_messages(self, agent_id: str, limit: int = 100) -> list[AgentMessage]:
+        """Read recent durable mailbox messages for an agent."""
+        return self._message_queue.get_mailbox_messages(agent_id, limit=limit)
 
     async def spawn(
         self,

@@ -1,7 +1,10 @@
 """Comprehensive tests for checkpoint.py"""
-import pytest
+
 from pathlib import Path
-from src.core.checkpoint import FileSnapshot, Checkpoint, CheckpointConfig, CheckpointManager
+
+import pytest
+
+from src.core.checkpoint import Checkpoint, CheckpointConfig, CheckpointManager, FileSnapshot
 
 
 class TestFileSnapshot:
@@ -10,11 +13,7 @@ class TestFileSnapshot:
     def test_creation_existing_file(self):
         """Test creating snapshot for existing file."""
         snapshot = FileSnapshot(
-            path="/test/file.py",
-            content="print('hello')",
-            exists=True,
-            size=14,
-            mtime=1234567890.0
+            path="/test/file.py", content="print('hello')", exists=True, size=14, mtime=1234567890.0
         )
         assert snapshot.path == "/test/file.py"
         assert snapshot.content == "print('hello')"
@@ -25,11 +24,7 @@ class TestFileSnapshot:
     def test_creation_nonexistent_file(self):
         """Test creating snapshot for non-existent file."""
         snapshot = FileSnapshot(
-            path="/test/missing.py",
-            content=None,
-            exists=False,
-            size=0,
-            mtime=None
+            path="/test/missing.py", content=None, exists=False, size=0, mtime=None
         )
         assert snapshot.path == "/test/missing.py"
         assert snapshot.content is None
@@ -40,11 +35,7 @@ class TestFileSnapshot:
     def test_to_dict(self):
         """Test converting snapshot to dictionary."""
         snapshot = FileSnapshot(
-            path="/test/file.py",
-            content="content",
-            exists=True,
-            size=7,
-            mtime=1234567890.0
+            path="/test/file.py", content="content", exists=True, size=7, mtime=1234567890.0
         )
         data = snapshot.to_dict()
         assert data["path"] == "/test/file.py"
@@ -60,7 +51,7 @@ class TestFileSnapshot:
             "content": "restored content",
             "exists": True,
             "size": 16,
-            "mtime": 1234567890.0
+            "mtime": 1234567890.0,
         }
         snapshot = FileSnapshot.from_dict(data)
         assert snapshot.path == "/test/restored.py"
@@ -84,7 +75,7 @@ class TestFileSnapshot:
             content="test content",
             exists=True,
             size=12,
-            mtime=1234567890.0
+            mtime=1234567890.0,
         )
         data = original.to_dict()
         restored = FileSnapshot.from_dict(data)
@@ -100,11 +91,7 @@ class TestCheckpoint:
 
     def test_creation_basic(self):
         """Test creating a basic checkpoint."""
-        checkpoint = Checkpoint(
-            id="cp_123",
-            created_at=1234567890.0,
-            prompt="Test prompt"
-        )
+        checkpoint = Checkpoint(id="cp_123", created_at=1234567890.0, prompt="Test prompt")
         assert checkpoint.id == "cp_123"
         assert checkpoint.created_at == 1234567890.0
         assert checkpoint.prompt == "Test prompt"
@@ -115,18 +102,10 @@ class TestCheckpoint:
     def test_creation_with_files(self):
         """Test creating checkpoint with file snapshots."""
         snapshot1 = FileSnapshot(
-            path="/test/file1.py",
-            content="content1",
-            exists=True,
-            size=8,
-            mtime=None
+            path="/test/file1.py", content="content1", exists=True, size=8, mtime=None
         )
         snapshot2 = FileSnapshot(
-            path="/test/file2.py",
-            content="content2",
-            exists=True,
-            size=8,
-            mtime=None
+            path="/test/file2.py", content="content2", exists=True, size=8, mtime=None
         )
         checkpoint = Checkpoint(
             id="cp_456",
@@ -134,7 +113,7 @@ class TestCheckpoint:
             prompt="Multi-file edit",
             files=[snapshot1, snapshot2],
             message_count=5,
-            description="Edited two files"
+            description="Edited two files",
         )
         assert len(checkpoint.files) == 2
         assert checkpoint.message_count == 5
@@ -143,18 +122,10 @@ class TestCheckpoint:
     def test_to_dict(self):
         """Test converting checkpoint to dictionary."""
         snapshot = FileSnapshot(
-            path="/test/file.py",
-            content="content",
-            exists=True,
-            size=7,
-            mtime=None
+            path="/test/file.py", content="content", exists=True, size=7, mtime=None
         )
         checkpoint = Checkpoint(
-            id="cp_789",
-            created_at=1234567890.0,
-            prompt="Test",
-            files=[snapshot],
-            message_count=3
+            id="cp_789", created_at=1234567890.0, prompt="Test", files=[snapshot], message_count=3
         )
         data = checkpoint.to_dict()
         assert data["id"] == "cp_789"
@@ -175,11 +146,11 @@ class TestCheckpoint:
                     "content": "content",
                     "exists": True,
                     "size": 7,
-                    "mtime": None
+                    "mtime": None,
                 }
             ],
             "message_count": 10,
-            "description": "Restored checkpoint"
+            "description": "Restored checkpoint",
         }
         checkpoint = Checkpoint.from_dict(data)
         assert checkpoint.id == "cp_from_dict"
@@ -190,10 +161,7 @@ class TestCheckpoint:
 
     def test_from_dict_with_defaults(self):
         """Test from_dict with missing optional fields."""
-        data = {
-            "id": "cp_minimal",
-            "created_at": 1234567890.0
-        }
+        data = {"id": "cp_minimal", "created_at": 1234567890.0}
         checkpoint = Checkpoint.from_dict(data)
         assert checkpoint.id == "cp_minimal"
         assert checkpoint.prompt == ""  # Default
@@ -202,23 +170,14 @@ class TestCheckpoint:
 
     def test_from_dict_empty_files(self):
         """Test from_dict with empty files list."""
-        data = {
-            "id": "cp_no_files",
-            "created_at": 1234567890.0,
-            "prompt": "No files",
-            "files": []
-        }
+        data = {"id": "cp_no_files", "created_at": 1234567890.0, "prompt": "No files", "files": []}
         checkpoint = Checkpoint.from_dict(data)
         assert checkpoint.files == []
 
     def test_roundtrip_to_dict_from_dict(self):
         """Test that to_dict and from_dict are inverses."""
         snapshot = FileSnapshot(
-            path="/test/roundtrip.py",
-            content="test",
-            exists=True,
-            size=4,
-            mtime=1234567890.0
+            path="/test/roundtrip.py", content="test", exists=True, size=4, mtime=1234567890.0
         )
         original = Checkpoint(
             id="cp_roundtrip",
@@ -226,7 +185,7 @@ class TestCheckpoint:
             prompt="Roundtrip test",
             files=[snapshot],
             message_count=7,
-            description="Test description"
+            description="Test description",
         )
         data = original.to_dict()
         restored = Checkpoint.from_dict(data)
@@ -257,7 +216,7 @@ class TestCheckpointConfig:
             save_directory="/custom/path",
             max_file_size=2048 * 1024,  # 2MB
             retention_days=60,
-            compress=False
+            compress=False,
         )
         assert config.enabled is False
         assert config.save_directory == "/custom/path"
@@ -267,10 +226,7 @@ class TestCheckpointConfig:
 
     def test_partial_custom_values(self):
         """Test creating config with some custom values."""
-        config = CheckpointConfig(
-            retention_days=90,
-            compress=False
-        )
+        config = CheckpointConfig(retention_days=90, compress=False)
         assert config.enabled is True  # Default
         assert config.retention_days == 90  # Custom
         assert config.compress is False  # Custom
@@ -294,7 +250,7 @@ class TestCheckpointManager:
     def test_initialization_creates_directory(self, tmp_path):
         """Test that initialization creates checkpoint directory."""
         config = CheckpointConfig(save_directory=str(tmp_path))
-        manager = CheckpointManager(project="test_project", config=config)
+        CheckpointManager(project="test_project", config=config)
 
         checkpoint_dir = Path(tmp_path) / "test_project"
         assert checkpoint_dir.exists()
@@ -302,10 +258,7 @@ class TestCheckpointManager:
 
     def test_initialization_with_disabled_config(self, tmp_path):
         """Test initialization with disabled checkpoint config."""
-        config = CheckpointConfig(
-            enabled=False,
-            save_directory=str(tmp_path)
-        )
+        config = CheckpointConfig(enabled=False, save_directory=str(tmp_path))
         manager = CheckpointManager(project="disabled", config=config)
 
         assert manager.config.enabled is False
@@ -325,10 +278,7 @@ class TestCheckpointManager:
 
     def test_begin_checkpoint_disabled(self, tmp_path):
         """Test begin_checkpoint returns empty string when disabled."""
-        config = CheckpointConfig(
-            enabled=False,
-            save_directory=str(tmp_path)
-        )
+        config = CheckpointConfig(enabled=False, save_directory=str(tmp_path))
         manager = CheckpointManager(project="test", config=config)
 
         checkpoint_id = manager.begin_checkpoint("Test prompt")
@@ -394,10 +344,7 @@ class TestCheckpointManager:
 
     def test_snapshot_file_disabled(self, tmp_path):
         """Test snapshot_file returns False when checkpoints disabled."""
-        config = CheckpointConfig(
-            enabled=False,
-            save_directory=str(tmp_path)
-        )
+        config = CheckpointConfig(enabled=False, save_directory=str(tmp_path))
         manager = CheckpointManager(project="test", config=config)
 
         test_file = tmp_path / "test.py"
@@ -428,7 +375,7 @@ class TestCheckpointManager:
         """Test snapshot_file with file exceeding max size."""
         config = CheckpointConfig(
             save_directory=str(tmp_path),
-            max_file_size=100  # 100 bytes
+            max_file_size=100,  # 100 bytes
         )
         manager = CheckpointManager(project="test", config=config)
 
@@ -826,7 +773,7 @@ class TestCheckpointManager:
 
         config = CheckpointConfig(
             save_directory=str(tmp_path),
-            retention_days=1  # 1 day retention
+            retention_days=1,  # 1 day retention
         )
 
         manager = CheckpointManager(project="test", config=config)
@@ -848,10 +795,7 @@ class TestCheckpointManager:
 
     def test_checkpoint_with_compression(self, tmp_path):
         """Test checkpoint saving with compression enabled."""
-        config = CheckpointConfig(
-            save_directory=str(tmp_path),
-            compress=True
-        )
+        config = CheckpointConfig(save_directory=str(tmp_path), compress=True)
         manager = CheckpointManager(project="test", config=config)
 
         test_file = tmp_path / "test.py"
@@ -867,10 +811,7 @@ class TestCheckpointManager:
 
     def test_checkpoint_without_compression(self, tmp_path):
         """Test checkpoint saving without compression."""
-        config = CheckpointConfig(
-            save_directory=str(tmp_path),
-            compress=False
-        )
+        config = CheckpointConfig(save_directory=str(tmp_path), compress=False)
         manager = CheckpointManager(project="test", config=config)
 
         test_file = tmp_path / "test.py"

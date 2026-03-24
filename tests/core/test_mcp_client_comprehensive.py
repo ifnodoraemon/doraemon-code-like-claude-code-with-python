@@ -10,10 +10,10 @@ Tests cover:
 
 import asyncio
 import json
-import logging
 import subprocess
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch, call
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 
 from src.core.mcp_client import (
@@ -25,7 +25,6 @@ from src.core.mcp_client import (
     MCPTool,
     MCPTransport,
 )
-
 
 # ============================================================================
 # FIXTURES
@@ -145,6 +144,7 @@ class TestMCPConnectionManagement:
     async def test_disconnect_cancels_reader_task(self, mock_config):
         """Test disconnect cancels reader task."""
         conn = MCPConnection(mock_config)
+
         # Create a real async task that we can cancel
         async def dummy_task():
             await asyncio.sleep(10)
@@ -269,9 +269,7 @@ class TestToolDiscoveryAndInvocation:
         """Test call_tool returns text content."""
         conn = MCPConnection(mock_config)
         conn._request = AsyncMock(
-            return_value={
-                "content": [{"type": "text", "text": "file content"}]
-            }
+            return_value={"content": [{"type": "text", "text": "file content"}]}
         )
 
         result = await conn.call_tool("read_file", {"path": "/test"})
@@ -316,9 +314,7 @@ class TestToolDiscoveryAndInvocation:
         """Test call_tool returns non-text content."""
         conn = MCPConnection(mock_config)
         conn._request = AsyncMock(
-            return_value={
-                "content": [{"type": "image", "data": "base64..."}]
-            }
+            return_value={"content": [{"type": "image", "data": "base64..."}]}
         )
 
         result = await conn.call_tool("get_image", {})
@@ -365,9 +361,7 @@ class TestErrorHandling:
 
         # Should not raise, just continue
         with patch("asyncio.get_event_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(
-                return_value=b"invalid json\n"
-            )
+            mock_loop.return_value.run_in_executor = AsyncMock(return_value=b"invalid json\n")
             # This would normally run indefinitely, so we'll just test the logic
 
     @pytest.mark.asyncio
@@ -377,9 +371,7 @@ class TestErrorHandling:
         future = asyncio.Future()
         conn._pending_requests[1] = future
 
-        await conn._handle_message(
-            {"id": 1, "error": {"message": "Test error"}}
-        )
+        await conn._handle_message({"id": 1, "error": {"message": "Test error"}})
 
         with pytest.raises(Exception, match="Test error"):
             await future
@@ -408,18 +400,18 @@ class TestErrorHandling:
     async def test_list_tools_handles_exception(self, mock_config):
         """Test list_tools handles exceptions gracefully."""
         conn = MCPConnection(mock_config)
-        conn._request = AsyncMock(side_effect=Exception("Request failed"))
+        conn._request = AsyncMock(side_effect=RuntimeError("Request failed"))
 
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             await conn.list_tools()
 
     @pytest.mark.asyncio
     async def test_call_tool_handles_exception(self, mock_config):
         """Test call_tool handles exceptions gracefully."""
         conn = MCPConnection(mock_config)
-        conn._request = AsyncMock(side_effect=Exception("Request failed"))
+        conn._request = AsyncMock(side_effect=RuntimeError("Request failed"))
 
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             await conn.call_tool("test_tool", {})
 
     @pytest.mark.asyncio
@@ -555,7 +547,6 @@ class TestMultiServerManagement:
         assert summary["total_connected"] == 0
 
 
-
 # ============================================================================
 # 6. RESOURCE MANAGEMENT TESTS (6 tests)
 # ============================================================================
@@ -625,11 +616,7 @@ class TestResourceManagement:
     async def test_read_resource_returns_text(self, mock_config):
         """Test read_resource returns text content."""
         conn = MCPConnection(mock_config)
-        conn._request = AsyncMock(
-            return_value={
-                "contents": [{"text": "resource content"}]
-            }
-        )
+        conn._request = AsyncMock(return_value={"contents": [{"text": "resource content"}]})
 
         content = await conn.read_resource("file:///test.txt")
         assert content == "resource content"
@@ -885,7 +872,7 @@ class TestConfigLoading:
         config_file.write_text("invalid json {")
 
         with patch("src.core.mcp_client.logger") as mock_logger:
-            client = MCPClient(config_file)
+            MCPClient(config_file)
             mock_logger.error.assert_called()
 
 
@@ -1097,7 +1084,7 @@ class TestEdgeCasesAndBoundaryConditions:
         conn = MCPConnection(mock_config)
         conn._request = AsyncMock(return_value={"content": []})
 
-        result = await conn.call_tool("tool", {})
+        await conn.call_tool("tool", {})
         conn._request.assert_called_once_with(
             "tools/call",
             {"name": "tool", "arguments": {}},
@@ -1427,7 +1414,6 @@ class TestMCPConnectionRequestFormat:
         conn._process = mock_process
 
         # Mock _request to capture the message format
-        original_request = conn._request
         captured_messages = []
 
         async def mock_request_impl(method, params):

@@ -4,8 +4,9 @@ Additional unit tests for model_client.py to increase coverage.
 Tests streaming, tool definitions, and edge cases.
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.core.model_client import (
     GatewayModelClient,
@@ -21,7 +22,7 @@ class TestToolDefinition:
         tool = ToolDefinition(
             name="test_tool",
             description="A test tool",
-            parameters={"type": "object", "properties": {}}
+            parameters={"type": "object", "properties": {}},
         )
 
         openai_format = tool.to_openai_format()
@@ -33,9 +34,7 @@ class TestToolDefinition:
     def test_to_genai_format(self):
         """Test conversion to GenAI format."""
         tool = ToolDefinition(
-            name="test_tool",
-            description="A test tool",
-            parameters={"type": "object"}
+            name="test_tool", description="A test tool", parameters={"type": "object"}
         )
 
         with patch("google.genai.types.FunctionDeclaration") as mock_func:
@@ -48,11 +47,7 @@ class TestStreamChunk:
 
     def test_stream_chunk_creation(self):
         """Test creating a stream chunk."""
-        chunk = StreamChunk(
-            content="Hello",
-            thought="Thinking...",
-            finish_reason="stop"
-        )
+        chunk = StreamChunk(content="Hello", thought="Thinking...", finish_reason="stop")
 
         assert chunk.content == "Hello"
         assert chunk.thought == "Thinking..."
@@ -74,7 +69,7 @@ class TestGatewayClientStreaming:
 
         # For now, just test that the method exists and can be called
         # Full streaming test requires complex async mock setup
-        assert hasattr(client, 'chat_stream')
+        assert hasattr(client, "chat_stream")
         assert callable(client.chat_stream)
 
 
@@ -92,14 +87,18 @@ class TestClientConfigValidation:
 
         with pytest.raises(ValueError, match="Gateway URL must be set"):
             import asyncio
+
             asyncio.run(client.connect())
 
     def test_from_env_detects_gateway_mode(self):
         """Test that from_env detects gateway mode."""
-        with patch("src.core.config.load_config", return_value={
-            "model": "gpt-4o",
-            "gateway_url": "http://test.com",
-        }):
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gpt-4o",
+                "gateway_url": "http://test.com",
+            },
+        ):
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.GATEWAY
             assert config.gateway_url == "http://test.com"
@@ -122,7 +121,7 @@ class TestMessageSerialization:
             thought="Thinking",
             tool_calls=[{"id": "1", "name": "test"}],
             tool_call_id="call_123",
-            name="test_tool"
+            name="test_tool",
         )
 
         d = msg.to_dict()

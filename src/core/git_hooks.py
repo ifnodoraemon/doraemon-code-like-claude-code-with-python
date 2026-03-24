@@ -85,7 +85,7 @@ class GitHooksManager:
 
     # Default hook scripts
     DEFAULT_HOOKS = {
-        GitHookType.PRE_COMMIT: '''#!/bin/bash
+        GitHookType.PRE_COMMIT: """#!/bin/bash
 # Doraemon pre-commit hook
 
 # Run linting
@@ -104,8 +104,8 @@ fi
 # pytest tests/ -q || exit 1
 
 exit 0
-''',
-        GitHookType.POST_COMMIT: '''#!/bin/bash
+""",
+        GitHookType.POST_COMMIT: """#!/bin/bash
 # Doraemon post-commit hook
 
 # Notify completion (if notification available)
@@ -114,8 +114,8 @@ if command -v notify-send &> /dev/null; then
 fi
 
 exit 0
-''',
-        GitHookType.PRE_PUSH: '''#!/bin/bash
+""",
+        GitHookType.PRE_PUSH: """#!/bin/bash
 # Doraemon pre-push hook
 
 # Run full test suite before push
@@ -125,8 +125,8 @@ if command -v pytest &> /dev/null; then
 fi
 
 exit 0
-''',
-        GitHookType.COMMIT_MSG: r'''#!/bin/bash
+""",
+        GitHookType.COMMIT_MSG: r"""#!/bin/bash
 # Doraemon commit-msg hook
 
 # Check commit message format
@@ -146,7 +146,7 @@ fi
 # fi
 
 exit 0
-''',
+""",
     }
 
     def __init__(self, repo_path: Path | None = None):
@@ -405,9 +405,7 @@ exit 0
             "is_git_repo": self.is_git_repo(),
             "hooks_dir": str(self._hooks_dir),
             "installed": [h.value for h in installed],
-            "custom_hooks": {
-                k.value: len(v) for k, v in self._custom_hooks.items()
-            },
+            "custom_hooks": {k.value: len(v) for k, v in self._custom_hooks.items()},
         }
 
 

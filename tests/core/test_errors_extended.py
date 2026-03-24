@@ -1,11 +1,19 @@
 """Tests for errors.py extended functionality"""
+
 import pytest
-import asyncio
+
 from src.core.errors import (
-    AgentError, ErrorCategory, ErrorInfo,
-    ConfigurationError, TransientError, RateLimitError,
-    RetryConfig, RetryPolicy, retry
+    AgentError,
+    ConfigurationError,
+    ErrorCategory,
+    ErrorInfo,
+    RateLimitError,
+    RetryConfig,
+    RetryPolicy,
+    TransientError,
+    retry,
 )
+
 
 class TestErrorCategories:
     """Tests for error categories."""
@@ -24,10 +32,11 @@ class TestErrorCategories:
             category=ErrorCategory.TRANSIENT,
             message="Test error",
             original_exception=exc,
-            retry_after=5.0
+            retry_after=5.0,
         )
         assert info.category == ErrorCategory.TRANSIENT
         assert info.retry_after == 5.0
+
 
 class TestCustomExceptions:
     """Tests for custom exceptions."""
@@ -55,6 +64,7 @@ class TestCustomExceptions:
         assert exc.category == ErrorCategory.RATE_LIMIT
         assert exc.retry_after == 60.0
 
+
 class TestRetryPolicy:
     """Tests for RetryPolicy."""
 
@@ -80,6 +90,7 @@ class TestRetryPolicy:
         policy = RetryPolicy(RetryConfig(max_attempts=3))
 
         attempts = []
+
         def failing_func():
             attempts.append(1)
             if len(attempts) < 2:

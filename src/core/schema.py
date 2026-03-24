@@ -71,8 +71,7 @@ class AgentConfig(BaseModel):
         default_factory=list, description="Additional instruction files to load (supports globs)"
     )
     tool_timeouts: dict[str, float] = Field(
-        default_factory=dict,
-        description="Timeout overrides for specific tools in seconds"
+        default_factory=dict, description="Timeout overrides for specific tools in seconds"
     )
 
     model_config = ConfigDict(populate_by_name=True)  # Allow both snake_case and camelCase
@@ -149,7 +148,11 @@ def get_default_config() -> dict:
     return {
         "mcpServers": {
             "memory": {"command": "python3", "args": ["src/servers/memory.py"], "env": {}},
-            "filesystem": {"command": "python3", "args": ["src/servers/filesystem_unified.py"], "env": {}},
+            "filesystem": {
+                "command": "python3",
+                "args": ["src/servers/filesystem_unified.py"],
+                "env": {},
+            },
             "web": {"command": "python3", "args": ["src/servers/web.py"], "env": {}},
             "run": {"command": "python3", "args": ["src/servers/run_unified.py"], "env": {}},
             "task": {"command": "python3", "args": ["src/servers/task.py"], "env": {}},

@@ -254,7 +254,9 @@ class MCPConnection:
             if request_id in self._pending_requests:
                 future = self._pending_requests.pop(request_id)
                 if "error" in message:
-                    future.set_exception(Exception(message["error"].get("message", "Unknown error")))
+                    future.set_exception(
+                        Exception(message["error"].get("message", "Unknown error"))
+                    )
                 else:
                     future.set_result(message.get("result"))
 
@@ -600,11 +602,7 @@ class MCPClient:
 
     def get_connected_servers(self) -> list[str]:
         """Get list of connected server names."""
-        return [
-            name
-            for name, conn in self._connections.items()
-            if conn.is_connected
-        ]
+        return [name for name, conn in self._connections.items() if conn.is_connected]
 
     def get_summary(self) -> dict[str, Any]:
         """Get client summary."""

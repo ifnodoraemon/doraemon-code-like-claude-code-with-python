@@ -75,3 +75,5 @@ temp/
 docs/_build/
 site/
 eval_results/test_history.db
+# Frontend dependencies
+webui/node_modules/

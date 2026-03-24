@@ -1,6 +1,9 @@
 """Tests for tools.py extended functionality"""
+
 import pytest
+
 from src.host.tools import ToolRegistry, get_default_registry
+
 
 class TestToolRegistryExtended:
     """Extended tests for ToolRegistry."""
@@ -75,6 +78,7 @@ class TestToolRegistryExtended:
         assert registry.is_sensitive("dangerous_tool") is True
         # Check it's in sensitive tools list
         assert "dangerous_tool" in registry.get_sensitive_tools()
+
 
 class TestDefaultRegistry:
     """Tests for default registry."""

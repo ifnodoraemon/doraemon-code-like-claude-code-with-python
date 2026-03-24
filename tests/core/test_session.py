@@ -1,11 +1,13 @@
 """Comprehensive tests for session.py"""
-import pytest
-import time
+
 import json
 import tempfile
+import time
 from pathlib import Path
-from datetime import datetime
-from src.core.session import SessionMetadata, SessionData, SessionManager
+
+import pytest
+
+from src.core.session import SessionData, SessionManager, SessionMetadata
 
 
 class TestSessionMetadata:
@@ -33,7 +35,7 @@ class TestSessionMetadata:
             mode="plan",
             parent_id="parent_123",
             tags=["important", "test"],
-            description="Test session"
+            description="Test session",
         )
         assert metadata.name == "My Session"
         assert metadata.project == "myproject"
@@ -44,12 +46,7 @@ class TestSessionMetadata:
 
     def test_to_dict(self):
         """Test converting metadata to dictionary."""
-        metadata = SessionMetadata(
-            id="test_789",
-            name="Test",
-            project="proj",
-            message_count=5
-        )
+        metadata = SessionMetadata(id="test_789", name="Test", project="proj", message_count=5)
         data = metadata.to_dict()
         assert data["id"] == "test_789"
         assert data["name"] == "Test"
@@ -64,7 +61,7 @@ class TestSessionMetadata:
             "id": "from_dict_123",
             "name": "From Dict",
             "project": "test_project",
-            "message_count": 15
+            "message_count": 15,
         }
         metadata = SessionMetadata.from_dict(data)
         assert metadata.id == "from_dict_123"
@@ -94,7 +91,7 @@ class TestSessionMetadata:
             "mode": "plan",
             "parent_id": "parent_456",
             "tags": ["tag1", "tag2"],
-            "description": "Full description"
+            "description": "Full description",
         }
         metadata = SessionMetadata.from_dict(data)
         assert metadata.name == "Full Session"
@@ -140,18 +137,12 @@ class TestSessionData:
     def test_creation_with_data(self):
         """Test creating session data with messages and summaries."""
         metadata = SessionMetadata(id="test_456")
-        messages = [
-            {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi"}
-        ]
+        messages = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}]
         summaries = [{"content": "Summary", "message_count": 2}]
         checkpoints = ["checkpoint_1", "checkpoint_2"]
 
         session = SessionData(
-            metadata=metadata,
-            messages=messages,
-            summaries=summaries,
-            checkpoints=checkpoints
+            metadata=metadata, messages=messages, summaries=summaries, checkpoints=checkpoints
         )
         assert len(session.messages) == 2
         assert len(session.summaries) == 1
@@ -177,7 +168,7 @@ class TestSessionData:
             "metadata": {"id": "from_dict_123", "name": "Test"},
             "messages": [{"role": "user", "content": "Hello"}],
             "summaries": [],
-            "checkpoints": []
+            "checkpoints": [],
         }
         session = SessionData.from_dict(data)
         assert session.metadata.id == "from_dict_123"
@@ -192,16 +183,14 @@ class TestSessionData:
                 "id": "full_123",
                 "name": "Full Session",
                 "message_count": 5,
-                "tags": ["test"]
+                "tags": ["test"],
             },
             "messages": [
                 {"role": "user", "content": "Message 1"},
-                {"role": "assistant", "content": "Response 1"}
+                {"role": "assistant", "content": "Response 1"},
             ],
-            "summaries": [
-                {"content": "Summary 1", "message_count": 2}
-            ],
-            "checkpoints": ["cp_1", "cp_2", "cp_3"]
+            "summaries": [{"content": "Summary 1", "message_count": 2}],
+            "checkpoints": ["cp_1", "cp_2", "cp_3"],
         }
         session = SessionData.from_dict(data)
         assert session.metadata.name == "Full Session"
@@ -211,9 +200,7 @@ class TestSessionData:
 
     def test_from_dict_with_missing_fields(self):
         """Test from_dict with missing optional fields."""
-        data = {
-            "metadata": {"id": "minimal_123"}
-        }
+        data = {"metadata": {"id": "minimal_123"}}
         session = SessionData.from_dict(data)
         assert session.metadata.id == "minimal_123"
         assert session.messages == []
@@ -222,14 +209,10 @@ class TestSessionData:
 
     def test_roundtrip_to_dict_from_dict(self):
         """Test that to_dict and from_dict are inverses."""
-        metadata = SessionMetadata(
-            id="roundtrip_123",
-            name="Roundtrip Test",
-            message_count=10
-        )
+        metadata = SessionMetadata(id="roundtrip_123", name="Roundtrip Test", message_count=10)
         messages = [
             {"role": "user", "content": "Test message"},
-            {"role": "assistant", "content": "Test response"}
+            {"role": "assistant", "content": "Test response"},
         ]
         original = SessionData(metadata=metadata, messages=messages)
 
@@ -303,7 +286,7 @@ class TestSessionManager:
             name="Test Session",
             mode="plan",
             description="Test description",
-            tags=["tag1", "tag2"]
+            tags=["tag1", "tag2"],
         )
         assert session.metadata.project == "testproj"
         assert session.metadata.name == "Test Session"
@@ -363,7 +346,7 @@ class TestSessionManager:
 
     def test_resume_session_by_name(self, session_manager):
         """Test resuming a session by name."""
-        created = session_manager.create_session(name="Named Session")
+        session_manager.create_session(name="Named Session")
 
         resumed = session_manager.resume_session("Named Session")
         assert resumed is not None
@@ -379,7 +362,7 @@ class TestSessionManager:
         original = session_manager.create_session(name="Original")
         original.messages = [
             {"role": "user", "content": "Message 1"},
-            {"role": "assistant", "content": "Response 1"}
+            {"role": "assistant", "content": "Response 1"},
         ]
         session_manager.save_session(original)
 
@@ -402,7 +385,7 @@ class TestSessionManager:
             {"role": "user", "content": "Message 1"},
             {"role": "assistant", "content": "Response 1"},
             {"role": "user", "content": "Message 2"},
-            {"role": "assistant", "content": "Response 2"}
+            {"role": "assistant", "content": "Response 2"},
         ]
         session_manager.save_session(original)
 
@@ -418,9 +401,7 @@ class TestSessionManager:
     def test_fork_preserves_metadata(self, session_manager):
         """Test that forking preserves relevant metadata."""
         original = session_manager.create_session(
-            project="testproj",
-            mode="plan",
-            tags=["important", "test"]
+            project="testproj", mode="plan", tags=["important", "test"]
         )
         forked = session_manager.fork_session(original.metadata.id)
         assert forked.metadata.project == original.metadata.project
@@ -434,8 +415,8 @@ class TestSessionManager:
 
     def test_list_sessions_basic(self, session_manager):
         """Test listing sessions."""
-        session1 = session_manager.create_session(name="Session 1")
-        session2 = session_manager.create_session(name="Session 2")
+        session_manager.create_session(name="Session 1")
+        session_manager.create_session(name="Session 2")
 
         sessions = session_manager.list_sessions()
         assert len(sessions) == 2
@@ -494,14 +475,8 @@ class TestSessionManager:
 
     def test_search_sessions_by_description(self, session_manager):
         """Test searching sessions by description."""
-        session_manager.create_session(
-            name="Session 1",
-            description="This is about authentication"
-        )
-        session_manager.create_session(
-            name="Session 2",
-            description="This is about database"
-        )
+        session_manager.create_session(name="Session 1", description="This is about authentication")
+        session_manager.create_session(name="Session 2", description="This is about database")
 
         results = session_manager.search_sessions("authentication")
         assert len(results) == 1
@@ -509,14 +484,8 @@ class TestSessionManager:
 
     def test_search_sessions_by_tags(self, session_manager):
         """Test searching sessions by tags."""
-        session_manager.create_session(
-            name="Session 1",
-            tags=["bug-fix", "urgent"]
-        )
-        session_manager.create_session(
-            name="Session 2",
-            tags=["feature", "enhancement"]
-        )
+        session_manager.create_session(name="Session 1", tags=["bug-fix", "urgent"])
+        session_manager.create_session(name="Session 2", tags=["feature", "enhancement"])
 
         results = session_manager.search_sessions("bug-fix")
         assert len(results) == 1
@@ -531,14 +500,8 @@ class TestSessionManager:
 
     def test_search_sessions_with_project_filter(self, session_manager):
         """Test searching sessions with project filter."""
-        session_manager.create_session(
-            project="proj1",
-            name="Python Project"
-        )
-        session_manager.create_session(
-            project="proj2",
-            name="Python Testing"
-        )
+        session_manager.create_session(project="proj1", name="Python Project")
+        session_manager.create_session(project="proj2", name="Python Testing")
 
         results = session_manager.search_sessions("Python", project="proj1")
         assert len(results) == 1
@@ -553,14 +516,8 @@ class TestSessionManager:
 
     def test_search_sessions_relevance_sorting(self, session_manager):
         """Test that search results are sorted by relevance."""
-        session_manager.create_session(
-            name="Python",
-            description="About something else"
-        )
-        session_manager.create_session(
-            name="JavaScript",
-            description="Python testing framework"
-        )
+        session_manager.create_session(name="Python", description="About something else")
+        session_manager.create_session(name="JavaScript", description="Python testing framework")
 
         results = session_manager.search_sessions("Python")
         # Name match should come first
@@ -626,7 +583,7 @@ class TestSessionManager:
         session = session_manager.create_session(name="Export Test")
         session.messages = [
             {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi there"}
+            {"role": "assistant", "content": "Hi there"},
         ]
         session_manager.save_session(session)
 
@@ -641,7 +598,7 @@ class TestSessionManager:
         session = session_manager.create_session(name="Export Test")
         session.messages = [
             {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi"}
+            {"role": "assistant", "content": "Hi"},
         ]
         session_manager.save_session(session)
 
@@ -656,11 +613,7 @@ class TestSessionManager:
         session_manager.save_session(session)
 
         export_path = temp_session_dir / "export.json"
-        session_manager.export_session(
-            session.metadata.id,
-            format="json",
-            path=export_path
-        )
+        session_manager.export_session(session.metadata.id, format="json", path=export_path)
 
         assert export_path.exists()
         content = export_path.read_text()
@@ -700,8 +653,8 @@ class TestSessionManager:
 
     def test_index_persistence(self, session_manager, temp_session_dir):
         """Test that index is persisted and reloaded."""
-        session1 = session_manager.create_session(name="Session 1")
-        session2 = session_manager.create_session(name="Session 2")
+        session_manager.create_session(name="Session 1")
+        session_manager.create_session(name="Session 2")
 
         # Create new manager instance
         new_manager = SessionManager(base_dir=temp_session_dir)
@@ -726,9 +679,7 @@ class TestSessionManager:
     def test_export_markdown_with_metadata(self, session_manager):
         """Test markdown export includes all metadata."""
         session = session_manager.create_session(
-            name="Full Test",
-            description="Test description",
-            tags=["tag1", "tag2"]
+            name="Full Test", description="Test description", tags=["tag1", "tag2"]
         )
         session.metadata.total_tokens = 1000
         session.messages = [{"role": "user", "content": "Test"}]
@@ -748,7 +699,7 @@ class TestSessionManager:
             {"role": "user", "content": "Question 1"},
             {"role": "assistant", "content": "Answer 1"},
             {"role": "user", "content": "Question 2"},
-            {"role": "assistant", "content": "Answer 2"}
+            {"role": "assistant", "content": "Answer 2"},
         ]
         session_manager.save_session(session)
 
@@ -782,7 +733,7 @@ class TestSessionManager:
         session = session_manager.create_session(name="Summary Test")
         session.summaries = [
             {"content": "Summary 1", "message_count": 5},
-            {"content": "Summary 2", "message_count": 3}
+            {"content": "Summary 2", "message_count": 3},
         ]
         session_manager.save_session(session)
 
@@ -807,7 +758,7 @@ class TestSessionManager:
             project="testproj",
             mode="plan",
             description="Test",
-            tags=["tag1"]
+            tags=["tag1"],
         )
         session.messages = [{"role": "user", "content": "Test"}]
         session.summaries = [{"content": "Summary"}]
@@ -853,12 +804,21 @@ class TestSessionManager:
             mode="plan",
             parent_id="parent",
             tags=["tag1"],
-            description="desc"
+            description="desc",
         )
         data = metadata.to_dict()
         required_fields = [
-            "id", "name", "project", "created_at", "updated_at",
-            "message_count", "total_tokens", "mode", "parent_id", "tags", "description"
+            "id",
+            "name",
+            "project",
+            "created_at",
+            "updated_at",
+            "message_count",
+            "total_tokens",
+            "mode",
+            "parent_id",
+            "tags",
+            "description",
         ]
         for field in required_fields:
             assert field in data
@@ -907,7 +867,7 @@ class TestSessionManager:
     def test_resume_session_prefers_id_over_name(self, session_manager):
         """Test that resume_session tries ID first before name."""
         session1 = session_manager.create_session(name="Session A")
-        session2 = session_manager.create_session(name="Session B")
+        session_manager.create_session(name="Session B")
 
         # Resume by ID should work
         resumed = session_manager.resume_session(session1.metadata.id)
@@ -945,10 +905,7 @@ class TestSessionManager:
 
     def test_fork_session_copies_tags_not_references(self, session_manager):
         """Test that forking creates a copy of tags, not references."""
-        original = session_manager.create_session(
-            name="Original",
-            tags=["tag1", "tag2"]
-        )
+        original = session_manager.create_session(name="Original", tags=["tag1", "tag2"])
         forked = session_manager.fork_session(original.metadata.id)
 
         # Modify forked tags
@@ -963,7 +920,7 @@ class TestSessionManager:
         original = session_manager.create_session(name="Original")
         original.messages = [
             {"role": "user", "content": "Message 1"},
-            {"role": "assistant", "content": "Response 1"}
+            {"role": "assistant", "content": "Response 1"},
         ]
         session_manager.save_session(original)
 
@@ -1020,14 +977,8 @@ class TestSessionManager:
 
     def test_search_sessions_tag_partial_match(self, session_manager):
         """Test search with partial tag match."""
-        session_manager.create_session(
-            name="Session 1",
-            tags=["bug-fix-urgent"]
-        )
-        session_manager.create_session(
-            name="Session 2",
-            tags=["feature-request"]
-        )
+        session_manager.create_session(name="Session 1", tags=["bug-fix-urgent"])
+        session_manager.create_session(name="Session 2", tags=["feature-request"])
 
         results = session_manager.search_sessions("bug")
         assert len(results) == 1
@@ -1143,11 +1094,7 @@ class TestSessionManager:
         session_manager.save_session(session)
 
         export_path = temp_session_dir / "export.json"
-        session_manager.export_session(
-            session.metadata.id,
-            format="json",
-            path=export_path
-        )
+        session_manager.export_session(session.metadata.id, format="json", path=export_path)
 
         # File should be created
         assert export_path.exists()
@@ -1187,7 +1134,7 @@ class TestSessionManager:
         new_dir = temp_session_dir / "new_sessions"
         assert not new_dir.exists()
 
-        manager = SessionManager(base_dir=new_dir)
+        SessionManager(base_dir=new_dir)
         assert new_dir.exists()
 
     def test_session_manager_with_string_path(self, temp_session_dir):
@@ -1233,10 +1180,7 @@ class TestSessionManager:
 
     def test_export_markdown_includes_project(self, session_manager):
         """Test that markdown export includes project name."""
-        session = session_manager.create_session(
-            name="Test",
-            project="myproject"
-        )
+        session = session_manager.create_session(name="Test", project="myproject")
         session_manager.save_session(session)
 
         exported = session_manager.export_session(session.metadata.id, format="markdown")
@@ -1271,10 +1215,7 @@ class TestSessionManager:
 
     def test_export_text_includes_project(self, session_manager):
         """Test that text export includes project."""
-        session = session_manager.create_session(
-            name="Test",
-            project="myproject"
-        )
+        session = session_manager.create_session(name="Test", project="myproject")
         session_manager.save_session(session)
 
         exported = session_manager.export_session(session.metadata.id, format="text")
@@ -1299,11 +1240,7 @@ class TestSessionManager:
     def test_session_data_from_dict_backward_compatibility(self):
         """Test SessionData.from_dict handles old format (metadata as root)."""
         # Old format where metadata fields were at root level
-        data = {
-            "id": "test_123",
-            "name": "Test",
-            "project": "proj"
-        }
+        data = {"id": "test_123", "name": "Test", "project": "proj"}
         session = SessionData.from_dict(data)
         assert session.metadata.id == "test_123"
 
@@ -1321,7 +1258,7 @@ class TestSessionManager:
     def test_session_manager_index_consistency(self, session_manager):
         """Test that index remains consistent after operations."""
         session1 = session_manager.create_session(name="Session 1")
-        session2 = session_manager.create_session(name="Session 2")
+        session_manager.create_session(name="Session 2")
 
         assert len(session_manager._index) == 2
 

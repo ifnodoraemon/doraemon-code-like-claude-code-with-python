@@ -163,9 +163,7 @@ class OllamaAdapter(BaseAdapter):
         data = response.json()
         return self._convert_response(data, request.model)
 
-    async def chat_stream(
-        self, request: ChatRequest
-    ) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[StreamChunk]:
         """Stream chat response from Ollama."""
         messages = [self._convert_message(m) for m in request.messages]
 

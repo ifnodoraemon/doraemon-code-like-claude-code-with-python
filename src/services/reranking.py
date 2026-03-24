@@ -58,7 +58,9 @@ class NoteReranker:
                 e,
             )
 
-    def rerank(self, query: str, candidates: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    def rerank(
+        self, query: str, candidates: list[dict[str, Any]], limit: int
+    ) -> list[dict[str, Any]]:
         """Return candidates in reranked order."""
         if len(candidates) <= 1:
             return candidates[:limit]

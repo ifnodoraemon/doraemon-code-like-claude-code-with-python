@@ -91,6 +91,7 @@ class BrowserManager:
         # Check if Playwright is installed
         try:
             import playwright  # noqa: F401
+
             self._available = True
         except ImportError:
             logger.warning(
@@ -304,9 +305,7 @@ class BrowserManager:
             logger.error(f"Select failed on {selector}: {e}")
             return False
 
-    async def wait_for_selector(
-        self, selector: str, timeout: int | None = None
-    ) -> bool:
+    async def wait_for_selector(self, selector: str, timeout: int | None = None) -> bool:
         """
         Wait for an element to appear.
 

@@ -46,9 +46,7 @@ class TaskPlanner:
         ).hexdigest()[:6]
         return f"{prefix}_{hash_part}"
 
-    def generate_plan(
-        self, goal: str, context: dict[str, Any] | None = None
-    ) -> ExecutionPlan:
+    def generate_plan(self, goal: str, context: dict[str, Any] | None = None) -> ExecutionPlan:
         """
         Generate an execution plan for a goal.
 
@@ -112,9 +110,7 @@ class TaskPlanner:
 
         return tasks
 
-    def update_task_status(
-        self, plan: ExecutionPlan, task_id: str, status: TaskStatus
-    ) -> bool:
+    def update_task_status(self, plan: ExecutionPlan, task_id: str, status: TaskStatus) -> bool:
         """
         Update a task's status.
 
