@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from mcp.server.fastmcp import FastMCP
 
 from src.core.logger import configure_root_logger
-from src.core.security import validate_path
+from src.core.security.security import validate_path
 
 # Setup logging
 configure_root_logger()
@@ -511,14 +511,14 @@ async def lsp_references(path: str, symbol: str) -> str:
         return f"Error: {e}"
 
     try:
-        from src.servers.filesystem_unified import grep_search
+        from src.servers.filesystem import grep_search
 
         result = grep_search(pattern=symbol, include="*.py", path=valid_path)
         if not result or result.startswith("No matches"):
             return f"No references found for '{symbol}'"
         return f"References to '{symbol}':\n\n{result}"
     except ImportError:
-        return "Error: filesystem_unified module not available"
+        return "Error: filesystem module not available"
     except Exception as e:
         return f"Error searching: {e}"
 
@@ -596,14 +596,14 @@ async def lsp_definition(path: str, symbol: str) -> str:
 
     for pattern in [f"class {symbol}", f"def {symbol}", f"{symbol} = ", f"{symbol}:"]:
         try:
-            from src.servers.filesystem_unified import grep_search
+            from src.servers.filesystem import grep_search
 
             result = grep_search(pattern=pattern, include="*.py", path=valid_path)
             if result and not result.startswith("No matches"):
                 first_line = result.strip().split("\n")[0]
                 return f"Definition of '{symbol}':\n\n{first_line}"
         except ImportError:
-            return "Error: filesystem_unified module not available"
+            return "Error: filesystem module not available"
         except Exception:
             continue
 

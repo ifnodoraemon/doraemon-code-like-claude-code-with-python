@@ -9,12 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.core.errors import ConfigurationError, TransientError
-from src.core.model_client import (
+from src.core.llm.model_client import (
     DirectModelClient,
     GatewayModelClient,
     ModelClient,
 )
-from src.core.model_utils import ChatResponse, ClientConfig, ClientMode, Message, Provider
+from src.core.llm.model_utils import ChatResponse, ClientConfig, ClientMode, Message, Provider
 
 
 class TestGatewayModelClient:
@@ -482,7 +482,7 @@ class TestGatewayModelClientErrorHandling:
         }
         mock_client.post.return_value = response_obj
 
-        from src.core.model_utils import ToolDefinition
+        from src.core.llm.model_utils import ToolDefinition
 
         tools = [
             ToolDefinition(
@@ -951,7 +951,7 @@ class TestToolDefinition:
 
     def test_tool_to_openai_format(self):
         """Test converting tool to OpenAI format."""
-        from src.core.model_utils import ToolDefinition
+        from src.core.llm.model_utils import ToolDefinition
 
         tool = ToolDefinition(
             name="test_tool",
@@ -965,7 +965,7 @@ class TestToolDefinition:
 
     def test_tool_to_genai_format(self):
         """Test converting tool to Google GenAI format."""
-        from src.core.model_utils import ToolDefinition
+        from src.core.llm.model_utils import ToolDefinition
 
         with patch("google.genai.types.FunctionDeclaration") as mock_func_decl:
             tool = ToolDefinition(
@@ -1011,14 +1011,14 @@ class TestStreamChunk:
 
     def test_stream_chunk_with_content(self):
         """Test stream chunk with content."""
-        from src.core.model_utils import StreamChunk
+        from src.core.llm.model_utils import StreamChunk
 
         chunk = StreamChunk(content="Hello")
         assert chunk.content == "Hello"
 
     def test_stream_chunk_with_tool_calls(self):
         """Test stream chunk with tool calls."""
-        from src.core.model_utils import StreamChunk
+        from src.core.llm.model_utils import StreamChunk
 
         chunk = StreamChunk(tool_calls=[{"id": "1", "name": "tool"}], finish_reason="tool_calls")
         assert chunk.tool_calls is not None
@@ -1026,7 +1026,7 @@ class TestStreamChunk:
 
     def test_stream_chunk_with_usage(self):
         """Test stream chunk with usage information."""
-        from src.core.model_utils import StreamChunk
+        from src.core.llm.model_utils import StreamChunk
 
         chunk = StreamChunk(content="Test", usage={"total_tokens": 10})
         assert chunk.usage["total_tokens"] == 10
@@ -1037,7 +1037,7 @@ class TestToolCall:
 
     def test_tool_call_to_dict(self):
         """Test converting ToolCall to dict."""
-        from src.core.model_utils import ToolCall
+        from src.core.llm.model_utils import ToolCall
 
         tc = ToolCall(id="call_123", name="my_tool", arguments={"arg1": "value1"})
         d = tc.to_dict()
@@ -1047,7 +1047,7 @@ class TestToolCall:
 
     def test_tool_call_from_dict(self):
         """Test creating ToolCall from dict."""
-        from src.core.model_utils import ToolCall
+        from src.core.llm.model_utils import ToolCall
 
         data = {"id": "call_456", "name": "another_tool", "arguments": {"key": "value"}}
         tc = ToolCall.from_dict(data)
@@ -1057,7 +1057,7 @@ class TestToolCall:
 
     def test_tool_call_from_dict_with_missing_fields(self):
         """Test ToolCall.from_dict handles missing fields."""
-        from src.core.model_utils import ToolCall
+        from src.core.llm.model_utils import ToolCall
 
         data = {"id": "call_789"}
         tc = ToolCall.from_dict(data)

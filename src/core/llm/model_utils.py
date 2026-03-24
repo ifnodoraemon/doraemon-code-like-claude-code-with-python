@@ -216,7 +216,7 @@ class ClientConfig:
     @classmethod
     def from_env(cls) -> "ClientConfig":
         """Load runtime configuration from the project config file."""
-        from src.core.config import load_config
+        from src.core.config.config import load_config
 
         config_data = load_config()
         model = config_data.get("model")

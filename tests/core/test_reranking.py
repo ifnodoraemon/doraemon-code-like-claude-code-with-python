@@ -1,6 +1,6 @@
 """Tests for optional note reranking."""
 
-from src.services.reranking import NoteReranker
+from src.servers._services.reranking import NoteReranker
 
 
 class TestNoteReranker:

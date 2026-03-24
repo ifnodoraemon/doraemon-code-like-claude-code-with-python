@@ -10,8 +10,8 @@ from collections.abc import AsyncIterator, Sequence
 
 import httpx
 
-from src.core.model_client_base import BaseModelClient
-from src.core.model_utils import (
+from src.core.llm.model_client_base import BaseModelClient
+from src.core.llm.model_utils import (
     ChatResponse,
     ClientConfig,
     Message,

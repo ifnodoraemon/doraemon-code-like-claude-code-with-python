@@ -10,8 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.core.model_client import ModelClient
-from src.core.model_utils import Message
+from src.core.llm.model_client import ModelClient
+from src.core.llm.model_utils import Message
 
 
 class LLMJudgeEvaluator:

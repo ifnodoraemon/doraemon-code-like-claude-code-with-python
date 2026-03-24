@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .paths import theme_path
+from src.core.paths import theme_path
 
 logger = logging.getLogger(__name__)
 

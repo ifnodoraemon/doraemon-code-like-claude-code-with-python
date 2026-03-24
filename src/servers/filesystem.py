@@ -31,8 +31,8 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP
 
 from src.core.logger import configure_root_logger
-from src.core.security import validate_path
-from src.services import code_nav, document, outline, vision
+from src.core.security.security import validate_path
+from src.servers._services import code_nav, document, outline, vision
 
 configure_root_logger()
 logger = logging.getLogger(__name__)
@@ -80,12 +80,12 @@ def read_file(path: str, offset: int = 0, limit: int | None = None, encoding: st
             if file_size > MAX_FILE_SIZE and limit is None:
                 limit = MAX_LINES_DEFAULT
 
-            if offset == 0 and limit is None:
+            if offset == 0 and (limit is None or limit == 0):
                 with open(valid_path, encoding=encoding, errors="replace") as f:
                     return f.read()
 
             with open(valid_path, encoding=encoding, errors="replace") as f:
-                if limit is None:
+                if limit is None or limit == 0:
                     lines = f.readlines()
                     if len(lines) > MAX_LINES_DEFAULT:
                         lines = lines[:MAX_LINES_DEFAULT]

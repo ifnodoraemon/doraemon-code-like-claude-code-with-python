@@ -11,7 +11,7 @@ from typing import Any
 
 # Use new Google GenAI SDK (consistent with main CLI)
 from google import genai
-from src.core.config import get_required_config_value
+from src.core.config.config import get_required_config_value
 
 
 class ModelGrader:

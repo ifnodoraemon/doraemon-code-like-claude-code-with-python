@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from src.core.config import get_required_config_value
+from src.core.config.config import get_required_config_value
 
 logger = logging.getLogger(__name__)
 

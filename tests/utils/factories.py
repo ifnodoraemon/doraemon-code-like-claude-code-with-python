@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 from src.agent import AgentState
-from src.core.model_utils import (
+from src.core.llm.model_utils import (
     ChatResponse,
     ClientConfig,
     ClientMode,

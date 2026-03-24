@@ -6,7 +6,7 @@ import sqlite3
 from mcp.server.fastmcp import FastMCP
 
 from src.core.logger import configure_root_logger
-from src.core.security import validate_path
+from src.core.security.security import validate_path
 
 # Setup logging
 configure_root_logger()

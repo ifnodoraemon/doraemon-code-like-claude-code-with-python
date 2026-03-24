@@ -1,20 +1,42 @@
+"""
+Embedding functions for semantic search.
+
+This module provides embedding functions that work with ChromaDB.
+chromadb is an optional dependency - if not installed, returns dummy embeddings.
+"""
+
 import logging
+from typing import Any
 
-from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
-
-from src.core.config import load_config
+from src.core.config.config import load_config
 
 logger = logging.getLogger(__name__)
 
-# Suppress noisy HTTP logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("google.genai").setLevel(logging.WARNING)
+
+HAS_CHROMA = False
+try:
+    from chromadb.api.types import Documents, Embeddings
+
+    HAS_CHROMA = True
+except ImportError:
+    Documents = list[str]
+    Embeddings = list[list[float]]
+
+EmbeddingFunction = Any
 
 
 class RemoteEmbeddingFunction(EmbeddingFunction):
     """
     Embedding function that uses remote APIs (Google GenAI or OpenAI).
-    Defaults to a dummy implementation if no keys are found, but warns the user.
+
+    Gracefully degrades if:
+    - chromadb not installed
+    - No API keys configured
+    - embedding_model not configured
+
+    Returns dummy embeddings in all error cases.
     """
 
     def __init__(self):
@@ -22,6 +44,10 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
         self.provider = "none"
         self.api_key = None
         self._embedding_model = config.get("embedding_model")
+
+        if not HAS_CHROMA:
+            logger.warning("chromadb not installed. Semantic search will not work.")
+            return
 
         model_name = (self._embedding_model or "").lower()
 
@@ -33,9 +59,7 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
 
                 self.client = OpenAI(api_key=self.api_key)
             except ImportError as e:
-                logger.warning(
-                    f"openai package not found or failed to load: {e}. Install it to use OpenAI embeddings."
-                )
+                logger.warning(f"openai package not found: {e}")
                 self.provider = "none"
         elif config.get("google_api_key"):
             self.provider = "google"
@@ -45,9 +69,7 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
 
                 self.client = genai.Client(api_key=self.api_key)
             except ImportError as e:
-                logger.warning(
-                    f"google-genai package not found or failed to load: {e}. Install it to use Google embeddings."
-                )
+                logger.warning(f"google-genai package not found: {e}")
                 self.provider = "none"
         elif config.get("openai_api_key"):
             self.provider = "openai"
@@ -57,47 +79,43 @@ class RemoteEmbeddingFunction(EmbeddingFunction):
 
                 self.client = OpenAI(api_key=self.api_key)
             except ImportError as e:
-                logger.warning(
-                    f"openai package not found or failed to load: {e}. Install it to use OpenAI embeddings."
-                )
+                logger.warning(f"openai package not found: {e}")
                 self.provider = "none"
 
     def __call__(self, input: Documents) -> Embeddings:
-        from typing import cast
+        if not HAS_CHROMA:
+            return [[0.0] * 768 for _ in input]
 
         if self.provider == "google":
             try:
                 embed_model = self._embedding_model
                 if not embed_model:
-                    logger.warning("embedding_model is not configured")
-                    return cast(Embeddings, [[0.0] * 768 for _ in input])
+                    logger.warning("embedding_model not configured")
+                    return [[0.0] * 768 for _ in input]
                 embeddings = []
                 for text in input:
                     result = self.client.models.embed_content(
                         model=embed_model,
                         contents=text,
                     )
-                    # New SDK returns embeddings[0].values
                     embeddings.append(result.embeddings[0].values)
-                return cast(Embeddings, embeddings)
+                return embeddings
             except Exception as e:
                 logger.error(f"Google embedding error: {e}")
-                return cast(Embeddings, [[0.0] * 768 for _ in input])
+                return [[0.0] * 768 for _ in input]
 
         elif self.provider == "openai":
             try:
                 embed_model = self._embedding_model
                 if not embed_model:
-                    logger.warning("embedding_model is not configured")
-                    return cast(Embeddings, [[0.0] * 1536 for _ in input])
+                    logger.warning("embedding_model not configured")
+                    return [[0.0] * 1536 for _ in input]
                 response = self.client.embeddings.create(input=input, model=embed_model)
-                return cast(Embeddings, [data.embedding for data in response.data])
+                return [data.embedding for data in response.data]
             except Exception as e:
                 logger.error(f"OpenAI embedding error: {e}")
-                return cast(Embeddings, [[0.0] * 1536 for _ in input])
+                return [[0.0] * 1536 for _ in input]
 
         else:
-            logger.warning(
-                "No remote embedding provider configured. Memory search will not work correctly."
-            )
-            return cast(Embeddings, [[0.0] * 768 for _ in input])
+            logger.warning("No embedding provider configured. Semantic search will not work.")
+            return [[0.0] * 768 for _ in input]

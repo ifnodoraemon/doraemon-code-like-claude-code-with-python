@@ -13,13 +13,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.model_client import (
+from src.core.llm.model_client import (
     DirectModelClient,
     GatewayModelClient,
     ModelClient,
 )
-from src.core.model_client_base import BaseModelClient
-from src.core.model_utils import (
+from src.core.llm.model_client_base import BaseModelClient
+from src.core.llm.model_utils import (
     ChatResponse,
     ClientConfig,
     ClientMode,

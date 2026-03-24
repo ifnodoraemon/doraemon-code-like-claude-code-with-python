@@ -9,8 +9,8 @@ import tempfile
 
 import pytest
 
-from src.core.security import validate_path
-from src.servers.filesystem_unified import (
+from src.core.security.security import validate_path
+from src.servers.filesystem import (
     glob_files,
     grep_search,
     list_directory,

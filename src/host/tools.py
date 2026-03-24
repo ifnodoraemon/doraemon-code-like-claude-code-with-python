@@ -36,7 +36,7 @@ from typing import Any, Union, get_args, get_origin
 
 from google.genai import types
 
-from src.core.config import load_config
+from src.core.config.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -428,7 +428,7 @@ def get_default_registry() -> ToolRegistry:
 class ToolSpec:
     """Declarative specification for a tool to register."""
 
-    module: str  # e.g. "src.servers.filesystem_unified"
+    module: str  # e.g. "src.servers.filesystem"
     func_name: str  # function name to import
     name: str | None = None  # registered name (defaults to func_name)
     sensitive: bool = False
@@ -439,15 +439,15 @@ class ToolSpec:
 # fmt: off
 TOOL_SPECS: list[ToolSpec] = [
     # ── Filesystem (critical) ─────────────────────────────────────────
-    ToolSpec("src.servers.filesystem_unified", "read",          sensitive=False, timeout=60.0,  critical=True),
-    ToolSpec("src.servers.filesystem_unified", "write",         sensitive=True,  timeout=120.0, critical=True),
-    ToolSpec("src.servers.filesystem_unified", "search",        sensitive=False, timeout=120.0, critical=True),
-    ToolSpec("src.servers.filesystem_unified", "notebook_read", sensitive=False, timeout=60.0,  critical=True),
-    ToolSpec("src.servers.filesystem_unified", "notebook_edit", sensitive=True,  timeout=60.0,  critical=True),
-    ToolSpec("src.servers.filesystem_unified", "multi_edit",    sensitive=True,  timeout=120.0, critical=True),
+    ToolSpec("src.servers.filesystem", "read",          sensitive=False, timeout=60.0,  critical=True),
+    ToolSpec("src.servers.filesystem", "write",         sensitive=True,  timeout=120.0, critical=True),
+    ToolSpec("src.servers.filesystem", "search",        sensitive=False, timeout=120.0, critical=True),
+    ToolSpec("src.servers.filesystem", "notebook_read", sensitive=False, timeout=60.0,  critical=True),
+    ToolSpec("src.servers.filesystem", "notebook_edit", sensitive=True,  timeout=60.0,  critical=True),
+    ToolSpec("src.servers.filesystem", "multi_edit",    sensitive=True,  timeout=120.0, critical=True),
 
     # ── Run (unified) ────────────────────────────────────────────────
-    ToolSpec("src.servers.run_unified", "run", sensitive=True, timeout=300.0),
+    ToolSpec("src.servers.run", "run", sensitive=True, timeout=300.0),
 
     # ── Memory ───────────────────────────────────────────────────────
     ToolSpec("src.servers.memory", "get_note",     sensitive=False, timeout=60.0),

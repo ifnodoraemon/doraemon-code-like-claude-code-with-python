@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.core.unified_config import UnifiedConfig
+from src.core.config.unified_config import UnifiedConfig
 
 BASE_CONFIG = {"model": "test-model"}
 
@@ -135,7 +135,7 @@ class TestConfigHelpers:
 
     def test_parse_int_valid(self):
         """Test parsing valid integers."""
-        from src.core.unified_config import _parse_int
+        from src.core.config.unified_config import _parse_int
 
         assert _parse_int("123") == 123
         assert _parse_int("0") == 0
@@ -143,7 +143,7 @@ class TestConfigHelpers:
 
     def test_parse_int_invalid(self):
         """Test parsing invalid integers."""
-        from src.core.unified_config import _parse_int
+        from src.core.config.unified_config import _parse_int
 
         assert _parse_int(None) is None
         assert _parse_int("abc") is None
@@ -151,7 +151,7 @@ class TestConfigHelpers:
 
     def test_parse_float_valid(self):
         """Test parsing valid floats."""
-        from src.core.unified_config import _parse_float
+        from src.core.config.unified_config import _parse_float
 
         assert _parse_float("1.5") == 1.5
         assert _parse_float("0.0") == 0.0
@@ -159,14 +159,14 @@ class TestConfigHelpers:
 
     def test_parse_float_invalid(self):
         """Test parsing invalid floats."""
-        from src.core.unified_config import _parse_float
+        from src.core.config.unified_config import _parse_float
 
         assert _parse_float(None) is None
         assert _parse_float("abc") is None
 
     def test_parse_bool_valid(self):
         """Test parsing valid booleans."""
-        from src.core.unified_config import _parse_bool
+        from src.core.config.unified_config import _parse_bool
 
         assert _parse_bool("true") is True
         assert _parse_bool("True") is True
@@ -182,7 +182,7 @@ class TestConfigHelpers:
 
     def test_parse_bool_invalid(self):
         """Test parsing invalid booleans."""
-        from src.core.unified_config import _parse_bool
+        from src.core.config.unified_config import _parse_bool
 
         assert _parse_bool(None) is None
         assert _parse_bool("maybe") is None

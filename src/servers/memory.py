@@ -7,11 +7,11 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from src.core.config import load_config
+from src.core.config.config import load_config
 from src.core.logger import configure_root_logger
 from src.core.memory_layers import LayeredMemory, MemoryLayer
 from src.core.paths import chroma_dir, layered_memory_dir, persona_path, state_dir
-from src.services.reranking import NoteReranker
+from src.servers._services.reranking import NoteReranker
 
 # Setup logging
 configure_root_logger()
@@ -353,7 +353,7 @@ def _ensure_initialized():
     try:
         import chromadb
 
-        from src.services.embeddings import RemoteEmbeddingFunction
+        from src.servers._services.embeddings import RemoteEmbeddingFunction
 
         embedding_fn = RemoteEmbeddingFunction()
         client = chromadb.PersistentClient(path=_persist_dir())

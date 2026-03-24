@@ -7,9 +7,9 @@ Integrates the standard ReActAgent with Doraemon's existing infrastructure:
 - Skills system
 - Checkpoint system
 - HITL approval workflow
+- Trace recording
 """
 
-import asyncio
 import logging
 import time
 import uuid
@@ -30,6 +30,7 @@ from src.agent.types import (
     ToolDefinition,
 )
 from src.core.hooks import HookEvent, HookManager
+from src.core.home import Trace, set_project_dir
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,12 @@ class DoraemonAgent(ReActAgent):
     - Checkpoint management
     - Skills integration
     - Rich display output
+    - Trace recording with session persistence
+
+    Trace ID Hierarchy:
+        session_id  - Set once, persists across all turns
+          └── turn_id - Each run() call
+                └── span_id - Each operation (tool_call, llm_call)
     """
 
     def __init__(
@@ -52,11 +59,15 @@ class DoraemonAgent(ReActAgent):
         tool_registry: Any,
         state: AgentState | None = None,
         *,
-        hook_mgr: HookManager | None = None,
-        checkpoint_mgr: Any = None,
-        skill_mgr: Any = None,
+        hooks: HookManager | None = None,
+        checkpoints: Any = None,
+        skills: Any = None,
         permission_callback: Callable | None = None,
         display_callback: Callable | None = None,
+        project_dir: Path | None = None,
+        enable_trace: bool = True,
+        trace: Trace | None = None,
+        session_id: str | None = None,
         **kwargs,
     ):
         tools = self._convert_registry_to_tools(tool_registry)
@@ -69,10 +80,46 @@ class DoraemonAgent(ReActAgent):
         )
 
         self.tool_registry = tool_registry
-        self.hook_mgr = hook_mgr
-        self.checkpoint_mgr = checkpoint_mgr
-        self.skill_mgr = skill_mgr
+        self.hooks = hooks
+        self.checkpoints = checkpoints
+        self.skills = skills
         self.display_callback = display_callback
+        self.project_dir = project_dir
+        self.enable_trace = enable_trace
+        self.session_id = session_id or self._generate_session_id()
+
+        if trace:
+            self._trace = trace
+        elif enable_trace:
+            self._trace = Trace(self.session_id, project_dir)
+        else:
+            self._trace = None
+
+        if self._trace:
+            self.set_trace(self._trace)
+
+        if project_dir:
+            set_project_dir(project_dir)
+
+    @staticmethod
+    def _generate_session_id() -> str:
+        """Generate a unique session ID."""
+        import uuid
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique = str(uuid.uuid4())[:8]
+        return f"{timestamp}_{unique}"
+
+    def get_trace(self) -> Trace | None:
+        """Get current trace object."""
+        return self._trace
+
+    def save_trace(self) -> Path | None:
+        """Save trace to file, returns path if saved."""
+        if self._trace:
+            return self._trace.save()
+        return None
 
     def _convert_registry_to_tools(
         self,
@@ -116,10 +163,12 @@ class DoraemonAgent(ReActAgent):
         arguments: dict[str, Any],
     ) -> tuple[str, str | None]:
         """
-        Execute a tool from the registry with hooks.
+        Execute a tool from the registry with hooks and trace recording.
         """
-        if self.hook_mgr:
-            hook_result = await self.hook_mgr.trigger(
+        start_time = time.time()
+
+        if self.hooks:
+            hook_result = await self.hooks.trigger(
                 HookEvent.PRE_TOOL_USE,
                 tool_name=name,
                 tool_input=arguments,
@@ -138,15 +187,20 @@ class DoraemonAgent(ReActAgent):
             result = ""
             error = str(e)
 
-        if self.hook_mgr:
-            await self.hook_mgr.trigger(
+        duration = time.time() - start_time
+
+        if self._trace and self.enable_trace:
+            self._trace.tool_call(name, arguments, result or f"Error: {error}", duration)
+
+        if self.hooks:
+            await self.hooks.trigger(
                 HookEvent.POST_TOOL_USE,
                 tool_name=name,
                 tool_input=arguments,
                 tool_output=result,
             )
 
-        if self.checkpoint_mgr and self._is_modifying_tool(name):
+        if self.checkpoints and self._is_modifying_tool(name):
             await self._create_checkpoint(name, arguments)
 
         return result, error
@@ -173,13 +227,13 @@ class DoraemonAgent(ReActAgent):
         args: dict[str, Any],
     ) -> None:
         """Create a checkpoint before file modifications."""
-        if not self.checkpoint_mgr:
+        if not self.checkpoints:
             return
 
         path = args.get("path")
         if path:
             try:
-                self.checkpoint_mgr.snapshot(
+                self.checkpoints.snapshot(
                     path,
                     reason=f"Before {tool_name}",
                 )
@@ -192,30 +246,46 @@ class DoraemonAgent(ReActAgent):
         **kwargs,
     ) -> AgentResult:
         """
-        Run the agent with lifecycle hooks.
+        Run the agent with lifecycle hooks and trace recording.
         """
-        if self.hook_mgr:
-            await self.hook_mgr.trigger(
+        if self.enable_trace and self._trace:
+            self._trace.start_turn(input)
+
+        if self.hooks:
+            await self.hooks.trigger(
                 HookEvent.USER_PROMPT_SUBMIT,
                 user_prompt=input,
             )
 
-        result = await super().run(input, **kwargs)
+        try:
+            result = await super().run(input, **kwargs)
 
-        if self.hook_mgr:
-            await self.hook_mgr.trigger(
-                HookEvent.STOP,
-                stop_reason="completed" if result.success else "error",
-            )
+            if self._trace and self.enable_trace:
+                self._trace.end_turn(success=result.success, error=result.error)
 
-        return result
+            if self.hooks:
+                await self.hooks.trigger(
+                    HookEvent.STOP,
+                    stop_reason="completed" if result.success else "error",
+                )
+
+            return result
+
+        except Exception as e:
+            if self._trace and self.enable_trace:
+                self._trace.error(
+                    message=str(e),
+                    details={"exception_type": type(e).__name__},
+                )
+                self._trace.end_turn(success=False, error=str(e))
+            raise
 
     async def observe(self) -> Observation:
         """Observe with skills context."""
         observation = await super().observe()
 
-        if self.skill_mgr:
-            skills_content = self.skill_mgr.get_skills_for_context(observation.user_input or "")
+        if self.skills:
+            skills_content = self.skills.get_skills_for_context(observation.user_input or "")
             if skills_content:
                 observation.context["skills"] = skills_content
 
@@ -290,12 +360,16 @@ def create_doraemon_agent(
     llm_client: Any,
     tool_registry: Any,
     mode: str = "build",
-    hook_mgr: HookManager | None = None,
-    checkpoint_mgr: Any = None,
-    skill_mgr: Any = None,
+    hooks: HookManager | None = None,
+    checkpoints: Any = None,
+    skills: Any = None,
     permission_callback: Callable | None = None,
     display_callback: Callable | None = None,
     max_turns: int = 100,
+    project_dir: Path | None = None,
+    enable_trace: bool = True,
+    trace: Trace | None = None,
+    session_id: str | None = None,
 ) -> DoraemonAgent:
     """
     Factory function to create a DoraemonAgent.
@@ -304,12 +378,16 @@ def create_doraemon_agent(
         llm_client: Model client for LLM calls
         tool_registry: Tool registry for tool execution
         mode: Agent mode ("plan" or "build")
-        hook_mgr: Hook manager for lifecycle events
-        checkpoint_mgr: Checkpoint manager for file snapshots
-        skill_mgr: Skill manager for skill loading
+        hooks: Hook manager for lifecycle events
+        checkpoints: Checkpoint manager for file snapshots
+        skills: Skill manager for skill loading
         permission_callback: Callback for HITL approval
         display_callback: Callback for UI updates
         max_turns: Maximum number of turns
+        project_dir: Project directory for trace storage
+        enable_trace: Enable trace recording
+        trace: Existing trace object to reuse
+        session_id: Session ID (auto-generated if not provided)
 
     Returns:
         Configured DoraemonAgent instance
@@ -320,12 +398,16 @@ def create_doraemon_agent(
         llm_client=llm_client,
         tool_registry=tool_registry,
         state=state,
-        hook_mgr=hook_mgr,
-        checkpoint_mgr=checkpoint_mgr,
-        skill_mgr=skill_mgr,
+        hooks=hooks,
+        checkpoints=checkpoints,
+        skills=skills,
         permission_callback=permission_callback,
         display_callback=display_callback,
         max_turns=max_turns,
+        project_dir=project_dir,
+        enable_trace=enable_trace,
+        trace=trace,
+        session_id=session_id,
     )
 
 
@@ -333,9 +415,9 @@ async def create_doraemon_agent_with_mcp(
     llm_client: Any,
     mode: str = "build",
     config_path: Path | None = None,
-    hook_mgr: HookManager | None = None,
-    checkpoint_mgr: Any = None,
-    skill_mgr: Any = None,
+    hooks: HookManager | None = None,
+    checkpoints: Any = None,
+    skills: Any = None,
     permission_callback: Callable | None = None,
     display_callback: Callable | None = None,
     max_turns: int = 100,
@@ -349,9 +431,9 @@ async def create_doraemon_agent_with_mcp(
         llm_client: Model client for LLM calls
         mode: Agent mode ("plan" or "build")
         config_path: Path to MCP config file (defaults to .agent/config.json)
-        hook_mgr: Hook manager for lifecycle events
-        checkpoint_mgr: Checkpoint manager for file snapshots
-        skill_mgr: Skill manager for skill loading
+        hooks: Hook manager for lifecycle events
+        checkpoints: Checkpoint manager for file snapshots
+        skills: Skill manager for skill loading
         permission_callback: Callback for HITL approval
         display_callback: Callback for UI updates
         max_turns: Maximum number of turns
@@ -367,9 +449,9 @@ async def create_doraemon_agent_with_mcp(
         llm_client=llm_client,
         tool_registry=registry,
         mode=mode,
-        hook_mgr=hook_mgr,
-        checkpoint_mgr=checkpoint_mgr,
-        skill_mgr=skill_mgr,
+        hooks=hooks,
+        checkpoints=checkpoints,
+        skills=skills,
         permission_callback=permission_callback,
         display_callback=display_callback,
         max_turns=max_turns,

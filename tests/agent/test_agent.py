@@ -585,7 +585,7 @@ class TestDoraemonAgent:
         return registry
 
     @pytest.fixture
-    def mock_hook_mgr(self):
+    def mock_hooks(self):
         """Create mock hook manager."""
         hook_mgr = AsyncMock()
         hook_mgr.trigger = AsyncMock()
@@ -618,18 +618,18 @@ class TestDoraemonAgent:
         assert result.response == "Done!"
 
     @pytest.mark.asyncio
-    async def test_doraemon_agent_with_hooks(self, mock_llm, mock_registry, mock_hook_mgr):
+    async def test_doraemon_agent_with_hooks(self, mock_llm, mock_registry, mock_hooks):
         """Should trigger hooks during execution."""
         agent = create_doraemon_agent(
             llm_client=mock_llm,
             tool_registry=mock_registry,
             mode="build",
-            hook_mgr=mock_hook_mgr,
+            hooks=mock_hooks,
         )
 
         await agent.run("Hello")
 
-        mock_hook_mgr.trigger.assert_called()
+        mock_hooks.trigger.assert_called()
 
     @pytest.mark.asyncio
     async def test_doraemon_agent_tool_execution(self, mock_llm, mock_registry):
@@ -694,7 +694,7 @@ class TestAgentAdapter:
             user_input="Hello",
             model_client=mock_llm,
             registry=mock_registry,
-            ctx=None,
+            context=None,
             mode="build",
         )
 
@@ -723,7 +723,7 @@ class TestAgentAdapter:
 
         session.reset()
 
-        assert session._agent is None
+        assert session._state is None
 
     @pytest.mark.asyncio
     async def test_agent_session_mode_change(self, mock_llm, mock_registry):

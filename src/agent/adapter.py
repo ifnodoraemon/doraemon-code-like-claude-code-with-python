@@ -5,7 +5,7 @@ This module provides a compatibility layer that allows the existing
 chat_loop.py to use the new Agent architecture without major changes.
 
 Usage:
-    from src.agent.adapter import run_agent_turn
+    from src.agent.adapter import run_agent_turn, AgentSession
 
     result = await run_agent_turn(
         user_input="Read the README",
@@ -13,6 +13,13 @@ Usage:
         registry=registry,
         ...
     )
+
+    # Or use AgentSession for multi-turn conversations:
+    session = AgentSession(model_client, mode="build")
+    await session.initialize()
+    result = await session.turn("First message")
+    result = await session.turn("Second message")
+    session.close()
 """
 
 import asyncio
@@ -28,7 +35,7 @@ from rich.panel import Panel
 
 from src.agent.doraemon import DoraemonAgent, create_doraemon_agent
 from src.agent.state import AgentState
-from src.agent.types import AgentResult
+from src.core.home import Trace
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -55,12 +62,12 @@ async def run_agent_turn(
     user_input: str,
     model_client: Any,
     registry: Any,
-    ctx: Any,
+    context: Any,
     *,
     mode: str = "build",
-    hook_mgr: Any = None,
-    checkpoint_mgr: Any = None,
-    skill_mgr: Any = None,
+    hooks: Any = None,
+    checkpoints: Any = None,
+    skills: Any = None,
     sensitive_tools: set[str] | None = None,
     headless: bool = False,
     permission_callback: Callable | None = None,
@@ -76,11 +83,11 @@ async def run_agent_turn(
         user_input: User's input message
         model_client: LLM client
         registry: Tool registry
-        ctx: Context manager (for history)
+        context: Context manager (for history)
         mode: Agent mode ("plan" or "build")
-        hook_mgr: Hook manager
-        checkpoint_mgr: Checkpoint manager
-        skill_mgr: Skill manager
+        hooks: Hook manager
+        checkpoints: Checkpoint manager
+        skills: Skill manager
         sensitive_tools: Set of sensitive tool names
         headless: Whether running in headless mode
         permission_callback: Callback for HITL approval
@@ -134,16 +141,16 @@ async def run_agent_turn(
         llm_client=model_client,
         tool_registry=registry,
         mode=mode,
-        hook_mgr=hook_mgr,
-        checkpoint_mgr=checkpoint_mgr,
-        skill_mgr=skill_mgr,
+        hooks=hooks,
+        checkpoints=checkpoints,
+        skills=skills,
         permission_callback=default_permission_callback if sensitive_tools else None,
         display_callback=display_callback,
         max_turns=max_turns,
     )
 
-    if ctx and hasattr(ctx, "messages"):
-        for msg in ctx.messages[-10:]:
+    if context and hasattr(context, "messages"):
+        for msg in context.messages[-10:]:
             if hasattr(msg, "role") and hasattr(msg, "content"):
                 agent.state.add_message(
                     type(
@@ -208,6 +215,13 @@ class AgentSession:
     Manages a persistent agent session.
 
     Use this for multi-turn conversations where context should persist.
+
+    Session Lifecycle:
+        session = AgentSession(...)
+        await session.initialize()
+        result1 = await session.turn("First message")
+        result2 = await session.turn("Second message")
+        session.close()  # Saves trace
     """
 
     def __init__(
@@ -216,24 +230,37 @@ class AgentSession:
         registry: Any | None = None,
         *,
         mode: str = "build",
-        hook_mgr: Any = None,
-        checkpoint_mgr: Any = None,
-        skill_mgr: Any = None,
+        hooks: Any = None,
+        checkpoints: Any = None,
+        skills: Any = None,
         max_turns: int = 100,
         config_path: Path | None = None,
+        project_dir: Path | None = None,
+        enable_trace: bool = True,
     ):
         self.model_client = model_client
         self.registry = registry
         self.mode = mode
-        self.hook_mgr = hook_mgr
-        self.checkpoint_mgr = checkpoint_mgr
-        self.skill_mgr = skill_mgr
+        self.hooks = hooks
+        self.checkpoints = checkpoints
+        self.skills = skills
         self.max_turns = max_turns
         self.config_path = config_path
+        self.project_dir = project_dir or Path.cwd()
+        self.enable_trace = enable_trace
 
         self._agent: DoraemonAgent | None = None
         self._state: AgentState | None = None
         self._mcp_registry: Any = None
+        self._trace: Trace | None = None
+        self._session_id: str | None = None
+
+    @property
+    def session_id(self) -> str:
+        """Get session ID."""
+        if not self._session_id:
+            self._session_id = DoraemonAgent._generate_session_id()
+        return self._session_id
 
     async def initialize(self) -> None:
         """Initialize the agent session with MCP support."""
@@ -245,14 +272,24 @@ class AgentSession:
             self._mcp_registry = await create_unified_registry(self.config_path)
             self.registry = self._mcp_registry
 
+        if self.enable_trace:
+            from src.core.home import set_project_dir
+
+            set_project_dir(self.project_dir)
+            self._trace = Trace(self.session_id, self.project_dir)
+
         self._agent = create_doraemon_agent(
             llm_client=self.model_client,
             tool_registry=self.registry,
             mode=self.mode,
-            hook_mgr=self.hook_mgr,
-            checkpoint_mgr=self.checkpoint_mgr,
-            skill_mgr=self.skill_mgr,
+            hooks=self.hooks,
+            checkpoints=self.checkpoints,
+            skills=self.skills,
             max_turns=self.max_turns,
+            project_dir=self.project_dir,
+            enable_trace=self.enable_trace,
+            trace=self._trace,
+            session_id=self.session_id,
         )
         self._agent.state = self._state
 
@@ -287,6 +324,8 @@ class AgentSession:
             )
         except Exception as e:
             logger.error(f"Agent turn failed: {e}")
+            if self._trace:
+                self._trace.error(str(e), {"exception_type": type(e).__name__})
             return AgentTurnResult(
                 response="",
                 tool_calls=[],
@@ -301,12 +340,25 @@ class AgentSession:
         """Get current agent state."""
         return self._state
 
+    def get_trace(self) -> Trace | None:
+        """Get current trace object."""
+        return self._trace
+
+    def save_trace(self) -> Path | None:
+        """Save trace to file, returns path if saved."""
+        if self._trace:
+            return self._trace.save()
+        return None
+
+    def close(self) -> Path | None:
+        """Close session and save trace."""
+        return self.save_trace()
+
     def reset(self) -> None:
-        """Reset the session."""
+        """Reset the session (preserves trace)."""
         if self._agent:
             self._agent.reset()
         self._state = None
-        self._agent = None
 
     def set_mode(self, mode: str) -> None:
         """Change agent mode."""

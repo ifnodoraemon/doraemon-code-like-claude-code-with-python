@@ -22,7 +22,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from src.core.config import load_config
+from src.core.config.config import load_config
 
 logger = logging.getLogger(__name__)
 

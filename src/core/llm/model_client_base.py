@@ -7,7 +7,7 @@ Provides the abstract base class for all model clients.
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 
-from src.core.model_utils import (
+from src.core.llm.model_utils import (
     ChatResponse,
     Message,
     StreamChunk,

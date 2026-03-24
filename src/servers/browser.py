@@ -25,7 +25,7 @@ from mcp.server.fastmcp import FastMCP
 from playwright.async_api import Browser, Page, async_playwright
 
 from src.core.logger import configure_root_logger
-from src.core.security import validate_path
+from src.core.security.security import validate_path
 
 configure_root_logger()
 logger = logging.getLogger(__name__)

@@ -2,10 +2,10 @@
 
 from unittest.mock import patch
 
-from src.core.model_client import (
+from src.core.llm.model_client import (
     ModelClient,
 )
-from src.core.model_utils import (
+from src.core.llm.model_utils import (
     ChatResponse,
     ClientConfig,
     ClientMode,

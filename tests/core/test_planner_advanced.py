@@ -1,6 +1,6 @@
 """Advanced comprehensive tests for planner.py - 25+ tests for improved coverage"""
 
-from src.core.planner import (
+from src.core.planner.planner import (
     ExecutionPlan,
     RiskAssessment,
     RiskLevel,

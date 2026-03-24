@@ -4,8 +4,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from .logger import get_logger
-from .paths import config_path as default_config_path
+from src.core.logger import get_logger
+from src.core.paths import config_path as default_config_path
 from .schema import get_default_config, validate_config_file
 
 logger = get_logger(__name__)

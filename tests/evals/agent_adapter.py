@@ -245,7 +245,7 @@ class DoraemonAgentAdapter(AgentAdapter):
 
         try:
             from src.core.context_manager import ContextManager
-            from src.core.model_client import ModelClient
+            from src.core.llm.model_client import ModelClient
             from src.host.tools import get_tool_registry
 
             self._model_client = ModelClient(model=self.model)

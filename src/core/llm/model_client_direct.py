@@ -12,8 +12,8 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from src.core.errors import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerOpenError
-from src.core.model_client_base import BaseModelClient
-from src.core.model_utils import (
+from src.core.llm.model_client_base import BaseModelClient
+from src.core.llm.model_utils import (
     ChatResponse,
     ClientConfig,
     Message,
@@ -22,7 +22,7 @@ from src.core.model_utils import (
     ToolDefinition,
     get_content_text,
 )
-from src.core.provider_adapters import (
+from src.core.llm.provider_adapters import (
     AnthropicAdapter,
     GoogleAdapter,
     OpenAIAdapter,

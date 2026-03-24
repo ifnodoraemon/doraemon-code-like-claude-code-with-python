@@ -13,7 +13,7 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from src.servers.filesystem_unified import (
+from src.servers.filesystem import (
     _human_size,
     copy_file,
     create_directory,
@@ -168,19 +168,23 @@ class TestReadFile:
         assert "Line 1" in result
         assert "Line 5" in result
 
+    @patch("os.path.getsize")
     @patch("builtins.open", new_callable=mock_open, read_data="test content")
     @patch("os.path.exists")
-    def test_read_file_with_mock(self, mock_exists, mock_file):
+    def test_read_file_with_mock(self, mock_exists, mock_file, mock_size):
         """Test read_file with mocked file operations."""
         mock_exists.return_value = True
+        mock_size.return_value = 100
         result = read_file("test.txt")
         assert "test content" in result
 
+    @patch("os.path.getsize")
     @patch("builtins.open", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
-    def test_read_file_permission_error(self, mock_exists, mock_file):
+    def test_read_file_permission_error(self, mock_exists, mock_file, mock_size):
         """Test read_file with permission error."""
         mock_exists.return_value = True
+        mock_size.return_value = 100
         result = read_file("test.txt")
         assert "Error" in result
 
@@ -776,14 +780,14 @@ class TestReadFileOutline:
 class TestFindSymbol:
     """Tests for find_symbol function."""
 
-    @patch("src.services.code_nav.find_definition")
+    @patch("src.servers._services.code_nav.find_definition")
     def test_find_symbol_success(self, mock_find):
         """Test finding symbol definition."""
         mock_find.return_value = "Found at line 10"
         result = find_symbol("TestClass")
         assert "Found at line 10" in result
 
-    @patch("src.services.code_nav.find_definition")
+    @patch("src.servers._services.code_nav.find_definition")
     def test_find_symbol_not_found(self, mock_find):
         """Test finding non-existent symbol."""
         mock_find.return_value = "Symbol not found"

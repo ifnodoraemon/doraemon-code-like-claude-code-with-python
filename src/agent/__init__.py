@@ -59,11 +59,14 @@ from .types import (
     ToolDefinition,
 )
 
+from src.core.home import Trace
+
 __all__ = [
     "BaseAgent",
     "ReActAgent",
     "DoraemonAgent",
     "create_doraemon_agent",
+    "create_doraemon_agent_with_mcp",
     "AgentState",
     "AgentResult",
     "AgentStatus",
@@ -82,4 +85,5 @@ __all__ = [
     "run_agent_turn",
     "AgentSession",
     "AgentTurnResult",
+    "Trace",
 ]

@@ -9,14 +9,14 @@ from unittest.mock import patch
 
 import pytest
 
-from src.servers.filesystem_unified import read, search, write
+from src.servers.filesystem import read, search, write
 
 
 # Mock validate_path to allow test paths
 @pytest.fixture(autouse=True)
 def mock_validate_path():
     """Mock validate_path to allow test paths outside workspace"""
-    with patch("src.servers.filesystem_unified.validate_path") as mock:
+    with patch("src.servers.filesystem.validate_path") as mock:
         mock.side_effect = lambda p: p  # Return path as-is
         yield mock
 

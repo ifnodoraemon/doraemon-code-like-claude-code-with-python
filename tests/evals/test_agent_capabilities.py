@@ -7,7 +7,7 @@ import pytest
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.core.security import validate_path
+from src.core.security.security import validate_path
 from src.servers.memory import save_note, search_notes
 
 

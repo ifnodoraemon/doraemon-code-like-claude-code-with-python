@@ -6,7 +6,7 @@ from openai import OpenAI
 
 from google import genai
 from google.genai import types
-from src.core.config import load_config
+from src.core.config.config import load_config
 
 # Setup logging
 logger = logging.getLogger(__name__)

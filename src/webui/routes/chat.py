@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.core.context_manager import ContextConfig, ContextManager
-from src.core.model_client import ModelClient
+from src.core.llm.model_client import ModelClient
 from src.core.model_utils import Message, ToolDefinition
 from src.core.tool_selector import ToolSelector
 from src.host.tools import get_default_registry

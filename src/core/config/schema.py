@@ -150,11 +150,11 @@ def get_default_config() -> dict:
             "memory": {"command": "python3", "args": ["src/servers/memory.py"], "env": {}},
             "filesystem": {
                 "command": "python3",
-                "args": ["src/servers/filesystem_unified.py"],
+                "args": ["src/servers/filesystem.py"],
                 "env": {},
             },
             "web": {"command": "python3", "args": ["src/servers/web.py"], "env": {}},
-            "run": {"command": "python3", "args": ["src/servers/run_unified.py"], "env": {}},
+            "run": {"command": "python3", "args": ["src/servers/run.py"], "env": {}},
             "task": {"command": "python3", "args": ["src/servers/task.py"], "env": {}},
         },
         "persona": {"name": "Agent", "role": "Generalist AI Assistant & Coder"},

@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Callable
 
-from src.core.security import validate_path
+from src.core.security.security import validate_path
 
 
 async def async_read_file(

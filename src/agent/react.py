@@ -35,6 +35,29 @@ from .types import (
 )
 
 
+class TraceInterface:
+    """Minimal trace interface for ReActAgent."""
+
+    def tool_call(
+        self, name: str, args: dict, result: str, duration: float, error: str | None = None
+    ) -> None:
+        pass
+
+    def llm_call(
+        self,
+        model: str,
+        messages: list,
+        response: dict,
+        input_tokens: int,
+        output_tokens: int,
+        duration: float,
+    ) -> None:
+        pass
+
+    def event(self, type: str, name: str, data: dict | None = None) -> None:
+        pass
+
+
 class ReActAgent(BaseAgent):
     """
     ReAct (Reasoning + Acting) Agent.
@@ -60,6 +83,7 @@ class ReActAgent(BaseAgent):
         max_turns: int = 100,
         timeout: float = 300.0,
         permission_callback: Callable | None = None,
+        trace: TraceInterface | None = None,
         **kwargs,
     ):
         super().__init__(state=state, tools=tools, **kwargs)
@@ -69,6 +93,11 @@ class ReActAgent(BaseAgent):
         self.permission_callback = permission_callback
         self._start_time: float | None = None
         self._tool_executor: Callable | None = None
+        self._trace: TraceInterface | None = trace
+
+    def set_trace(self, trace: TraceInterface | None) -> None:
+        """Set trace recorder."""
+        self._trace = trace
 
     def set_tool_executor(self, executor: Callable) -> None:
         """Set the tool executor function."""
@@ -168,13 +197,24 @@ class ReActAgent(BaseAgent):
 
         Tools return facts, not next actions.
         """
+        start_time = time.time()
+
         if name not in self._tools:
-            return "", f"Tool not found: {name}"
+            error = f"Tool not found: {name}"
+            if self._trace:
+                self._trace.tool_call(name, arguments, "", time.time() - start_time, error)
+            return "", error
 
         if self._tool_executor:
-            return await self._tool_executor(name, arguments)
+            result, error = await self._tool_executor(name, arguments)
+        else:
+            result, error = "", "No tool executor configured"
 
-        return "", "No tool executor configured"
+        duration = time.time() - start_time
+        if self._trace:
+            self._trace.tool_call(name, arguments, result or "", duration, error)
+
+        return result, error
 
     async def run(
         self,
@@ -224,7 +264,7 @@ class ReActAgent(BaseAgent):
                         if isinstance(args, str):
                             try:
                                 args = json.loads(args)
-                            except:
+                            except (json.JSONDecodeError, TypeError):
                                 args = {}
 
                         self.state.add_tool_call(
@@ -287,7 +327,7 @@ class ReActAgent(BaseAgent):
             if isinstance(args, str):
                 try:
                     args = json.loads(args)
-                except:
+                except (json.JSONDecodeError, TypeError):
                     args = {}
             tasks.append(self._execute_tool_with_permission(name, args))
 
@@ -337,7 +377,7 @@ class ReActAgent(BaseAgent):
                     if isinstance(args, str):
                         try:
                             args = json.loads(args)
-                        except:
+                        except (json.JSONDecodeError, TypeError):
                             args = {}
 
                     yield {"type": "tool_call", "name": name, "args": args}
@@ -379,16 +419,58 @@ class ReActAgent(BaseAgent):
         tools: list[dict],
     ) -> dict[str, Any]:
         """Call the LLM with messages and tools."""
-        if hasattr(self.llm, "chat"):
-            response = await self.llm.chat(messages, tools=tools)
-        elif hasattr(self.llm, "ainvoke"):
-            response = await self.llm.ainvoke(messages, tools=tools)
-        elif callable(self.llm):
-            response = await self.llm(messages, tools=tools)
-        else:
-            raise ValueError("LLM client must have chat, ainvoke, or be callable")
+        start_time = time.time()
+        model_name = getattr(self.llm, "model", "unknown")
 
-        return self._parse_llm_response(response)
+        try:
+            if hasattr(self.llm, "chat"):
+                response = await self.llm.chat(messages, tools=tools)
+            elif hasattr(self.llm, "ainvoke"):
+                response = await self.llm.ainvoke(messages, tools=tools)
+            elif callable(self.llm):
+                response = await self.llm(messages, tools=tools)
+            else:
+                raise ValueError("LLM client must have chat, ainvoke, or be callable")
+
+            parsed = self._parse_llm_response(response)
+            duration = time.time() - start_time
+
+            if self._trace:
+                input_tokens = self._estimate_tokens(messages)
+                output_tokens = self._estimate_tokens([{"content": parsed.get("content", "")}])
+                self._trace.llm_call(
+                    model=model_name,
+                    messages=messages,
+                    response=parsed,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    duration=duration,
+                )
+
+            return parsed
+
+        except Exception as e:
+            duration = time.time() - start_time
+            if self._trace:
+                self._trace.event(
+                    "error",
+                    "llm_call_failed",
+                    {
+                        "model": model_name,
+                        "error": str(e),
+                        "duration": duration,
+                    },
+                )
+            raise
+
+    def _estimate_tokens(self, messages: list[dict]) -> int:
+        """Rough estimate of token count."""
+        total = 0
+        for msg in messages:
+            content = msg.get("content", "")
+            if content:
+                total += len(str(content)) // 4
+        return total
 
     def _parse_llm_response(self, response: Any) -> dict[str, Any]:
         """Parse LLM response into standard format."""
@@ -497,7 +579,7 @@ When the task is complete, provide a summary of what was done."""
                 [],
             )
             return response.get("content", content[:500])
-        except:
+        except Exception:
             return content[:500]
 
     def _build_result(self, error: str | None = None) -> AgentResult:

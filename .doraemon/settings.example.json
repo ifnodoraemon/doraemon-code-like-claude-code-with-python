@@ -1,0 +1,9 @@
+{
+  "model": "your-model-name-here",
+  "mode": "build",
+  "max_turns": 100,
+  "max_context_tokens": 128000,
+  "theme": "dark",
+  "telemetry": true,
+  "language": "auto"
+}

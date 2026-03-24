@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from src.agent import AgentState
-from src.core.model_client_base import BaseModelClient
+from src.core.llm.model_client_base import BaseModelClient
 from src.host.tools import ToolRegistry
 from tests.utils.factories import (
     create_mock_model_client,

@@ -3,6 +3,8 @@ Semantic Code Search MCP Server
 
 Provides semantic code search using Vector Database (ChromaDB) and Remote Embeddings.
 Uses Google Gemini or OpenAI for embeddings, avoiding local heavy models.
+
+chromadb is an optional dependency - if not installed, search returns empty results.
 """
 
 import hashlib
@@ -12,12 +14,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import chromadb
 from mcp.server.fastmcp import FastMCP
 
 from src.core.logger import configure_root_logger
-from src.core.security import validate_path
-from src.services.embeddings import RemoteEmbeddingFunction
+from src.core.security.security import validate_path
+from src.servers._services.embeddings import RemoteEmbeddingFunction
 
 # Setup logging
 configure_root_logger()
@@ -35,18 +36,26 @@ COLLECTION_NAME = "codebase_index_remote"
 # Ensure directory exists
 os.makedirs(".agent", exist_ok=True)
 
-# Initialize ChromaDB
+# Initialize ChromaDB (optional dependency)
+HAS_DB = False
+collection = None
+embedding_fn = None
+
 try:
+    import chromadb
+
     embedding_fn = RemoteEmbeddingFunction()
     client = chromadb.PersistentClient(path=PERSIST_DIR)
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME, embedding_function=embedding_fn
     )
     HAS_DB = True
+except ImportError:
+    logger.warning(
+        "chromadb not installed. Semantic search will not work. Install with: pip install doraemon[search]"
+    )
 except Exception as e:
     logger.error(f"Failed to initialize ChromaDB: {e}")
-    HAS_DB = False
-    collection = None
 
 
 @dataclass

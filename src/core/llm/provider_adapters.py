@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from src.core.model_utils import (
+from src.core.llm.model_utils import (
     ToolDefinition,
     get_content_text,
 )

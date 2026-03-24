@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
-from .paths import config_path as default_config_path
+from src.core.paths import config_path as default_config_path
 
 
 class UnifiedConfig(BaseModel):

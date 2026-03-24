@@ -24,11 +24,11 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP
 
 from src.core.logger import configure_root_logger
-from src.core.security import validate_path
-from src.core.shell_security import (
+from src.core.security.security import validate_path
+from src.core.security.shell_security import (
     DEFAULT_CONFIG as DEFAULT_SHELL_CONFIG,
 )
-from src.core.shell_security import (
+from src.core.security.shell_security import (
     check_git_safety,
     is_command_blocked,
     register_background_process,
@@ -446,35 +446,6 @@ def _run_install(package_name: str) -> str:
 
     except Exception as e:
         return f"Error: {str(e)}"
-
-
-# ========================================
-# Backward Compatibility Aliases
-# ========================================
-
-
-@mcp.tool()
-def shell_execute(command: str, timeout: int = 30, working_directory: str = ".") -> str:
-    """[Deprecated] Use run(command, mode='shell') instead."""
-    return run(command, mode="shell", timeout=timeout, working_dir=working_directory)
-
-
-@mcp.tool()
-def shell_background(command: str, working_directory: str = ".") -> str:
-    """[Deprecated] Use run(command, mode='background') instead."""
-    return run(command, mode="background", working_dir=working_directory)
-
-
-@mcp.tool()
-def execute_python(code: str, timeout: int = 30) -> str:
-    """[Deprecated] Use run(code, mode='python') instead."""
-    return run(code, mode="python", timeout=timeout)
-
-
-@mcp.tool()
-def install_package(package_name: str) -> str:
-    """[Deprecated] Use run(package_name, mode='install') instead."""
-    return run(package_name, mode="install")
 
 
 if __name__ == "__main__":

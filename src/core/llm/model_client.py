@@ -24,10 +24,10 @@ Usage:
         print(chunk.content)
 """
 
-from src.core.model_client_base import BaseModelClient
-from src.core.model_client_direct import DirectModelClient
-from src.core.model_client_gateway import GatewayModelClient
-from src.core.model_utils import ClientConfig, ClientMode
+from src.core.llm.model_client_base import BaseModelClient
+from src.core.llm.model_client_direct import DirectModelClient
+from src.core.llm.model_client_gateway import GatewayModelClient
+from src.core.llm.model_utils import ClientConfig, ClientMode
 
 __all__ = [
     "BaseModelClient",

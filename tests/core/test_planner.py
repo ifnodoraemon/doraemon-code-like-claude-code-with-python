@@ -1,6 +1,6 @@
 """Comprehensive tests for planner.py"""
 
-from src.core.planner import (
+from src.core.planner.planner import (
     ExecutionPlan,
     RiskAssessment,
     RiskLevel,

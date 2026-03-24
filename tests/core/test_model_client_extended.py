@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from src.core.model_client import (
+from src.core.llm.model_client import (
     GatewayModelClient,
 )
-from src.core.model_utils import ClientConfig, ClientMode, Message, StreamChunk, ToolDefinition
+from src.core.llm.model_utils import ClientConfig, ClientMode, Message, StreamChunk, ToolDefinition
 
 
 class TestToolDefinition:
