@@ -151,12 +151,10 @@ class DirectModelClient(BaseModelClient):
 
         # Ollama (always available if running)
         try:
-            import httpx
+            from src.core.http_pool import get_shared_client
 
-            self._providers[Provider.OLLAMA] = httpx.AsyncClient(
-                base_url=self.config.ollama_base_url,
-                timeout=120.0,
-            )
+            self._providers[Provider.OLLAMA] = await get_shared_client()
+            self._ollama_base_url = self.config.ollama_base_url
             logger.info("Ollama client initialized")
         except Exception:
             pass
@@ -373,11 +371,11 @@ class DirectModelClient(BaseModelClient):
         """Chat with Ollama."""
         client = self._providers[Provider.OLLAMA]
         model = kwargs.get("model", self.config.model)
+        base_url = getattr(self, "_ollama_base_url", "http://localhost:11434")
 
         msg_list = []
         for m in messages:
             msg = m if isinstance(m, dict) else m.to_dict()
-            # Ollama doesn't support multimodal - extract text only
             content = get_content_text(msg.get("content", ""))
             msg_list.append(
                 {
@@ -395,7 +393,7 @@ class DirectModelClient(BaseModelClient):
             },
         }
 
-        response = await client.post("/api/chat", json=payload)
+        response = await client.post(f"{base_url}/api/chat", json=payload)
         response.raise_for_status()
         data = response.json()
 
