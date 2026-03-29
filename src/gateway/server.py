@@ -441,6 +441,12 @@ def _convert_chat_response_to_anthropic(response) -> dict[str, Any]:
     }
 
 
+def _format_sse(event: str, data: dict[str, Any] | str) -> str:
+    """Format an Anthropic-style SSE event."""
+    payload = data if isinstance(data, str) else json.dumps(data)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
 @app.get("/health")
 async def health(request: Request):
     """Health check endpoint."""
@@ -578,16 +584,116 @@ async def anthropic_messages(
     if not router:
         raise HTTPException(status_code=503, detail="Gateway not initialized")
 
-    if request.stream:
-        raise HTTPException(status_code=501, detail="Anthropic streaming is not implemented")
-
     chat_request = _build_chat_request_from_anthropic(request)
+
+    if request.stream:
+        return StreamingResponse(
+            stream_anthropic_response(chat_request, router),
+            media_type="text/event-stream",
+        )
+
     response = await router.chat(chat_request, preferred_provider="anthropic")
 
     if isinstance(response, ErrorResponse):
         raise HTTPException(status_code=500, detail=response.to_dict())
 
     return _convert_chat_response_to_anthropic(response)
+
+
+async def stream_anthropic_response(request: ChatRequest, router: ModelRouter):
+    """Generate Anthropic-compatible SSE events for a streaming message request."""
+    message_id: str | None = None
+    content_block_started = False
+    tool_block_index = 0
+
+    async for chunk in router.chat_stream(request, preferred_provider="anthropic"):
+        if isinstance(chunk, ErrorResponse):
+            yield _format_sse(
+                "error",
+                {"type": "error", "error": {"type": chunk.code, "message": chunk.error}},
+            )
+            break
+
+        if not message_id:
+            message_id = chunk.id
+            yield _format_sse(
+                "message_start",
+                {
+                    "type": "message_start",
+                    "message": {
+                        "id": chunk.id,
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [],
+                        "model": chunk.model,
+                        "stop_reason": None,
+                        "stop_sequence": None,
+                        "usage": {
+                            "input_tokens": chunk.usage.prompt_tokens if chunk.usage else 0,
+                            "output_tokens": 0,
+                        },
+                    },
+                },
+            )
+
+        if chunk.delta_content:
+            if not content_block_started:
+                yield _format_sse(
+                    "content_block_start",
+                    {
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {"type": "text", "text": ""},
+                    },
+                )
+                content_block_started = True
+            yield _format_sse(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": chunk.delta_content},
+                },
+            )
+
+        if chunk.delta_tool_calls:
+            for tool_call in chunk.delta_tool_calls:
+                yield _format_sse(
+                    "content_block_start",
+                    {
+                        "type": "content_block_start",
+                        "index": tool_block_index,
+                        "content_block": {
+                            "type": "tool_use",
+                            "id": tool_call.id,
+                            "name": tool_call.name,
+                            "input": tool_call.arguments,
+                        },
+                    },
+                )
+                tool_block_index += 1
+
+        if chunk.finish_reason:
+            if content_block_started:
+                yield _format_sse(
+                    "content_block_stop",
+                    {"type": "content_block_stop", "index": 0},
+                )
+            yield _format_sse(
+                "message_delta",
+                {
+                    "type": "message_delta",
+                    "delta": {
+                        "stop_reason": _anthropic_stop_reason(chunk.finish_reason),
+                        "stop_sequence": None,
+                    },
+                    "usage": {
+                        "output_tokens": chunk.usage.completion_tokens if chunk.usage else 0,
+                    },
+                },
+            )
+            yield _format_sse("message_stop", {"type": "message_stop"})
+            return
 
 
 async def stream_response(

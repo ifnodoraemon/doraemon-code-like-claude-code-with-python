@@ -87,13 +87,17 @@ def main():
         display_task_summary(tasks)
         return 0
 
-    console.print(f"[bold]Running {len(tasks)} evaluation tasks...[/bold]\n")
-
-    # TODO: Integrate with actual harness
-    console.print("[yellow]Note: Full harness integration pending[/yellow]")
-    console.print("[green]Task files created successfully![/green]")
-
-    return 0
+    console.print(f"[bold]Loaded {len(tasks)} evaluation tasks.[/bold]\n")
+    console.print("[red]scripts/run_evals.py is not wired to the active evaluation harness.[/red]")
+    console.print("Use one of these instead:")
+    console.print("  `python3 scripts/ci_eval_runner.py --scope quick`")
+    console.print(
+        "  `REAL_API_BASE=... REAL_API_KEY=... REAL_MODEL=... python3 -m pytest -q tests/integration/test_real_protocols.py`"
+    )
+    console.print(
+        "[yellow]Reason:[/yellow] this script currently only loads task files and would otherwise report a false success."
+    )
+    return 2
 
 
 if __name__ == "__main__":
