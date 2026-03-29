@@ -45,10 +45,7 @@ def load_config() -> dict[str, Any]:
         "anthropic": {
             "enabled": bool(os.getenv("ANTHROPIC_API_KEY")),
             "api_key": os.getenv("ANTHROPIC_API_KEY"),
-        },
-        "ollama": {
-            "enabled": os.getenv("OLLAMA_ENABLED", "true").lower() == "true",
-            "api_base": os.getenv("OLLAMA_API_BASE", "http://localhost:11434"),
+            "api_base": os.getenv("ANTHROPIC_API_BASE"),
         },
     }
 
@@ -158,7 +155,14 @@ class ToolCallInfo(BaseModel):
 
     id: str
     type: str = "function"
-    function: FunctionDefinition
+    function: "ToolCallFunction"
+
+
+class ToolCallFunction(BaseModel):
+    """Typed function call payload for assistant tool calls."""
+
+    name: str
+    arguments: str | dict[str, Any] = "{}"
 
 
 class ChatCompletionMessage(BaseModel):
@@ -185,6 +189,256 @@ class ChatCompletionRequest(BaseModel):
     top_p: float | None = None
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
+
+
+class AnthropicToolDefinition(BaseModel):
+    name: str
+    description: str = ""
+    input_schema: dict[str, Any] = {}
+
+
+class AnthropicMessage(BaseModel):
+    role: str
+    content: str | list[dict[str, Any]]
+
+
+class AnthropicMessagesRequest(BaseModel):
+    model: str
+    messages: list[AnthropicMessage]
+    system: str | None = None
+    tools: list[AnthropicToolDefinition] | None = None
+    temperature: float = 0.7
+    max_tokens: int | None = None
+    stream: bool = False
+    stop_sequences: list[str] | None = None
+    top_p: float | None = None
+
+
+def _parse_tool_call_arguments(arguments: str | dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize tool call arguments from either JSON string or dict form."""
+    if isinstance(arguments, dict):
+        return arguments
+    if not arguments:
+        return {}
+    try:
+        return json.loads(arguments)
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse tool call arguments: %s", str(arguments)[:200])
+        return {}
+
+
+def _build_openai_messages(request: ChatCompletionRequest) -> list[ChatMessage]:
+    """Convert OpenAI-format messages to the unified gateway schema."""
+    messages = []
+    for m in request.messages:
+        tool_calls = None
+        if m.tool_calls:
+            from .schema import ToolCall
+
+            tool_calls = [
+                ToolCall(
+                    id=tc.id,
+                    name=tc.function.name,
+                    arguments=_parse_tool_call_arguments(tc.function.arguments),
+                )
+                for tc in m.tool_calls
+            ]
+
+        messages.append(
+            ChatMessage(
+                role=m.role,
+                content=m.content,
+                tool_calls=tool_calls,
+                tool_call_id=m.tool_call_id,
+                name=m.name,
+            )
+        )
+    return messages
+
+
+def _build_openai_tools(
+    tools: list[ChatCompletionTool] | None,
+) -> list[ToolDefinition] | None:
+    """Convert OpenAI-format tools to the unified gateway schema."""
+    if not tools:
+        return None
+    return [
+        ToolDefinition(
+            name=t.function.name,
+            description=t.function.description,
+            parameters=t.function.parameters,
+        )
+        for t in tools
+    ]
+
+
+def _build_chat_request_from_openai(request: ChatCompletionRequest) -> ChatRequest:
+    """Translate an OpenAI-compatible chat request to the unified gateway schema."""
+    return ChatRequest(
+        model=request.model,
+        messages=_build_openai_messages(request),
+        tools=_build_openai_tools(request.tools),
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        stream=request.stream,
+        stop=request.stop,
+        top_p=request.top_p,
+        presence_penalty=request.presence_penalty,
+        frequency_penalty=request.frequency_penalty,
+    )
+
+
+def _build_chat_request_from_anthropic(request: AnthropicMessagesRequest) -> ChatRequest:
+    """Translate an Anthropic-compatible messages request to the unified gateway schema."""
+    from .schema import ToolCall
+
+    messages: list[ChatMessage] = []
+
+    if request.system:
+        messages.append(ChatMessage(role="system", content=request.system))
+
+    for message in request.messages:
+        content = message.content
+        if isinstance(content, str):
+            messages.append(ChatMessage(role=message.role, content=content))
+            continue
+
+        text_parts: list[str] = []
+        tool_calls: list[ToolCall] = []
+
+        for block in content:
+            block_type = block.get("type")
+            if block_type == "text":
+                text = block.get("text")
+                if text:
+                    text_parts.append(text)
+            elif block_type == "tool_use":
+                tool_calls.append(
+                    ToolCall(
+                        id=block.get("id", ""),
+                        name=block.get("name", ""),
+                        arguments=block.get("input") or {},
+                    )
+                )
+            elif block_type == "tool_result":
+                result_content = block.get("content")
+                if isinstance(result_content, list):
+                    result_content = "".join(
+                        part.get("text", "")
+                        for part in result_content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    )
+                messages.append(
+                    ChatMessage(
+                        role="tool",
+                        content=result_content if isinstance(result_content, str) else "",
+                        tool_call_id=block.get("tool_use_id"),
+                    )
+                )
+
+        if text_parts or tool_calls or message.role != "user":
+            messages.append(
+                ChatMessage(
+                    role=message.role,
+                    content="".join(text_parts) or None,
+                    tool_calls=tool_calls or None,
+                )
+            )
+
+    tools = None
+    if request.tools:
+        tools = [
+            ToolDefinition(
+                name=tool.name,
+                description=tool.description,
+                parameters=tool.input_schema,
+            )
+            for tool in request.tools
+        ]
+
+    return ChatRequest(
+        model=request.model,
+        messages=messages,
+        tools=tools,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        stream=request.stream,
+        stop=request.stop_sequences,
+        top_p=request.top_p,
+    )
+
+
+def _anthropic_stop_reason(finish_reason: str | None) -> str:
+    """Map unified finish reasons to Anthropic stop reasons."""
+    if finish_reason == "tool_calls":
+        return "tool_use"
+    if finish_reason == "length":
+        return "max_tokens"
+    return "end_turn"
+
+
+def _convert_chat_response_to_anthropic(response) -> dict[str, Any]:
+    """Convert a unified gateway response to Anthropic's message format."""
+    choice = response.choices[0] if response.choices else None
+    if isinstance(choice, dict):
+        message = choice.get("message")
+        finish_reason = choice.get("finish_reason")
+    else:
+        message = choice.message if choice else None
+        finish_reason = choice.finish_reason if choice else None
+
+    if isinstance(message, dict):
+        text_content = message.get("content")
+        raw_tool_calls = message.get("tool_calls") or []
+        tool_calls = [
+            {
+                "id": tc.get("id", ""),
+                "name": (tc.get("function") or {}).get("name", ""),
+                "arguments": (tc.get("function") or {}).get("arguments", {}),
+            }
+            for tc in raw_tool_calls
+        ]
+    else:
+        text_content = message.content if message else None
+        tool_calls = (message.tool_calls or []) if message else []
+
+    content: list[dict[str, Any]] = []
+    if text_content:
+        content.append({"type": "text", "text": text_content})
+    for tool_call in tool_calls:
+        if isinstance(tool_call, dict):
+            content.append(
+                {
+                    "type": "tool_use",
+                    "id": tool_call.get("id", ""),
+                    "name": tool_call.get("name", ""),
+                    "input": tool_call.get("arguments") or {},
+                }
+            )
+        else:
+            content.append(
+                {
+                    "type": "tool_use",
+                    "id": tool_call.id,
+                    "name": tool_call.name,
+                    "input": tool_call.arguments,
+                }
+            )
+
+    usage = response.usage.to_dict() if response.usage else {}
+    return {
+        "id": response.id,
+        "type": "message",
+        "role": "assistant",
+        "content": content,
+        "model": response.model,
+        "stop_reason": _anthropic_stop_reason(finish_reason),
+        "stop_sequence": None,
+        "usage": {
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+        },
+    }
 
 
 @app.get("/health")
@@ -289,63 +543,15 @@ async def chat_completions(
     if not router:
         raise HTTPException(status_code=503, detail="Gateway not initialized")
 
-    # Convert to internal format
-    messages = []
-    for m in request.messages:
-        tool_calls = None
-        if m.tool_calls:
-            from .schema import ToolCall
-
-            tool_calls = [
-                ToolCall(
-                    id=tc.id,
-                    type=tc.type,
-                    function={"name": tc.function.name, "arguments": tc.function.parameters},
-                )
-                for tc in m.tool_calls
-            ]
-
-        messages.append(
-            ChatMessage(
-                role=m.role,
-                content=m.content,
-                tool_calls=tool_calls,
-                tool_call_id=m.tool_call_id,
-                name=m.name,
-            )
-        )
-
-    tools = None
-    if request.tools:
-        tools = [
-            ToolDefinition(
-                name=t.function.name,
-                description=t.function.description,
-                parameters=t.function.parameters,
-            )
-            for t in request.tools
-        ]
-
-    chat_request = ChatRequest(
-        model=request.model,
-        messages=messages,
-        tools=tools,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-        stream=request.stream,
-        stop=request.stop,
-        top_p=request.top_p,
-        presence_penalty=request.presence_penalty,
-        frequency_penalty=request.frequency_penalty,
-    )
+    chat_request = _build_chat_request_from_openai(request)
 
     if request.stream:
         return StreamingResponse(
-            stream_response(chat_request, router),
+            stream_response(chat_request, router, preferred_provider="openai"),
             media_type="text/event-stream",
         )
 
-    response = await router.chat(chat_request)
+    response = await router.chat(chat_request, preferred_provider="openai")
 
     if isinstance(response, ErrorResponse):
         raise HTTPException(
@@ -356,10 +562,42 @@ async def chat_completions(
     return response.to_dict()
 
 
-async def stream_response(request: ChatRequest, router: ModelRouter):
+@app.post("/v1/messages")
+async def anthropic_messages(
+    request: AnthropicMessagesRequest,
+    raw_request: Request,
+    x_api_key: str | None = Header(None),
+    authorization: str | None = Header(None),
+):
+    """Create a message using Anthropic-compatible request/response bodies."""
+    auth_header = authorization or x_api_key
+    if not verify_api_key(auth_header):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    router = getattr(raw_request.app.state, "router", None)
+    if not router:
+        raise HTTPException(status_code=503, detail="Gateway not initialized")
+
+    if request.stream:
+        raise HTTPException(status_code=501, detail="Anthropic streaming is not implemented")
+
+    chat_request = _build_chat_request_from_anthropic(request)
+    response = await router.chat(chat_request, preferred_provider="anthropic")
+
+    if isinstance(response, ErrorResponse):
+        raise HTTPException(status_code=500, detail=response.to_dict())
+
+    return _convert_chat_response_to_anthropic(response)
+
+
+async def stream_response(
+    request: ChatRequest,
+    router: ModelRouter,
+    preferred_provider: str | None = None,
+):
     """Generate SSE stream for chat completion."""
     try:
-        async for chunk in router.chat_stream(request):
+        async for chunk in router.chat_stream(request, preferred_provider=preferred_provider):
             if isinstance(chunk, ErrorResponse):
                 yield f"data: {json.dumps(chunk.to_dict())}\n\n"
                 break

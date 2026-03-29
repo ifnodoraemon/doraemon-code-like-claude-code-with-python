@@ -7,7 +7,6 @@ from typing import Any
 from .adapters.anthropic_adapter import AnthropicAdapter
 from .adapters.base import AdapterConfig, BaseAdapter
 from .adapters.google_adapter import GoogleAdapter
-from .adapters.ollama_adapter import OllamaAdapter
 from .adapters.openai_adapter import OpenAIAdapter
 from .schema import ChatRequest, ChatResponse, ErrorResponse, ModelInfo, StreamChunk
 
@@ -21,7 +20,6 @@ class ModelRouter:
         "google": ["gemini-", "palm-"],
         "openai": ["gpt-", "o1", "o3"],
         "anthropic": ["claude-"],
-        "ollama": [],
     }
 
     def __init__(self, config: dict[str, Any]):
@@ -35,7 +33,6 @@ class ModelRouter:
             "google": GoogleAdapter,
             "openai": OpenAIAdapter,
             "anthropic": AnthropicAdapter,
-            "ollama": OllamaAdapter,
         }
 
         for provider, adapter_class in adapter_classes.items():
@@ -61,7 +58,12 @@ class ModelRouter:
             except Exception as e:
                 logger.error(f"Failed to initialize {provider}: {type(e).__name__}")
 
-    def _get_adapter(self, model_id: str) -> BaseAdapter | None:
+    def _get_adapter(
+        self, model_id: str, preferred_provider: str | None = None
+    ) -> BaseAdapter | None:
+        if preferred_provider and preferred_provider in self._adapters:
+            return self._adapters[preferred_provider]
+
         provider = self._model_cache.get(model_id)
         if not provider:
             for p, patterns in self.PROVIDER_PATTERNS.items():
@@ -70,12 +72,14 @@ class ModelRouter:
                         if model_id.startswith(pat):
                             provider = p
                             break
-        if not provider and "ollama" in self._adapters:
-            provider = "ollama"
         return self._adapters.get(provider) if provider else None
 
-    async def chat(self, request: ChatRequest) -> ChatResponse | ErrorResponse:
-        adapter = self._get_adapter(request.model)
+    async def chat(
+        self,
+        request: ChatRequest,
+        preferred_provider: str | None = None,
+    ) -> ChatResponse | ErrorResponse:
+        adapter = self._get_adapter(request.model, preferred_provider=preferred_provider)
         if not adapter:
             return ErrorResponse(error=f"Model not found: {request.model}", code="model_not_found")
         try:
@@ -83,8 +87,12 @@ class ModelRouter:
         except Exception as e:
             return ErrorResponse(error=str(e), code="provider_error")
 
-    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[StreamChunk | ErrorResponse]:
-        adapter = self._get_adapter(request.model)
+    async def chat_stream(
+        self,
+        request: ChatRequest,
+        preferred_provider: str | None = None,
+    ) -> AsyncIterator[StreamChunk | ErrorResponse]:
+        adapter = self._get_adapter(request.model, preferred_provider=preferred_provider)
         if not adapter:
             yield ErrorResponse(error=f"Model not found: {request.model}", code="model_not_found")
             return

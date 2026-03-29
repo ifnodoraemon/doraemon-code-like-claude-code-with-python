@@ -1,7 +1,7 @@
 """
 Direct Model Client
 
-Client that connects directly to provider APIs (Google, OpenAI, Anthropic, Ollama).
+Client that connects directly to provider APIs (Google, OpenAI, Anthropic).
 """
 
 import asyncio
@@ -21,6 +21,7 @@ from src.core.llm.model_utils import (
     StreamChunk,
     ToolDefinition,
     get_content_text,
+    normalize_anthropic_base_url,
 )
 from src.core.llm.provider_adapters import (
     AnthropicAdapter,
@@ -103,7 +104,6 @@ class DirectModelClient(BaseModelClient):
         Provider.GOOGLE: ["gemini-", "palm-"],
         Provider.OPENAI: ["gpt-", "o1", "o3"],
         Provider.ANTHROPIC: ["claude-"],
-        Provider.OLLAMA: [],
     }
 
     def __init__(self, config: ClientConfig):
@@ -145,7 +145,10 @@ class DirectModelClient(BaseModelClient):
             try:
                 from openai import AsyncOpenAI
 
-                self._providers[Provider.OPENAI] = AsyncOpenAI(api_key=self.config.openai_api_key)
+                self._providers[Provider.OPENAI] = AsyncOpenAI(
+                    api_key=self.config.openai_api_key,
+                    base_url=self.config.openai_api_base,
+                )
                 logger.info("OpenAI client initialized")
             except ImportError:
                 logger.warning("openai not installed")
@@ -156,21 +159,12 @@ class DirectModelClient(BaseModelClient):
                 from anthropic import AsyncAnthropic
 
                 self._providers[Provider.ANTHROPIC] = AsyncAnthropic(
-                    api_key=self.config.anthropic_api_key
+                    api_key=self.config.anthropic_api_key,
+                    base_url=normalize_anthropic_base_url(self.config.anthropic_api_base),
                 )
                 logger.info("Anthropic client initialized")
             except ImportError:
                 logger.warning("anthropic not installed")
-
-        # Ollama (always available if running)
-        try:
-            from src.core.http_pool import get_shared_client
-
-            self._providers[Provider.OLLAMA] = await get_shared_client()
-            self._ollama_base_url = self.config.ollama_base_url
-            logger.info("Ollama client initialized")
-        except Exception:
-            pass
 
         if not self._providers:
             raise RuntimeError("No providers available. Check your API keys.")
@@ -214,10 +208,8 @@ class DirectModelClient(BaseModelClient):
                 return await self._chat_google(messages, tools, **kwargs)
             elif provider == Provider.OPENAI:
                 return await self._chat_openai(messages, tools, **kwargs)
-            elif provider == Provider.ANTHROPIC:
-                return await self._chat_anthropic(messages, tools, **kwargs)
             else:
-                return await self._chat_ollama(messages, tools, **kwargs)
+                return await self._chat_anthropic(messages, tools, **kwargs)
 
         try:
             if breaker:
@@ -289,7 +281,6 @@ class DirectModelClient(BaseModelClient):
         **kwargs,
     ) -> ChatResponse:
         """Chat with OpenAI."""
-        client = self._providers[Provider.OPENAI]
         model = kwargs.get("model", self.config.model)
         temperature = kwargs.get("temperature", self.config.temperature)
 
@@ -298,6 +289,7 @@ class DirectModelClient(BaseModelClient):
             model, msg_list, tools, temperature, self.config.max_tokens
         )
 
+        client = self._providers[Provider.OPENAI]
         response = await client.chat.completions.create(**params)
 
         if not response.choices:
@@ -388,53 +380,6 @@ class DirectModelClient(BaseModelClient):
             raw=response,
         )
 
-    async def _chat_ollama(
-        self,
-        messages: Sequence[Message | dict],
-        tools: Sequence[ToolDefinition | dict] | None = None,
-        **kwargs,
-    ) -> ChatResponse:
-        """Chat with Ollama."""
-        client = self._providers[Provider.OLLAMA]
-        model = kwargs.get("model", self.config.model)
-        base_url = getattr(self, "_ollama_base_url", "http://localhost:11434")
-
-        msg_list = []
-        for m in messages:
-            msg = m if isinstance(m, dict) else m.to_dict()
-            content = get_content_text(msg.get("content", ""))
-            msg_list.append(
-                {
-                    "role": msg.get("role", "user"),
-                    "content": content,
-                }
-            )
-
-        payload = {
-            "model": model,
-            "messages": msg_list,
-            "stream": False,
-            "options": {
-                "temperature": kwargs.get("temperature", self.config.temperature),
-            },
-        }
-
-        response = await client.post(f"{base_url}/api/chat", json=payload)
-        response.raise_for_status()
-        data = response.json()
-
-        return ChatResponse(
-            content=data.get("message", {}).get("content"),
-            tool_calls=None,
-            finish_reason="stop",
-            usage={
-                "prompt_tokens": data.get("prompt_eval_count", 0),
-                "completion_tokens": data.get("eval_count", 0),
-                "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
-            },
-            raw=data,
-        )
-
     async def chat_stream(
         self,
         messages: Sequence[Message | dict],
@@ -454,18 +399,9 @@ class DirectModelClient(BaseModelClient):
         elif provider == Provider.OPENAI:
             async for chunk in self._stream_openai(messages, tools, **kwargs):
                 yield chunk
-        elif provider == Provider.ANTHROPIC:
+        else:
             async for chunk in self._stream_anthropic(messages, tools, **kwargs):
                 yield chunk
-        else:
-            # Ollama: fallback to non-streaming
-            response = await self.chat(messages, tools, **kwargs)
-            yield StreamChunk(
-                content=response.content,
-                tool_calls=response.tool_calls,
-                finish_reason=response.finish_reason,
-                usage=response.usage,
-            )
 
     async def _stream_google(
         self,

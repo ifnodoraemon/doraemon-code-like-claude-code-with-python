@@ -71,6 +71,20 @@ def is_image_path(path_str: str) -> bool:
     return Path(path_str).suffix.lower() in IMAGE_EXTENSIONS
 
 
+def normalize_anthropic_base_url(base_url: str | None) -> str | None:
+    """Normalize Anthropic SDK base URLs.
+
+    Anthropic's SDK already appends `/v1/...`, so user-supplied OpenAI-style
+    endpoints like `http://host/v1` must be reduced to `http://host`.
+    """
+    if not base_url:
+        return None
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/v1"):
+        normalized = normalized[:-3]
+    return normalized
+
+
 class ClientMode(Enum):
     """Client connection mode."""
 
@@ -84,7 +98,6 @@ class Provider(Enum):
     GOOGLE = "google"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
-    OLLAMA = "ollama"
 
 
 @dataclass
@@ -210,13 +223,14 @@ class ClientConfig:
     # Direct mode settings - provider API keys
     google_api_key: str | None = None
     openai_api_key: str | None = None
+    openai_api_base: str | None = None
     anthropic_api_key: str | None = None
-    ollama_base_url: str = "http://localhost:11434"
+    anthropic_api_base: str | None = None
 
     @classmethod
     def from_env(cls) -> "ClientConfig":
         """Load runtime configuration from the project config file."""
-        from src.core.config.config import load_config
+        from src.core.config import load_config
 
         config_data = load_config()
         model = config_data.get("model")
@@ -234,6 +248,7 @@ class ClientConfig:
             gateway_key=config_data.get("gateway_key"),
             google_api_key=config_data.get("google_api_key"),
             openai_api_key=config_data.get("openai_api_key"),
+            openai_api_base=config_data.get("openai_api_base"),
             anthropic_api_key=config_data.get("anthropic_api_key"),
-            ollama_base_url=config_data.get("ollama_base_url", "http://localhost:11434"),
+            anthropic_api_base=config_data.get("anthropic_api_base"),
         )

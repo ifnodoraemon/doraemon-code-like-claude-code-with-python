@@ -9,6 +9,8 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from src.core.llm.model_utils import normalize_anthropic_base_url
+
 from ..schema import (
     ChatMessage,
     ChatRequest,
@@ -91,7 +93,7 @@ class AnthropicAdapter(BaseAdapter):
 
             self._client = AsyncAnthropic(
                 api_key=self.config.api_key,
-                base_url=self.config.api_base,
+                base_url=normalize_anthropic_base_url(self.config.api_base),
                 timeout=self.config.timeout,
                 max_retries=self.config.max_retries,
             )
