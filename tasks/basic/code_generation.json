@@ -71,7 +71,7 @@
     "category": "basic",
     "difficulty": "hard",
     "description": "Add type hints",
-    "prompt": "Edit utils.py and add Python type hints to all functions.",
+    "prompt": "Edit utils.py and add Python type hints to all functions. Use `str` for `process` and `int` for `calculate`.",
     "setup": {
       "files": {
         "utils.py": "def process(data):\n    return data.upper()\n\ndef calculate(x, y):\n    return x + y"

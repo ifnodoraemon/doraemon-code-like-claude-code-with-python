@@ -73,12 +73,8 @@ python3 scripts/run_evals.py --category basic
 
 Current real-eval baseline as of `2026-03-30`:
 
-- `basic`: `5/6`
+- `basic`: `6/6`
 - `advanced --limit 3`: `3/3`
-
-Known issue:
-
-- `basic/code_005` fails due to task assertion mismatch on the expected typed function signature, not because of provider protocol failure.
 
 ### Code Quality
 

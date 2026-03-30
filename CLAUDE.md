@@ -544,5 +544,5 @@ REAL_MODEL='claude-sonnet-4-6'
 
 Current real eval status:
 
-- `basic`: `5/6`
+- `basic`: `6/6`
 - `advanced --limit 3`: `3/3`
