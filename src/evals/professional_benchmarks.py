@@ -147,6 +147,22 @@ class ProfessionalBenchmarkRunner:
 
                 os.chdir(sandbox_dir)
                 response = self.agent.execute(task.prompt)
+                trace_path = response.metadata.get("trace_path")
+                tool_calls = [tc.name for tc in response.tool_calls]
+
+                if not response.success:
+                    error = "; ".join(response.errors) or "agent execution failed"
+                    return BenchmarkResult(
+                        task_id=task.id,
+                        suite=task.suite,
+                        passed=False,
+                        duration=time.time() - start,
+                        output=response.output,
+                        tool_calls=tool_calls,
+                        trace_path=trace_path,
+                        error=error,
+                    )
+
                 passed, error = self._verify_task(task, sandbox_dir, response.output)
                 return BenchmarkResult(
                     task_id=task.id,
@@ -154,8 +170,8 @@ class ProfessionalBenchmarkRunner:
                     passed=passed,
                     duration=time.time() - start,
                     output=response.output,
-                    tool_calls=[tc.name for tc in response.tool_calls],
-                    trace_path=response.metadata.get("trace_path"),
+                    tool_calls=tool_calls,
+                    trace_path=trace_path,
                     error=error,
                 )
             except Exception as e:

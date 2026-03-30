@@ -293,6 +293,10 @@ class DoraemonAgentAdapter(AgentAdapter):
                 # Execute with timeout
                 response = self._execute_with_timeout(prompt)
 
+                if not response.get("success", True):
+                    error_msg = response.get("error") or "Agent execution failed"
+                    raise RuntimeError(error_msg)
+
                 output = response.get("output", "")
                 tool_calls = response.get("tool_calls", [])
                 token_usage = response.get("token_usage", TokenUsage())
@@ -419,6 +423,8 @@ class DoraemonAgentAdapter(AgentAdapter):
             )
 
             return {
+                "success": result.success,
+                "error": result.error,
                 "output": result.response or "",
                 "tool_calls": tool_calls,
                 "token_usage": token_usage,
