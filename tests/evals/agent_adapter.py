@@ -363,12 +363,18 @@ class DoraemonAgentAdapter(AgentAdapter):
         if real_api_base and real_api_key and real_model:
             from src.core.llm.model_utils import ClientMode
 
-            config = self._client_config_cls(
-                mode=ClientMode.DIRECT,
-                model=real_model,
-                openai_api_base=real_api_base,
-                openai_api_key=real_api_key,
-            )
+            config_kwargs: dict[str, Any] = {
+                "mode": ClientMode.DIRECT,
+                "model": real_model,
+            }
+            if real_model.startswith("claude-"):
+                config_kwargs["anthropic_api_base"] = real_api_base
+                config_kwargs["anthropic_api_key"] = real_api_key
+            else:
+                config_kwargs["openai_api_base"] = real_api_base
+                config_kwargs["openai_api_key"] = real_api_key
+
+            config = self._client_config_cls(**config_kwargs)
         else:
             config = self._client_config_cls.from_env()
             if real_model:

@@ -4,6 +4,8 @@ Unit tests for model_client.py
 Tests the unified model client interface, retry logic, and error handling.
 """
 
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -230,10 +232,57 @@ class TestDirectModelClient:
         )
         client = DirectModelClient(config)
 
-        # Mock httpx to fail so Ollama also fails
+        # Mock httpx so direct OpenAI-compatible initialization also fails
         with patch("httpx.AsyncClient", side_effect=Exception("No httpx")):
             with pytest.raises(RuntimeError, match="No providers available"):
                 await client.connect()
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_prefers_responses_api(self):
+        """Test that OpenAI direct chat prefers the Responses API."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.responses.create.return_value = types.SimpleNamespace(
+            output_text="pong",
+            output=[],
+            usage=types.SimpleNamespace(input_tokens=3, output_tokens=1),
+            status="completed",
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai([Message(role="user", content="ping")])
+
+        mock_provider.responses.create.assert_called_once()
+        mock_provider.chat.completions.create.assert_not_called()
+        assert response.content == "pong"
+        assert response.usage == {
+            "prompt_tokens": 3,
+            "completion_tokens": 1,
+            "total_tokens": 4,
+        }
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_rejects_string_responses_payload(self):
+        """Test that string payloads from responses API fail clearly."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.responses.create.return_value = "<html>not json</html>"
+        client._providers[Provider.OPENAI] = mock_provider
+
+        with pytest.raises(RuntimeError, match="non-OpenAI responses payload"):
+            await client._chat_openai([Message(role="user", content="ping")])
 
 
 class TestModelClient:
@@ -815,7 +864,8 @@ class TestDirectModelClientProviderDetection:
         )
         client = DirectModelClient(config)
 
-        with patch("anthropic.AsyncAnthropic"):
+        anthropic_module = types.SimpleNamespace(AsyncAnthropic=MagicMock())
+        with patch.dict(sys.modules, {"anthropic": anthropic_module}):
             await client.connect()
             provider = client._detect_provider("claude-3-sonnet")
             assert provider == Provider.ANTHROPIC

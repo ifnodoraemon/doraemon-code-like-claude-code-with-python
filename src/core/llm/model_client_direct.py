@@ -281,17 +281,39 @@ class DirectModelClient(BaseModelClient):
         tools: Sequence[ToolDefinition | dict] | None = None,
         **kwargs,
     ) -> ChatResponse:
-        """Chat with OpenAI."""
+        """Chat with OpenAI.
+
+        Prefer the Responses API for newer OpenAI-compatible models and fall back
+        to Chat Completions when the upstream does not support `/responses`.
+        """
         model = kwargs.get("model", self.config.model)
         temperature = kwargs.get("temperature", self.config.temperature)
 
         msg_list = OpenAIAdapter.convert_messages(messages)
-        params = OpenAIAdapter.build_params(
-            model, msg_list, tools, temperature, self.config.max_tokens
-        )
-
         client = self._providers[Provider.OPENAI]
+        response_tools = self._build_openai_responses_tools(tools)
+
+        try:
+            response = await client.responses.create(
+                **self._build_openai_responses_params(
+                    model=model,
+                    msg_list=msg_list,
+                    tools=response_tools,
+                    temperature=temperature,
+                    max_output_tokens=self.config.max_tokens,
+                )
+            )
+            return self._parse_openai_responses_response(response)
+        except Exception as e:
+            if not self._should_fallback_to_chat_completions(e):
+                raise
+            logger.warning("OpenAI Responses API unavailable, falling back to chat.completions: %s", e)
+
+        params = OpenAIAdapter.build_params(model, msg_list, tools, temperature, self.config.max_tokens)
         response = await client.chat.completions.create(**params)
+
+        if isinstance(response, str):
+            raise RuntimeError("Provider returned non-OpenAI chat response (string body)")
 
         if not response.choices:
             logger.warning("No choices in OpenAI response")
@@ -329,6 +351,122 @@ class DirectModelClient(BaseModelClient):
             }
             if response.usage
             else None,
+            raw=response,
+        )
+
+    @staticmethod
+    def _build_openai_responses_tools(
+        tools: Sequence[ToolDefinition | dict] | None,
+    ) -> list[dict] | None:
+        """Convert chat-completions style tools into Responses API tools."""
+        if not tools:
+            return None
+
+        response_tools: list[dict] = []
+        for tool in tools:
+            formatted = tool.to_openai_format() if isinstance(tool, ToolDefinition) else tool
+            if formatted.get("type") != "function":
+                response_tools.append(formatted)
+                continue
+
+            function = formatted.get("function", {})
+            response_tools.append(
+                {
+                    "type": "function",
+                    "name": function.get("name"),
+                    "description": function.get("description", ""),
+                    "parameters": function.get("parameters", {}),
+                }
+            )
+        return response_tools
+
+    @staticmethod
+    def _build_openai_responses_params(
+        *,
+        model: str,
+        msg_list: list[dict],
+        tools: list[dict] | None,
+        temperature: float,
+        max_output_tokens: int | None,
+    ) -> dict[str, Any]:
+        """Build request params for the OpenAI Responses API."""
+        params: dict[str, Any] = {
+            "model": model,
+            "input": msg_list,
+            "temperature": temperature,
+            "store": False,
+        }
+        if tools:
+            params["tools"] = tools
+        if max_output_tokens:
+            params["max_output_tokens"] = max_output_tokens
+        return params
+
+    @staticmethod
+    def _should_fallback_to_chat_completions(exc: Exception) -> bool:
+        """Detect when an upstream likely does not support `/responses`."""
+        message = str(exc).lower()
+        if "non-openai responses payload" in message:
+            return False
+        fallback_markers = [
+            "/responses",
+            "responses",
+            "not found",
+            "404",
+            "bad_response_status_code",
+            "unsupported",
+        ]
+        return any(marker in message for marker in fallback_markers)
+
+    @staticmethod
+    def _parse_openai_responses_response(response: Any) -> ChatResponse:
+        """Parse an OpenAI Responses API object into the unified ChatResponse."""
+        if isinstance(response, str):
+            raise RuntimeError("Provider returned non-OpenAI responses payload (string body)")
+
+        output_text = getattr(response, "output_text", None)
+        content = output_text or None
+        tool_calls: list[dict] | None = None
+
+        for item in getattr(response, "output", []) or []:
+            item_type = getattr(item, "type", None)
+            if item_type == "message" and not content:
+                for part in getattr(item, "content", []) or []:
+                    if getattr(part, "type", None) in {"output_text", "text"}:
+                        text = getattr(part, "text", None)
+                        if text:
+                            content = (content or "") + text
+            elif item_type in {"function_call", "tool_call"}:
+                if tool_calls is None:
+                    tool_calls = []
+                arguments = getattr(item, "arguments", None)
+                tool_calls.append(
+                    {
+                        "id": getattr(item, "call_id", None) or getattr(item, "id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": getattr(item, "name", ""),
+                            "arguments": arguments if isinstance(arguments, str) else json.dumps(arguments or {}),
+                        },
+                    }
+                )
+
+        usage = None
+        if getattr(response, "usage", None):
+            usage = {
+                "prompt_tokens": getattr(response.usage, "input_tokens", 0),
+                "completion_tokens": getattr(response.usage, "output_tokens", 0),
+                "total_tokens": (
+                    getattr(response.usage, "input_tokens", 0)
+                    + getattr(response.usage, "output_tokens", 0)
+                ),
+            }
+
+        return ChatResponse(
+            content=content,
+            tool_calls=tool_calls,
+            finish_reason=getattr(response, "status", None),
+            usage=usage,
             raw=response,
         )
 
