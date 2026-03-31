@@ -1,10 +1,5 @@
 """Tool selection by mode."""
 
-import logging
-
-logger = logging.getLogger(__name__)
-
-
 # ========================================
 # 工具定义
 # ========================================
@@ -37,13 +32,6 @@ AUX_TOOLS = [
     "search_notes",  # 搜索笔记
 ]
 
-# 高级工具 - 特殊场景
-ADVANCED_TOOLS = [
-    "semantic_search",  # 语义搜索
-    "index_codebase",  # 索引代码库
-]
-
-
 class ToolSelector:
     """
     简化的工具选择器
@@ -52,14 +40,11 @@ class ToolSelector:
     """
 
     def __init__(self):
-        # plan 模式：只读 + 辅助
-        self.plan_tools = READ_TOOLS + AUX_TOOLS
+        # plan 模式：最小只读工具集
+        self.plan_tools = READ_TOOLS.copy()
 
-        # build 模式：全部工具
-        self.build_tools = READ_TOOLS + WRITE_TOOLS + AUX_TOOLS + ADVANCED_TOOLS
-
-        # MCP 扩展工具（运行时加载）
-        self.mcp_tools: list[str] = []
+        # build 模式：最小 coding 工具集
+        self.build_tools = READ_TOOLS + WRITE_TOOLS
 
     def get_tools_for_mode(self, mode: str) -> list[str]:
         """
@@ -76,36 +61,7 @@ class ToolSelector:
         else:  # build
             tools = self.build_tools.copy()
 
-        # 添加 MCP 扩展工具
-        tools.extend(self.mcp_tools)
-
         return tools
-
-    def register_mcp_tools(self, tool_names: list[str]) -> None:
-        """
-        注册 MCP 扩展工具
-
-        Args:
-            tool_names: MCP 工具名称列表
-        """
-        for name in tool_names:
-            if name not in self.mcp_tools:
-                self.mcp_tools.append(name)
-                logger.info(f"Registered MCP tool: {name}")
-
-    def unregister_mcp_tools(self, tool_names: list[str] | None = None) -> None:
-        """
-        注销 MCP 扩展工具
-
-        Args:
-            tool_names: 要注销的工具，None 表示全部注销
-        """
-        if tool_names is None:
-            self.mcp_tools.clear()
-        else:
-            for name in tool_names:
-                if name in self.mcp_tools:
-                    self.mcp_tools.remove(name)
 
 
 _default_selector: ToolSelector | None = None

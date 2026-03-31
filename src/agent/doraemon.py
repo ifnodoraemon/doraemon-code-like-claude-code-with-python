@@ -2,7 +2,7 @@
 Doraemon Agent - Production Agent for Doraemon Code
 
 Integrates the standard ReActAgent with Doraemon's existing infrastructure:
-- ToolRegistry for tool execution (built-in + MCP)
+- ToolRegistry for built-in tool execution
 - HookManager for lifecycle events
 - Skills system
 - Checkpoint system
@@ -70,7 +70,8 @@ class DoraemonAgent(ReActAgent):
         session_id: str | None = None,
         **kwargs,
     ):
-        tools = self._convert_registry_to_tools(tool_registry)
+        mode = state.mode if state else "build"
+        tools = self._convert_registry_to_tools(tool_registry, mode=mode)
         super().__init__(
             llm_client=llm_client,
             state=state,
@@ -124,9 +125,15 @@ class DoraemonAgent(ReActAgent):
     def _convert_registry_to_tools(
         self,
         registry: Any,
+        *,
+        mode: str = "build",
     ) -> list[ToolDefinition]:
-        """Convert ToolRegistry/MCPToolRegistry tools to agent ToolDefinitions."""
+        """Convert registry tool definitions into agent ToolDefinitions."""
+        from src.core.tool_selector import get_tools_for_mode
+        from src.host.tools import LazyToolFunction
+
         tools = []
+        allowed_tool_names = set(get_tools_for_mode(mode))
 
         if hasattr(registry, "_tool_schemas"):
             for name, schema in registry._tool_schemas.items():
@@ -143,9 +150,19 @@ class DoraemonAgent(ReActAgent):
 
         if hasattr(registry, "_tools"):
             for name in registry.get_tool_names():
+                if name not in allowed_tool_names:
+                    continue
                 if name not in [t.name for t in tools]:
                     tool_def = registry._tools.get(name)
                     if tool_def:
+                        func = getattr(tool_def, "function", None)
+                        if isinstance(func, LazyToolFunction) and getattr(func, "_load_error", None):
+                            logger.warning(
+                                "Skipping unavailable tool '%s' from agent-visible tool list: %s",
+                                name,
+                                func._load_error,
+                            )
+                            continue
                         tools.append(
                             ToolDefinition(
                                 name=tool_def.name,
@@ -411,7 +428,7 @@ def create_doraemon_agent(
     )
 
 
-async def create_doraemon_agent_with_mcp(
+async def create_doraemon_agent_with_tools(
     llm_client: Any,
     mode: str = "build",
     config_path: Path | None = None,
@@ -423,14 +440,14 @@ async def create_doraemon_agent_with_mcp(
     max_turns: int = 100,
 ) -> DoraemonAgent:
     """
-    Factory function to create a DoraemonAgent with MCP support.
+    Factory function to create a DoraemonAgent with the built-in tool registry.
 
-    Loads built-in tools and connects to MCP servers from config.
+    Loads the built-in tool registry from project config.
 
     Args:
         llm_client: Model client for LLM calls
         mode: Agent mode ("plan" or "build")
-        config_path: Path to MCP config file (defaults to .agent/config.json)
+        config_path: Path to project config file (defaults to .agent/config.json)
         hooks: Hook manager for lifecycle events
         checkpoints: Checkpoint manager for file snapshots
         skills: Skill manager for skill loading
@@ -439,16 +456,41 @@ async def create_doraemon_agent_with_mcp(
         max_turns: Maximum number of turns
 
     Returns:
-        Configured DoraemonAgent instance with MCP tools loaded
+        Configured DoraemonAgent instance with built-in tools loaded
     """
-    from src.host.mcp_registry import create_unified_registry
+    from src.host.mcp_registry import create_tool_registry
 
-    registry = await create_unified_registry(config_path)
+    registry = await create_tool_registry(config_path)
 
     return create_doraemon_agent(
         llm_client=llm_client,
         tool_registry=registry,
         mode=mode,
+        hooks=hooks,
+        checkpoints=checkpoints,
+        skills=skills,
+        permission_callback=permission_callback,
+        display_callback=display_callback,
+        max_turns=max_turns,
+    )
+
+
+async def create_doraemon_agent_with_mcp(
+    llm_client: Any,
+    mode: str = "build",
+    config_path: Path | None = None,
+    hooks: HookManager | None = None,
+    checkpoints: Any = None,
+    skills: Any = None,
+    permission_callback: Callable | None = None,
+    display_callback: Callable | None = None,
+    max_turns: int = 100,
+) -> DoraemonAgent:
+    """Backward-compatible alias for older callers."""
+    return await create_doraemon_agent_with_tools(
+        llm_client=llm_client,
+        mode=mode,
+        config_path=config_path,
         hooks=hooks,
         checkpoints=checkpoints,
         skills=skills,

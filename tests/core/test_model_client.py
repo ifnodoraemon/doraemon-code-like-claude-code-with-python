@@ -268,6 +268,72 @@ class TestDirectModelClient:
         }
 
     @pytest.mark.asyncio
+    async def test_chat_openai_skips_responses_for_custom_base_url(self):
+        """Third-party OpenAI-compatible upstreams should go straight to chat.completions."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://api-inference.modelscope.cn/v1",
+            model="ZhipuAI/GLM-5",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="pong", tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai([Message(role="user", content="ping")])
+
+        mock_provider.responses.create.assert_not_called()
+        mock_provider.chat.completions.create.assert_called_once()
+        assert response.content == "pong"
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_skips_responses_for_tool_history(self):
+        """Chat-style tool history should bypass Responses API until we encode it natively."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="done", tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai(
+            [
+                Message(
+                    role="assistant",
+                    content="calling tool",
+                    tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "read", "arguments": "{}"}}],
+                ),
+                Message(role="tool", content="result", tool_call_id="call_1", name="read"),
+            ]
+        )
+
+        mock_provider.responses.create.assert_not_called()
+        mock_provider.chat.completions.create.assert_called_once()
+        assert response.content == "done"
+
+    @pytest.mark.asyncio
     async def test_chat_openai_rejects_string_responses_payload(self):
         """Test that string payloads from responses API fail clearly."""
         config = ClientConfig(
@@ -283,6 +349,95 @@ class TestDirectModelClient:
 
         with pytest.raises(RuntimeError, match="non-OpenAI responses payload"):
             await client._chat_openai([Message(role="user", content="ping")])
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_falls_back_when_responses_object_is_failed(self):
+        """Test fallback when Responses API returns a failed response object."""
+        from src.core.llm.model_utils import ToolDefinition
+
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.responses.create.return_value = types.SimpleNamespace(
+            status="failed",
+            error=types.SimpleNamespace(message="Unsupported model: glm-5"),
+        )
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content=None, tool_calls=[
+                        types.SimpleNamespace(
+                            id="call_1",
+                            function=types.SimpleNamespace(name="write", arguments='{"path":"a.txt","content":"hello"}'),
+                        )
+                    ]),
+                    finish_reason="tool_calls",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai(
+            [Message(role="user", content="use write")],
+            tools=[
+                ToolDefinition(
+                    name="write",
+                    description="Write file",
+                    parameters={"type": "object"},
+                )
+            ],
+        )
+
+        mock_provider.responses.create.assert_called_once()
+        mock_provider.chat.completions.create.assert_called_once()
+        assert response.tool_calls is not None
+        assert response.tool_calls[0]["function"]["name"] == "write"
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_falls_back_when_responses_object_has_top_level_error_fields(self):
+        """Test fallback when Responses API returns a malformed object with code/message fields."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.responses.create.return_value = types.SimpleNamespace(
+            status=None,
+            error=None,
+            code="InvalidParameter",
+            message="Invalid role value: 'tool'",
+            output=None,
+        )
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="done", tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai(
+            [
+                Message(role="user", content="ping"),
+                Message(role="tool", content="pong", tool_call_id="call_1", name="read"),
+            ]
+        )
+
+        mock_provider.responses.create.assert_called_once()
+        mock_provider.chat.completions.create.assert_called_once()
+        assert response.content == "done"
 
 
 class TestModelClient:

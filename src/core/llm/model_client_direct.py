@@ -293,21 +293,41 @@ class DirectModelClient(BaseModelClient):
         client = self._providers[Provider.OPENAI]
         response_tools = self._build_openai_responses_tools(tools)
 
-        try:
-            response = await client.responses.create(
-                **self._build_openai_responses_params(
-                    model=model,
-                    msg_list=msg_list,
-                    tools=response_tools,
-                    temperature=temperature,
-                    max_output_tokens=self.config.max_tokens,
+        if self._should_use_openai_responses_api(msg_list):
+            try:
+                response = await client.responses.create(
+                    **self._build_openai_responses_params(
+                        model=model,
+                        msg_list=msg_list,
+                        tools=response_tools,
+                        temperature=temperature,
+                        max_output_tokens=self.config.max_tokens,
+                    )
                 )
-            )
-            return self._parse_openai_responses_response(response)
-        except Exception as e:
-            if not self._should_fallback_to_chat_completions(e):
-                raise
-            logger.warning("OpenAI Responses API unavailable, falling back to chat.completions: %s", e)
+                if isinstance(response, str):
+                    raise RuntimeError("Provider returned non-OpenAI responses payload (string body)")
+                response_error = getattr(response, "error", None)
+                response_status = getattr(response, "status", None)
+                response_code = getattr(response, "code", None)
+                response_message = getattr(response, "message", None)
+                response_output = getattr(response, "output", None)
+                if (
+                    response_error
+                    or response_status == "failed"
+                    or response_code
+                    or response_message
+                    or (response_status is None and response_output is None)
+                ):
+                    error_msg = getattr(response_error, "message", None) if response_error else None
+                    raise RuntimeError(
+                        "OpenAI Responses API failed: "
+                        f"{error_msg or response_message or response_code or response_status or 'empty response'}"
+                    )
+                return self._parse_openai_responses_response(response)
+            except Exception as e:
+                if not self._should_fallback_to_chat_completions(e):
+                    raise
+                logger.warning("OpenAI Responses API unavailable, falling back to chat.completions: %s", e)
 
         params = OpenAIAdapter.build_params(model, msg_list, tools, temperature, self.config.max_tokens)
         response = await client.chat.completions.create(**params)
@@ -418,17 +438,32 @@ class DirectModelClient(BaseModelClient):
         ]
         return any(marker in message for marker in fallback_markers)
 
+    def _should_use_openai_responses_api(self, msg_list: Sequence[dict[str, Any]]) -> bool:
+        """Use Responses API only for official OpenAI-style first turns we can encode correctly."""
+        base_url = (self.config.openai_api_base or "").lower().rstrip("/")
+        if base_url and "api.openai.com" not in base_url:
+            return False
+
+        for msg in msg_list:
+            if msg.get("role") == "tool" or msg.get("tool_calls"):
+                return False
+
+        return True
+
     @staticmethod
     def _parse_openai_responses_response(response: Any) -> ChatResponse:
         """Parse an OpenAI Responses API object into the unified ChatResponse."""
         if isinstance(response, str):
             raise RuntimeError("Provider returned non-OpenAI responses payload (string body)")
 
-        output_text = getattr(response, "output_text", None)
+        try:
+            output_text = getattr(response, "output_text", None)
+        except TypeError:
+            output_text = None
         content = output_text or None
         tool_calls: list[dict] | None = None
 
-        for item in getattr(response, "output", []) or []:
+        for item in getattr(response, "output", None) or []:
             item_type = getattr(item, "type", None)
             if item_type == "message" and not content:
                 for part in getattr(item, "content", []) or []:

@@ -5,6 +5,7 @@ Tests for the standard agent abstraction.
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,6 +26,7 @@ from src.agent import (
     ToolDefinition,
     create_doraemon_agent,
 )
+from src.host.tools import LazyToolFunction
 
 
 class TestAgentState:
@@ -623,6 +625,46 @@ class TestDoraemonAgent:
         assert isinstance(agent, DoraemonAgent)
         assert agent.state.mode == "build"
         assert len(agent.tools) == 2
+
+    def test_skips_unavailable_lazy_tools(self, mock_llm):
+        """Unavailable lazy tools should not be exposed to the model."""
+        broken_lazy = LazyToolFunction("missing.module", "browser_click")
+        try:
+            broken_lazy._load()
+        except ImportError:
+            pass
+
+        registry = MagicMock()
+        registry.get_tool_names = MagicMock(return_value=["read", "browser_click"])
+        registry._tools = {
+            "read": SimpleNamespace(
+                name="read",
+                description="Read file",
+                parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+                sensitive=False,
+                function=lambda path: path,
+            ),
+            "browser_click": SimpleNamespace(
+                name="browser_click",
+                description="Broken browser tool",
+                parameters={
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": True,
+                },
+                sensitive=False,
+                function=broken_lazy,
+            ),
+        }
+
+        agent = create_doraemon_agent(
+            llm_client=mock_llm,
+            tool_registry=registry,
+            mode="build",
+        )
+
+        assert [tool.name for tool in agent.tools] == ["read"]
 
     @pytest.mark.asyncio
     async def test_doraemon_agent_run(self, mock_llm, mock_registry):
