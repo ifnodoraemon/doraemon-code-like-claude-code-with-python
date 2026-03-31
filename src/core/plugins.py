@@ -6,7 +6,7 @@ Enables extending Doraemon with plugins that bundle:
 - Custom tools
 - Hooks
 - Subagents
-- MCP server configurations
+- Runtime configuration
 
 Features:
 - Plugin discovery and loading

@@ -12,7 +12,7 @@ license = {text = "MIT"}
 authors = [
     {name = "Doraemon Code Contributors"}
 ]
-keywords = ["ai", "assistant", "mcp", "code-assistant", "doraemon"]
+keywords = ["ai", "assistant", "code-assistant", "doraemon"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -25,9 +25,6 @@ classifiers = [
 
 # Core dependencies only (~50MB)
 dependencies = [
-    # MCP Protocol
-    "mcp[cli]>=1.0.0",
-    
     # AI SDKs (at least one required)
     "google-genai>=1.0.0",
     
@@ -63,11 +60,6 @@ llm = [
 # Browser automation (~100MB)
 browser = [
     "playwright>=1.40.0",
-]
-
-# Semantic search (~200MB)
-search = [
-    "chromadb>=0.4.0",
 ]
 
 # Database support (~20MB)
@@ -128,7 +120,6 @@ all = [
     "openai>=1.0.0",
     "anthropic>=0.18.0",
     "playwright>=1.40.0",
-    "chromadb>=0.4.0",
     "sqlalchemy>=2.0.0",
     "pillow>=10.0.0",
     "pdfplumber>=0.10.0",

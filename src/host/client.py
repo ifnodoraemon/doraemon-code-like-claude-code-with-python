@@ -1,14 +1,14 @@
-"""Compatibility-free in-process tool client for evaluation and automation.
+"""In-process tool client for evaluation and automation.
 
-This replaces the old multi-server MCP client path used by the evaluation
-harness. The current runtime uses the in-process tool registry directly, so
-the eval path should do the same instead of depending on removed legacy code.
+The runtime uses the built-in tool registry directly. Evals and automation
+should follow the same path instead of depending on an external subprocess
+tool layer.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
-from src.host.tools import ToolRegistry, get_default_registry
+from src.host.tools import ToolRegistry
 
 
 @dataclass
@@ -43,7 +43,7 @@ class _InProcessSession:
         return _ListToolsResult(tools=tools)
 
 
-class MultiServerMCPClient:
+class InProcessToolClient:
     """Thin adapter used by evals to interact with the current tool registry."""
 
     def __init__(self, tracer=None):
@@ -52,7 +52,14 @@ class MultiServerMCPClient:
         self.sessions: dict[str, _InProcessSession] = {}
 
     async def connect_to_config(self, _config: dict[str, Any] | None = None) -> None:
-        self.registry = get_default_registry()
+        from src.host.mcp_registry import create_tool_registry
+
+        mode = (_config or {}).get("mode")
+        extension_tools = (_config or {}).get("mcp_extensions")
+        self.registry = await create_tool_registry(
+            mode=mode,
+            extension_tools=extension_tools,
+        )
         self.sessions = {"default": _InProcessSession(self.registry)}
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
@@ -70,4 +77,7 @@ class MultiServerMCPClient:
         return result
 
     async def cleanup(self) -> None:
+        if self.registry is not None:
+            for client in getattr(self.registry, "_mcp_clients", []):
+                await client.close()
         self.sessions.clear()

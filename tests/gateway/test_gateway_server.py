@@ -14,6 +14,7 @@ from src.gateway.schema import (
     ChatRequest,
     ChatResponse,
     ModelInfo,
+    ToolCall,
     Usage,
 )
 
@@ -151,15 +152,6 @@ class TestGatewayRouter:
                     break
         assert provider == "anthropic"
 
-    def test_provider_detection_ollama(self):
-        """Test Ollama is the fallback provider."""
-        from src.gateway.router import ModelRouter
-
-        # Ollama has empty patterns, so it's the fallback for unknown models
-        patterns = ModelRouter.PROVIDER_PATTERNS
-        assert patterns["ollama"] == []
-        # Ollama is used as fallback for models that don't match other patterns
-
     def test_list_models_requires_initialization(self):
         """Test that list_models requires initialized adapters."""
         from src.gateway.router import ModelRouter
@@ -170,6 +162,129 @@ class TestGatewayRouter:
 
         # Without initialization, no models should be returned
         assert models == []
+
+
+class TestGatewayServerConversions:
+    """Tests for protocol conversion helpers."""
+
+    def test_openai_tool_call_arguments_are_parsed(self):
+        """OpenAI tool call arguments should be parsed from the arguments field."""
+        from src.gateway.server import ChatCompletionMessage, ChatCompletionRequest, ToolCallInfo
+        from src.gateway.server import ToolCallFunction, _build_chat_request_from_openai
+
+        request = ChatCompletionRequest(
+            model="gpt-4",
+            messages=[
+                ChatCompletionMessage(
+                    role="assistant",
+                    tool_calls=[
+                        ToolCallInfo(
+                            id="call_1",
+                            function=ToolCallFunction(
+                                name="read_file",
+                                arguments='{"path":"/tmp/demo.txt"}',
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        chat_request = _build_chat_request_from_openai(request)
+        tool_call = chat_request.messages[0].tool_calls[0]
+
+        assert tool_call.name == "read_file"
+        assert tool_call.arguments == {"path": "/tmp/demo.txt"}
+
+    def test_build_chat_request_from_anthropic(self):
+        """Anthropic request bodies should map into the unified schema."""
+        from src.gateway.server import AnthropicMessagesRequest, _build_chat_request_from_anthropic
+
+        request = AnthropicMessagesRequest(
+            model="minimax-m2.5",
+            system="You are concise.",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "hello"}],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "calling tool"},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_1",
+                            "name": "lookup",
+                            "input": {"city": "Shanghai"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_1",
+                            "content": "Sunny",
+                        }
+                    ],
+                },
+            ],
+            tools=[
+                {
+                    "name": "lookup",
+                    "description": "Lookup weather",
+                    "input_schema": {"type": "object"},
+                }
+            ],
+            max_tokens=128,
+        )
+
+        chat_request = _build_chat_request_from_anthropic(request)
+
+        assert chat_request.messages[0].role == "system"
+        assert chat_request.messages[1].content == "hello"
+        assert chat_request.messages[2].tool_calls[0].name == "lookup"
+        assert chat_request.messages[3].role == "tool"
+        assert chat_request.messages[3].tool_call_id == "toolu_1"
+        assert chat_request.tools[0].name == "lookup"
+
+    def test_convert_chat_response_to_anthropic(self):
+        """Unified responses should map back to Anthropic format."""
+        from src.gateway.server import _convert_chat_response_to_anthropic
+
+        response = ChatResponse(
+            id="msg_123",
+            model="minimax-m2.5",
+            choices=[
+                {
+                    "index": 0,
+                    "message": Message(
+                        role="assistant",
+                        content="pong",
+                        tool_calls=[
+                            ToolCall(
+                                id="toolu_1",
+                                name="lookup",
+                                arguments={"city": "Shanghai"},
+                            )
+                        ],
+                    ),
+                    "finish_reason": "tool_calls",
+                }
+            ],
+            usage=Usage(prompt_tokens=11, completion_tokens=7, total_tokens=18),
+        )
+
+        payload = _convert_chat_response_to_anthropic(response)
+
+        assert payload["type"] == "message"
+        assert payload["content"][0]["text"] == "pong"
+        assert payload["content"][1]["type"] == "tool_use"
+        assert payload["content"][1]["input"] == {"city": "Shanghai"}
+        assert payload["stop_reason"] == "tool_use"
+        assert payload["usage"] == {"input_tokens": 11, "output_tokens": 7}
 
 
 class TestUsage:

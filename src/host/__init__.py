@@ -1,1 +1,1 @@
-"""Host components (CLI and MCP Client)."""
+"""Host components (CLI and tool client)."""

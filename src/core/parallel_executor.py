@@ -106,7 +106,6 @@ class DependencyAnalyzer:
     READ_TOOLS = {
         "read",
         "search",
-        "semantic_search",
     }
 
     # Known dependencies (tool -> depends on)

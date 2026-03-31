@@ -1,1 +1,1 @@
-"""MCP servers for the agent."""
+"""Built-in tool modules for the agent."""

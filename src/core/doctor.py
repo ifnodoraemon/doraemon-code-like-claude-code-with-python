@@ -210,7 +210,6 @@ class Doctor:
     def check_optional_dependencies(self) -> CheckResult:
         """Check optional dependencies."""
         optional = [
-            ("chromadb", "chromadb", "Vector memory"),
             ("playwright", "playwright", "Browser automation"),
             ("pdfplumber", "pdfplumber", "PDF parsing"),
         ]

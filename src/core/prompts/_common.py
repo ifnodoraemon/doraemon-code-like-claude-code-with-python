@@ -182,7 +182,7 @@ When implementing changes, follow the task list systematically:
 PROGRESSIVE_FEEDBACK_PLAN = """
 <progressive_feedback>
 Do NOT be a silent black box. Provide staged feedback to the user:
-1. After **searching** (web_search): Summarize findings before continuing.
+1. After **web research** (`web_search`): Summarize findings before continuing.
 2. After **reading key files**: Briefly state what you learned.
 3. After **major analysis**: Share intermediate conclusions.
 4. **Every 3-5 tool calls**: Give the user a status update.

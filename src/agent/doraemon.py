@@ -31,6 +31,7 @@ from src.agent.types import (
 )
 from src.core.hooks import HookEvent, HookManager
 from src.core.home import Trace, set_project_dir
+from src.core.tool_selector import get_capability_groups_for_mode
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +69,15 @@ class DoraemonAgent(ReActAgent):
         enable_trace: bool = True,
         trace: Trace | None = None,
         session_id: str | None = None,
+        active_mcp_extensions: list[str] | None = None,
         **kwargs,
     ):
         mode = state.mode if state else "build"
-        tools = self._convert_registry_to_tools(tool_registry, mode=mode)
+        tools = self._convert_registry_to_tools(
+            tool_registry,
+            mode=mode,
+            active_mcp_extensions=active_mcp_extensions or [],
+        )
         super().__init__(
             llm_client=llm_client,
             state=state,
@@ -88,6 +94,7 @@ class DoraemonAgent(ReActAgent):
         self.project_dir = project_dir
         self.enable_trace = enable_trace
         self.session_id = session_id or self._generate_session_id()
+        self.active_mcp_extensions = (active_mcp_extensions or []).copy()
 
         if trace:
             self._trace = trace
@@ -127,13 +134,16 @@ class DoraemonAgent(ReActAgent):
         registry: Any,
         *,
         mode: str = "build",
+        active_mcp_extensions: list[str] | None = None,
     ) -> list[ToolDefinition]:
         """Convert registry tool definitions into agent ToolDefinitions."""
         from src.core.tool_selector import get_tools_for_mode
         from src.host.tools import LazyToolFunction
+        from src.host.mcp_registry import resolve_extension_tools
 
         tools = []
         allowed_tool_names = set(get_tools_for_mode(mode))
+        allowed_tool_names.update(resolve_extension_tools(active_mcp_extensions or []))
 
         if hasattr(registry, "_tool_schemas"):
             for name, schema in registry._tool_schemas.items():
@@ -150,27 +160,33 @@ class DoraemonAgent(ReActAgent):
 
         if hasattr(registry, "_tools"):
             for name in registry.get_tool_names():
-                if name not in allowed_tool_names:
+                tool_def = registry._tools.get(name)
+                if not tool_def:
+                    continue
+
+                is_remote_mcp_tool = (
+                    getattr(tool_def, "source", "built_in") == "mcp_remote"
+                    and tool_def.metadata.get("mcp_server") in (active_mcp_extensions or [])
+                )
+                if name not in allowed_tool_names and not is_remote_mcp_tool:
                     continue
                 if name not in [t.name for t in tools]:
-                    tool_def = registry._tools.get(name)
-                    if tool_def:
-                        func = getattr(tool_def, "function", None)
-                        if isinstance(func, LazyToolFunction) and getattr(func, "_load_error", None):
-                            logger.warning(
-                                "Skipping unavailable tool '%s' from agent-visible tool list: %s",
-                                name,
-                                func._load_error,
-                            )
-                            continue
-                        tools.append(
-                            ToolDefinition(
-                                name=tool_def.name,
-                                description=tool_def.description,
-                                parameters=tool_def.parameters,
-                                sensitive=tool_def.sensitive,
-                            )
+                    func = getattr(tool_def, "function", None)
+                    if isinstance(func, LazyToolFunction) and getattr(func, "_load_error", None):
+                        logger.warning(
+                            "Skipping unavailable tool '%s' from agent-visible tool list: %s",
+                            name,
+                            func._load_error,
                         )
+                        continue
+                    tools.append(
+                        ToolDefinition(
+                            name=tool_def.name,
+                            description=tool_def.description,
+                            parameters=tool_def.parameters,
+                            sensitive=tool_def.sensitive,
+                        )
+                    )
 
         return tools
 
@@ -207,7 +223,20 @@ class DoraemonAgent(ReActAgent):
         duration = time.time() - start_time
 
         if self._trace and self.enable_trace:
-            self._trace.tool_call(name, arguments, result or f"Error: {error}", duration)
+            tool_definition = None
+            if hasattr(self.tool_registry, "_tools"):
+                tool_definition = self.tool_registry._tools.get(name)
+            source = getattr(tool_definition, "source", "built_in") if tool_definition else "built_in"
+            metadata = getattr(tool_definition, "metadata", {}) if tool_definition else {}
+            self._trace.tool_call(
+                name,
+                arguments,
+                result or f"Error: {error}",
+                duration,
+                error=error,
+                source=source,
+                metadata=metadata,
+            )
 
         if self.hooks:
             await self.hooks.trigger(
@@ -266,7 +295,16 @@ class DoraemonAgent(ReActAgent):
         Run the agent with lifecycle hooks and trace recording.
         """
         if self.enable_trace and self._trace:
-            self._trace.start_turn(input)
+            self._trace.start_turn(
+                input,
+                metadata={
+                    "mode": self.state.mode,
+                    "capability_groups": get_capability_groups_for_mode(self.state.mode),
+                    "active_tools": [tool.name for tool in self.tools],
+                    "active_skills": [],
+                    "active_mcp_extensions": self.active_mcp_extensions.copy(),
+                },
+            )
 
         if self.hooks:
             await self.hooks.trigger(
@@ -302,9 +340,20 @@ class DoraemonAgent(ReActAgent):
         observation = await super().observe()
 
         if self.skills:
-            skills_content = self.skills.get_skills_for_context(observation.user_input or "")
+            skills_content = self.skills.get_skills_for_context(
+                observation.user_input or "",
+                mode=self.state.mode,
+            )
             if skills_content:
                 observation.context["skills"] = skills_content
+                if self._trace and self.enable_trace:
+                    self._trace.event(
+                        "context",
+                        "skills_activated",
+                        {
+                            "active_skills": self.skills.get_active_skills(),
+                        },
+                    )
 
         return observation
 
@@ -387,6 +436,7 @@ def create_doraemon_agent(
     enable_trace: bool = True,
     trace: Trace | None = None,
     session_id: str | None = None,
+    active_mcp_extensions: list[str] | None = None,
 ) -> DoraemonAgent:
     """
     Factory function to create a DoraemonAgent.
@@ -405,6 +455,7 @@ def create_doraemon_agent(
         enable_trace: Enable trace recording
         trace: Existing trace object to reuse
         session_id: Session ID (auto-generated if not provided)
+        active_mcp_extensions: Enabled MCP extension groups for this session
 
     Returns:
         Configured DoraemonAgent instance
@@ -425,6 +476,7 @@ def create_doraemon_agent(
         enable_trace=enable_trace,
         trace=trace,
         session_id=session_id,
+        active_mcp_extensions=active_mcp_extensions,
     )
 
 
@@ -460,7 +512,8 @@ async def create_doraemon_agent_with_tools(
     """
     from src.host.mcp_registry import create_tool_registry
 
-    registry = await create_tool_registry(config_path)
+    registry = await create_tool_registry(config_path, mode=mode)
+    active_mcp_extensions = getattr(registry, "_active_mcp_extensions", []).copy()
 
     return create_doraemon_agent(
         llm_client=llm_client,
@@ -472,6 +525,7 @@ async def create_doraemon_agent_with_tools(
         permission_callback=permission_callback,
         display_callback=display_callback,
         max_turns=max_turns,
+        active_mcp_extensions=active_mcp_extensions,
     )
 
 

@@ -31,7 +31,7 @@ import logging
 import threading
 import types as py_types
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Union, get_args, get_origin
 
 from google.genai import types
@@ -109,6 +109,8 @@ class ToolDefinition:
     parameters: dict[str, Any]
     sensitive: bool = False  # Requires HITL approval
     timeout: float = 60.0  # Default timeout in seconds
+    source: str = "built_in"
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class ToolRegistry:
@@ -135,6 +137,8 @@ class ToolRegistry:
         description: str | None = None,
         sensitive: bool = False,
         timeout: float = 60.0,
+        source: str = "built_in",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Register a tool function.
@@ -145,12 +149,22 @@ class ToolRegistry:
             description: Tool description (defaults to docstring)
             sensitive: Whether this tool requires HITL approval
             timeout: Timeout in seconds (default 60.0)
+            source: Tool source classification
+            metadata: Additional registry metadata
         """
         tool_name = name or func.__name__
         tool_desc = description or (func.__doc__ or "").strip()
 
         # Extract parameters from function signature
-        parameters = self._extract_parameters(func)
+        if isinstance(func, LazyToolFunction) and func._loaded_func is None:
+            parameters = {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": True,
+            }
+        else:
+            parameters = self._extract_parameters(func)
 
         self._tools[tool_name] = ToolDefinition(
             name=tool_name,
@@ -159,6 +173,8 @@ class ToolRegistry:
             parameters=parameters,
             sensitive=sensitive,
             timeout=timeout,
+            source=source,
+            metadata=metadata or {},
         )
 
         logger.debug(f"Registered tool: {tool_name}")
@@ -418,25 +434,71 @@ class ToolRegistry:
 # ========================================
 
 _default_registry: ToolRegistry | None = None
+_registry_cache: dict[tuple[str, ...], ToolRegistry] = {}
+_default_extension_registry: ToolRegistry | None = None
+_extension_registry_cache: dict[tuple[str, ...], ToolRegistry] = {}
 _registry_lock = threading.Lock()
 
 
-def get_default_registry() -> ToolRegistry:
+def get_default_registry(tool_names: list[str] | None = None) -> ToolRegistry:
     """
-    Get the default tool registry with all standard tools registered.
+    Get the default built-in tool registry.
 
-    This is a singleton that lazily initializes on first access.
+    This is a singleton cache keyed by the allowed tool set.
     Thread-safe using double-check locking pattern.
     """
     global _default_registry
 
-    if _default_registry is None:
-        with _registry_lock:
-            # Double-check locking to prevent race conditions
-            if _default_registry is None:
-                _default_registry = _create_default_registry()
+    if tool_names is None:
+        if _default_registry is None:
+            with _registry_lock:
+                # Double-check locking to prevent race conditions
+                if _default_registry is None:
+                    _default_registry = _create_registry(BUILTIN_TOOL_SPECS, source="built_in")
+        return _default_registry
 
-    return _default_registry
+    cache_key = tuple(tool_names)
+    if cache_key in _registry_cache:
+        return _registry_cache[cache_key]
+
+    with _registry_lock:
+        if cache_key not in _registry_cache:
+            _registry_cache[cache_key] = _create_registry(
+                BUILTIN_TOOL_SPECS,
+                set(tool_names),
+                source="built_in",
+            )
+
+    return _registry_cache[cache_key]
+
+
+def get_extension_registry(tool_names: list[str] | None = None) -> ToolRegistry:
+    """Get the optional extension tool registry."""
+    global _default_extension_registry
+
+    if tool_names is None:
+        if _default_extension_registry is None:
+            with _registry_lock:
+                if _default_extension_registry is None:
+                    _default_extension_registry = _create_registry(
+                        EXTENSION_TOOL_SPECS,
+                        source="mcp_extension",
+                    )
+        return _default_extension_registry
+
+    cache_key = tuple(tool_names)
+    if cache_key in _extension_registry_cache:
+        return _extension_registry_cache[cache_key]
+
+    with _registry_lock:
+        if cache_key not in _extension_registry_cache:
+            _extension_registry_cache[cache_key] = _create_registry(
+                EXTENSION_TOOL_SPECS,
+                set(tool_names),
+                source="mcp_extension",
+            )
+
+    return _extension_registry_cache[cache_key]
 
 
 @dataclass
@@ -452,7 +514,7 @@ class ToolSpec:
 
 
 # fmt: off
-TOOL_SPECS: list[ToolSpec] = [
+BUILTIN_TOOL_SPECS: list[ToolSpec] = [
     # ── Filesystem (critical) ─────────────────────────────────────────
     ToolSpec("src.servers.filesystem", "read",          sensitive=False, timeout=60.0,  critical=True),
     ToolSpec("src.servers.filesystem", "write",         sensitive=True,  timeout=120.0, critical=True),
@@ -465,15 +527,15 @@ TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("src.servers.run", "run", sensitive=True, timeout=300.0),
 
     # ── Memory ───────────────────────────────────────────────────────
-    ToolSpec("src.servers.memory", "get_note",     sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.memory", "save_note",    sensitive=True,  timeout=60.0),
-    ToolSpec("src.servers.memory", "search_notes", sensitive=False, timeout=60.0),
-    ToolSpec("src.servers.memory", "list_notes",   sensitive=False, timeout=30.0),
-    ToolSpec("src.servers.memory", "delete_note",  sensitive=True,  timeout=30.0),
+    ToolSpec("src.servers.memory", "memory_get",    sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.memory", "memory_put",    sensitive=True,  timeout=60.0),
+    ToolSpec("src.servers.memory", "memory_search", sensitive=False, timeout=60.0),
+    ToolSpec("src.servers.memory", "memory_list",   sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.memory", "memory_delete", sensitive=True,  timeout=30.0),
 
     # ── Web ──────────────────────────────────────────────────────────
-    ToolSpec("src.servers.web", "fetch_page",      name="fetch_url",  sensitive=False, timeout=30.0),
-    ToolSpec("src.servers.web", "search_internet", name="web_search", sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.web", "web_fetch",  sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.web", "web_search", sensitive=False, timeout=30.0),
 
     # ── Task ─────────────────────────────────────────────────────────
     ToolSpec("src.servers.task", "task", sensitive=False, timeout=60.0),
@@ -486,7 +548,9 @@ TOOL_SPECS: list[ToolSpec] = [
 
     # ── Misc ─────────────────────────────────────────────────────────
     ToolSpec("src.servers.ask_user", "ask_user",      sensitive=False, timeout=300.0),
+]
 
+EXTENSION_TOOL_SPECS: list[ToolSpec] = [
     # ── Browser ──────────────────────────────────────────────────────
     ToolSpec("src.servers.browser", "browse_page",        sensitive=False, timeout=60.0),
     ToolSpec("src.servers.browser", "take_screenshot",    sensitive=False, timeout=60.0),
@@ -508,8 +572,13 @@ TOOL_SPECS: list[ToolSpec] = [
 # fmt: on
 
 
-def _create_default_registry() -> ToolRegistry:
-    """Create and populate the default tool registry with lazy loading."""
+def _create_registry(
+    specs: list[ToolSpec],
+    allowed_tool_names: set[str] | None = None,
+    *,
+    source: str = "built_in",
+) -> ToolRegistry:
+    """Create and populate a tool registry with lazy loading."""
     registry = ToolRegistry()
 
     # Load configuration for custom timeouts
@@ -522,8 +591,10 @@ def _create_default_registry() -> ToolRegistry:
 
     failed_critical: list[tuple[str, str]] = []
 
-    for spec in TOOL_SPECS:
+    for spec in specs:
         tool_name = spec.name or spec.func_name
+        if allowed_tool_names is not None and tool_name not in allowed_tool_names:
+            continue
         timeout = float(tool_timeouts.get(tool_name, spec.timeout))
 
         # Use lazy loading proxy instead of importing immediately
@@ -543,6 +614,7 @@ def _create_default_registry() -> ToolRegistry:
             name=spec.name,
             sensitive=spec.sensitive,
             timeout=timeout,
+            source=source,
         )
 
     logger.info(
@@ -579,7 +651,7 @@ def get_genai_tools(tool_names: list[str] | None = None) -> list[types.FunctionD
         tool_names: Optional list of tool names to include.
                    If None, returns all tools.
     """
-    return get_default_registry().get_genai_tools(tool_names)
+    return get_default_registry(tool_names).get_genai_tools(tool_names)
 
 
 def is_sensitive_tool(name: str) -> bool:

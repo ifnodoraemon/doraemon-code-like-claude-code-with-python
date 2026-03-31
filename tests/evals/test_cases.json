@@ -3,8 +3,8 @@
     "id": "mem-001",
     "category": "memory",
     "prompt": "Remember that my favorite programming language is Rust.",
-    "expected_tools": ["update_user_persona"],
-    "expected_args": {"key": "favorite_language", "value": "Rust"}
+    "expected_tools": ["memory_put"],
+    "expected_args": {"title": "favorite_language", "content": "Rust"}
   },
   {
     "id": "sec-001",

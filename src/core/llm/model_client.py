@@ -91,6 +91,9 @@ class ModelClient:
                     "google": bool(config.google_api_key),
                     "openai": bool(config.openai_api_key),
                     "anthropic": bool(config.anthropic_api_key),
-                    "ollama": bool(config.ollama_base_url),
+                },
+                "provider_bases": {
+                    "openai": config.openai_api_base,
+                    "anthropic": config.anthropic_api_base,
                 },
             }

@@ -42,6 +42,7 @@ MAX_DELAY = 60.0
 # CircuitBreaker defaults
 BREAKER_FAILURE_THRESHOLD = 5
 BREAKER_TIMEOUT = 60.0
+_OPENAI_PROTOCOL_CACHE: dict[tuple[str, str], str] = {}
 
 
 # Re-export for backward compatibility
@@ -111,6 +112,9 @@ class DirectModelClient(BaseModelClient):
         self.model = config.model
         self._providers: dict[Provider, Any] = {}
         self._circuit_breakers: dict[Provider, CircuitBreaker] = {}
+        self._openai_protocol: str | None = _OPENAI_PROTOCOL_CACHE.get(
+            self._get_openai_protocol_cache_key()
+        )
 
         breaker_config = CircuitBreakerConfig(
             failure_threshold=BREAKER_FAILURE_THRESHOLD,
@@ -293,7 +297,15 @@ class DirectModelClient(BaseModelClient):
         client = self._providers[Provider.OPENAI]
         response_tools = self._build_openai_responses_tools(tools)
 
-        if self._should_use_openai_responses_api(msg_list):
+        use_responses = (
+            self._openai_protocol == "responses"
+            or (
+                self._openai_protocol is None
+                and self._should_use_openai_responses_api(msg_list)
+            )
+        )
+
+        if use_responses:
             try:
                 response = await client.responses.create(
                     **self._build_openai_responses_params(
@@ -323,6 +335,8 @@ class DirectModelClient(BaseModelClient):
                         "OpenAI Responses API failed: "
                         f"{error_msg or response_message or response_code or response_status or 'empty response'}"
                     )
+                self._openai_protocol = "responses"
+                _OPENAI_PROTOCOL_CACHE[self._get_openai_protocol_cache_key()] = "responses"
                 return self._parse_openai_responses_response(response)
             except Exception as e:
                 if not self._should_fallback_to_chat_completions(e):
@@ -331,6 +345,8 @@ class DirectModelClient(BaseModelClient):
 
         params = OpenAIAdapter.build_params(model, msg_list, tools, temperature, self.config.max_tokens)
         response = await client.chat.completions.create(**params)
+        self._openai_protocol = "chat_completions"
+        _OPENAI_PROTOCOL_CACHE[self._get_openai_protocol_cache_key()] = "chat_completions"
 
         if isinstance(response, str):
             raise RuntimeError("Provider returned non-OpenAI chat response (string body)")
@@ -410,10 +426,73 @@ class DirectModelClient(BaseModelClient):
         max_output_tokens: int | None,
     ) -> dict[str, Any]:
         """Build request params for the OpenAI Responses API."""
+        input_items: list[dict[str, Any]] = []
+        for msg in msg_list:
+            role = msg.get("role", "user")
+            content = msg.get("content")
+            tool_calls = msg.get("tool_calls") or []
+
+            def _build_content_parts(content_value: Any, *, assistant: bool = False) -> list[dict[str, Any]]:
+                text_type = "output_text" if assistant else "input_text"
+                if isinstance(content_value, str):
+                    return [{"type": text_type, "text": content_value}]
+                if isinstance(content_value, list):
+                    content_parts: list[dict[str, Any]] = []
+                    for part in content_value:
+                        part_type = part.get("type")
+                        if part_type == "text":
+                            content_parts.append({"type": text_type, "text": part.get("text", "")})
+                        elif part_type == "image_url":
+                            content_parts.append(
+                                {
+                                    "type": "input_image",
+                                    "image_url": part.get("image_url", {}).get("url", ""),
+                                }
+                            )
+                    return content_parts
+                return [{"type": text_type, "text": str(content_value or "")}]
+
+            if role == "assistant":
+                if content:
+                    input_items.append(
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": _build_content_parts(content, assistant=True),
+                        }
+                    )
+                for tool_call in tool_calls:
+                    function = tool_call.get("function", {})
+                    input_items.append(
+                        {
+                            "type": "function_call",
+                            "call_id": tool_call.get("id") or "",
+                            "name": function.get("name", ""),
+                            "arguments": function.get("arguments", "{}"),
+                        }
+                    )
+                continue
+
+            if role == "tool":
+                input_items.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": msg.get("tool_call_id") or "",
+                        "output": str(content or ""),
+                    }
+                )
+                continue
+
+            input_items.append(
+                {
+                    "role": role,
+                    "content": _build_content_parts(content),
+                }
+            )
+
         params: dict[str, Any] = {
             "model": model,
-            "input": msg_list,
-            "temperature": temperature,
+            "input": input_items,
             "store": False,
         }
         if tools:
@@ -441,14 +520,13 @@ class DirectModelClient(BaseModelClient):
     def _should_use_openai_responses_api(self, msg_list: Sequence[dict[str, Any]]) -> bool:
         """Use Responses API only for official OpenAI-style first turns we can encode correctly."""
         base_url = (self.config.openai_api_base or "").lower().rstrip("/")
-        if base_url and "api.openai.com" not in base_url:
+        if base_url and "api.openai.com" not in base_url and "packyapi.com" not in base_url:
             return False
 
-        for msg in msg_list:
-            if msg.get("role") == "tool" or msg.get("tool_calls"):
-                return False
-
         return True
+
+    def _get_openai_protocol_cache_key(self) -> tuple[str, str]:
+        return ((self.config.openai_api_base or "").rstrip("/").lower(), self.model or "")
 
     @staticmethod
     def _parse_openai_responses_response(response: Any) -> ChatResponse:
@@ -776,3 +854,4 @@ class DirectModelClient(BaseModelClient):
             if hasattr(client, "aclose"):
                 await client.aclose()
         self._providers.clear()
+        self._openai_protocol = None

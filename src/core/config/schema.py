@@ -5,22 +5,6 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class ServerConfig(BaseModel):
-    """MCP Server configuration."""
-
-    command: str = Field(..., description="Command to run the server")
-    args: list[str] = Field(default_factory=list, description="Command arguments")
-    env: dict[str, str] = Field(default_factory=dict, description="Environment variables")
-
-    @field_validator("command")
-    @classmethod
-    def validate_command(cls, v):
-        """Ensure command is not empty."""
-        if not v or not v.strip():
-            raise ValueError("Command cannot be empty")
-        return v.strip()
-
-
 class PersonaConfig(BaseModel):
     """Agent persona configuration."""
 
@@ -36,21 +20,78 @@ class PersonaConfig(BaseModel):
         return v.strip()
 
 
+class MCPServerConfig(BaseModel):
+    """Remote MCP server configuration."""
+
+    name: str = Field(..., description="Unique MCP server name")
+    transport: str = Field(
+        default="streamable_http",
+        description="MCP transport type: streamable_http or stdio",
+    )
+    url: str | None = Field(default=None, description="HTTP MCP server URL")
+    command: str | None = Field(default=None, description="stdio MCP server command")
+    args: list[str] = Field(default_factory=list, description="stdio MCP server arguments")
+    env: dict[str, str] = Field(default_factory=dict, description="stdio MCP server environment")
+    cwd: str | None = Field(default=None, description="stdio MCP server working directory")
+    headers: dict[str, str] = Field(default_factory=dict, description="Optional HTTP headers")
+    timeout_seconds: float = Field(default=30.0, gt=0, description="Per-request timeout")
+    tool_prefix: str | None = Field(
+        default=None,
+        description="Optional prefix added to all tools from this MCP server",
+    )
+    enabled: bool = Field(default=True, description="Whether this server is enabled")
+
+    @field_validator("name", "transport")
+    @classmethod
+    def validate_required_strings(cls, v: str) -> str:
+        """Ensure required string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty")
+        return v.strip()
+
+    @field_validator("transport")
+    @classmethod
+    def validate_transport(cls, v: str) -> str:
+        """Validate supported MCP transport types."""
+        normalized = v.strip()
+        if normalized not in {"streamable_http", "stdio"}:
+            raise ValueError("transport must be 'streamable_http' or 'stdio'")
+        return normalized
+
+    @field_validator("url", "command", "cwd")
+    @classmethod
+    def validate_optional_strings(cls, v: str | None) -> str | None:
+        """Normalize optional string fields."""
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
+
+    @model_validator(mode="after")
+    def validate_transport_fields(self) -> "MCPServerConfig":
+        """Ensure transport-specific fields are configured."""
+        if self.transport == "streamable_http" and not self.url:
+            raise ValueError("url is required for streamable_http MCP servers")
+        if self.transport == "stdio" and not self.command:
+            raise ValueError("command is required for stdio MCP servers")
+        return self
+
+
 class AgentConfig(BaseModel):
     """Main agent configuration."""
 
     model: str = Field(..., description="Primary model identifier")
-    mcpServers: dict[str, ServerConfig] = Field(
-        ..., alias="mcpServers", description="MCP servers configuration"
-    )
     gateway_url: str | None = Field(default=None, description="Gateway server URL")
     gateway_key: str | None = Field(default=None, description="Gateway API key")
     google_api_key: str | None = Field(default=None, description="Google API key")
     openai_api_key: str | None = Field(default=None, description="OpenAI API key")
+    openai_api_base: str | None = Field(
+        default=None, description="OpenAI-compatible API base URL"
+    )
     anthropic_api_key: str | None = Field(default=None, description="Anthropic API key")
-    ollama_base_url: str | None = Field(default=None, description="Ollama base URL")
-    embedding_model: str | None = Field(default=None, description="Embedding model")
-    rerank_model: str | None = Field(default=None, description="Rerank model")
+    anthropic_api_base: str | None = Field(
+        default=None, description="Anthropic-compatible API base URL"
+    )
     temperature: float | None = Field(default=None, description="Model temperature override")
     daily_budget_usd: float | None = Field(default=None, description="Daily budget in USD")
     session_budget_usd: float | None = Field(default=None, description="Session budget in USD")
@@ -61,7 +102,7 @@ class AgentConfig(BaseModel):
         default_factory=lambda: [
             "execute_python",
             "write_file",
-            "save_note",
+            "memory_put",
             "move_file",
             "delete_file",
         ],
@@ -70,32 +111,19 @@ class AgentConfig(BaseModel):
     instructions: list[str] = Field(
         default_factory=list, description="Additional instruction files to load (supports globs)"
     )
+    mcp_extensions: list[str] = Field(
+        default_factory=list,
+        description="Optional extension groups to attach at runtime, e.g. ['browser', 'database']",
+    )
+    mcp_servers: list[MCPServerConfig] = Field(
+        default_factory=list,
+        description="Optional remote MCP servers attached at runtime",
+    )
     tool_timeouts: dict[str, float] = Field(
         default_factory=dict, description="Timeout overrides for specific tools in seconds"
     )
 
     model_config = ConfigDict(populate_by_name=True)  # Allow both snake_case and camelCase
-
-    @model_validator(mode="after")
-    def validate_required_servers(self):
-        """Ensure required servers are configured."""
-        required_servers = {
-            "memory": "Long-term memory server",
-            "filesystem": "Unified filesystem server",
-            "web": "Web access server",
-            "run": "Unified command execution server",
-            "task": "Task management server",
-        }
-
-        missing = []
-        for server_name, description in required_servers.items():
-            if server_name not in self.mcpServers:
-                missing.append(f"{server_name} ({description})")
-
-        if missing:
-            raise ValueError(f"Missing required servers: {', '.join(missing)}")
-
-        return self
 
     @field_validator("sensitive_tools")
     @classmethod
@@ -146,22 +174,12 @@ def validate_config_file(config_path: Path) -> AgentConfig:
 def get_default_config() -> dict:
     """Return the default configuration structure."""
     return {
-        "mcpServers": {
-            "memory": {"command": "python3", "args": ["src/servers/memory.py"], "env": {}},
-            "filesystem": {
-                "command": "python3",
-                "args": ["src/servers/filesystem.py"],
-                "env": {},
-            },
-            "web": {"command": "python3", "args": ["src/servers/web.py"], "env": {}},
-            "run": {"command": "python3", "args": ["src/servers/run.py"], "env": {}},
-            "task": {"command": "python3", "args": ["src/servers/task.py"], "env": {}},
-        },
         "persona": {"name": "Agent", "role": "Generalist AI Assistant & Coder"},
+        "mcp_extensions": [],
         "sensitive_tools": [
             "execute_python",
             "write_file",
-            "save_note",
+            "memory_put",
             "move_file",
             "delete_file",
         ],

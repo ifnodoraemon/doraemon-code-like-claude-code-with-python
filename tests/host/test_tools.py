@@ -4,7 +4,8 @@ from typing import Literal
 
 import pytest
 
-from src.host.tools import ToolRegistry, get_default_registry
+from src.core.tool_selector import get_tools_for_mode
+from src.host.tools import ToolRegistry, get_default_registry, get_extension_registry
 
 
 class TestToolRegistry:
@@ -215,3 +216,58 @@ class TestDefaultRegistry:
         registry2 = get_default_registry()
 
         assert registry1 is registry2
+
+    def test_default_registry_excludes_extension_tools(self):
+        """Default built-in registry should not include browser/db extensions."""
+        registry = get_default_registry()
+        tools = registry.get_tool_names()
+
+        assert "browser_click" not in tools
+        assert "db_read_query" not in tools
+
+    def test_filtered_registry_only_loads_requested_tools(self):
+        """Filtered registry should only expose the requested tool set."""
+        registry = get_default_registry(["read", "search", "ask_user", "write", "run"])
+
+        assert set(registry.get_tool_names()) == {"read", "search", "ask_user", "write", "run"}
+
+    def test_filtered_registry_is_cached_by_tool_set(self):
+        """Filtered registries should be cached per tool set."""
+        registry1 = get_default_registry(["read", "search", "ask_user"])
+        registry2 = get_default_registry(["read", "search", "ask_user"])
+
+        assert registry1 is registry2
+
+    def test_plan_mode_registry_matches_capability_groups(self):
+        """Plan mode should expose only the plan tool surface."""
+        plan_tools = get_tools_for_mode("plan")
+        registry = get_default_registry(plan_tools)
+
+        assert set(registry.get_tool_names()) == set(plan_tools)
+        assert "write" not in registry.get_tool_names()
+        assert "run" not in registry.get_tool_names()
+        assert "memory_put" in registry.get_tool_names()
+        assert "web_search" in registry.get_tool_names()
+        assert "task" in registry.get_tool_names()
+        assert "update_user_persona" not in registry.get_tool_names()
+
+    def test_build_mode_registry_matches_capability_groups(self):
+        """Build mode should expose the coding mainline tool surface."""
+        build_tools = get_tools_for_mode("build")
+        registry = get_default_registry(build_tools)
+
+        assert set(registry.get_tool_names()) == set(build_tools)
+        assert len(build_tools) == 12
+        assert "write" in registry.get_tool_names()
+        assert "run" in registry.get_tool_names()
+        assert "memory_put" in registry.get_tool_names()
+        assert "web_fetch" in registry.get_tool_names()
+        assert "task" in registry.get_tool_names()
+        assert "update_user_persona" not in registry.get_tool_names()
+
+    def test_extension_registry_only_loads_extension_tools(self):
+        """Extension registry should keep browser/db tools outside the mainline."""
+        registry = get_extension_registry(["browser_click", "db_read_query"])
+
+        assert set(registry.get_tool_names()) == {"browser_click", "db_read_query"}
+        assert "read" not in registry.get_tool_names()

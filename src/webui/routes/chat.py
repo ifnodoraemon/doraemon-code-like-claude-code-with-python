@@ -43,8 +43,8 @@ async def get_model_client():
 
 def get_tools_for_mode(mode: str = "build"):
     selector = ToolSelector()
-    registry = get_default_registry()
     tool_names = selector.get_tools_for_mode(mode)
+    registry = get_default_registry(tool_names)
     genai_tools = registry.get_genai_tools(tool_names)
 
     # Convert to ToolDefinition

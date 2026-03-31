@@ -127,13 +127,14 @@ READ_ONLY_TOOLS = {
     "search",
     "glob",
     "list_directory",
-    "get_note",
-    "list_notes",
-    "search_notes",
+    "memory_get",
+    "memory_list",
+    "memory_search",
     "browse_page",
     "take_screenshot",
-    "semantic_search",
     "lsp_diagnostics",
+    "web_search",
+    "web_fetch",
 }
 
 

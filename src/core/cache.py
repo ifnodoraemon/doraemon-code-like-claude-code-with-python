@@ -84,19 +84,25 @@ class ToolCache:
         "file_read",
         "file_list",
         "file_search",
-        "semantic_search",
         "grep",
         "glob",
         "outline",
         "web_search",
+        "web_fetch",
+        "memory_get",
+        "memory_list",
+        "memory_search",
     }
 
     # TTL overrides for specific tools
     TOOL_TTL = {
         "file_read": 60,
         "file_list": 30,
-        "semantic_search": 300,
         "web_search": 600,  # Web results change slowly
+        "web_fetch": 300,
+        "memory_get": 300,
+        "memory_list": 60,
+        "memory_search": 300,
     }
 
     def __init__(self, config: CacheConfig | None = None):

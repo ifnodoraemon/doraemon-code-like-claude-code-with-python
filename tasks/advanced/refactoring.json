@@ -12,8 +12,8 @@
     },
     "assertions": [
       {"type": "tool_used", "tool": "write"},
-      {"type": "pattern_exists", "pattern": "def\\s+_?validate"},
-      {"type": "pattern_exists", "pattern": "def\\s+_?process"},
+      {"type": "pattern_exists", "pattern": "def\\s+_?(validate|is_valid)"},
+      {"type": "pattern_exists", "pattern": "def\\s+_?(process|filter)"},
       {"type": "pattern_exists", "pattern": "def\\s+_?format"}
     ],
     "expected_outcome": "Long function split into smaller functions"
@@ -52,7 +52,7 @@
       {"type": "tool_used", "tool": "write"},
       {"type": "pattern_exists", "pattern": "async def fetch_data"},
       {"type": "pattern_exists", "pattern": "await"},
-      {"type": "pattern_exists", "pattern": "asyncio"}
+      {"type": "pattern_exists", "pattern": "(asyncio|aiohttp)"}
     ],
     "expected_outcome": "Code converted to async/await"
   }

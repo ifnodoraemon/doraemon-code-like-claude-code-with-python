@@ -37,11 +37,65 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - exercised through fallback tests/runtime
+    yaml = None
 
 from .paths import skills_dir
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_simple_frontmatter(frontmatter: str) -> dict[str, Any]:
+    """Parse a minimal YAML subset used by SKILL.md frontmatter."""
+    data: dict[str, Any] = {}
+    current_key: str | None = None
+
+    for raw_line in frontmatter.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        if line.startswith("  - ") and current_key is not None:
+            data.setdefault(current_key, []).append(stripped[2:].strip())
+            continue
+
+        if ":" not in line:
+            current_key = None
+            continue
+
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not value:
+            data[key] = []
+            current_key = key
+            continue
+
+        current_key = None
+        if ":" in value:
+            raise ValueError(f"Unsupported nested YAML value for key '{key}'")
+        lowered = value.lower()
+        if lowered in {"true", "false"}:
+            data[key] = lowered == "true"
+        else:
+            try:
+                data[key] = int(value)
+            except ValueError:
+                data[key] = value
+
+    return data
+
+
+def _safe_load_frontmatter(frontmatter: str) -> dict[str, Any]:
+    """Load SKILL.md frontmatter without requiring PyYAML at runtime."""
+    if yaml is not None:
+        loaded = yaml.safe_load(frontmatter)
+        return loaded or {}
+    return _parse_simple_frontmatter(frontmatter)
 
 
 # ========================================
@@ -59,6 +113,9 @@ class SkillMetadata:
     priority: int = 0  # Higher = more important
     requires: list[str] = field(default_factory=list)  # Other skills this depends on
     files: list[str] = field(default_factory=list)  # Additional files to load
+    mode: list[str] = field(default_factory=list)  # plan/build applicability
+    tools: list[str] = field(default_factory=list)  # preferred tools for this skill
+    constraints: list[str] = field(default_factory=list)  # execution constraints
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SkillMetadata":
@@ -69,6 +126,9 @@ class SkillMetadata:
             priority=data.get("priority", 0),
             requires=data.get("requires", []),
             files=data.get("files", []),
+            mode=data.get("mode", []),
+            tools=data.get("tools", []),
+            constraints=data.get("constraints", []),
         )
 
 
@@ -93,12 +153,21 @@ class Skill:
             parts.append(f"\n\n## {filename}\n\n{content}")
         return "\n".join(parts)
 
-    def matches_context(self, context: str) -> float:
+    def supports_mode(self, mode: str | None) -> bool:
+        """Return whether the skill can be activated in the given product mode."""
+        if not self.metadata.mode or mode is None:
+            return True
+        return mode in self.metadata.mode
+
+    def matches_context(self, context: str, mode: str | None = None) -> float:
         """
         Calculate relevance score for given context.
 
         Returns a score between 0.0 and 1.0.
         """
+        if not self.supports_mode(mode):
+            return 0.0
+
         if not self.metadata.triggers:
             return 0.0
 
@@ -207,6 +276,7 @@ class SkillLoader:
         context: str,
         max_skills: int = 3,
         threshold: float = 0.1,
+        mode: str | None = None,
     ) -> list[Skill]:
         """
         Get skills relevant to the given context.
@@ -235,7 +305,7 @@ class SkillLoader:
         # Score and filter skills
         scored_skills = []
         for skill in self._skills.values():
-            score = skill.matches_context(context)
+            score = skill.matches_context(context, mode=mode)
             if score >= threshold:
                 scored_skills.append((score, skill))
 
@@ -276,10 +346,10 @@ class SkillLoader:
         body = parts[2].strip()
 
         try:
-            data = yaml.safe_load(frontmatter)
+            data = _safe_load_frontmatter(frontmatter)
             metadata = SkillMetadata.from_dict(data or {})
             return metadata, body
-        except yaml.YAMLError as e:
+        except Exception as e:
             logger.warning(f"Invalid YAML frontmatter: {e}")
             return SkillMetadata(name="Unknown", description=""), content
 
@@ -310,6 +380,7 @@ class SkillManager:
         self,
         user_input: str,
         current_context: str = "",
+        mode: str | None = None,
     ) -> str:
         """
         Get formatted skill content for the current context.
@@ -327,6 +398,7 @@ class SkillManager:
             full_context,
             max_skills=3,
             threshold=0.1,
+            mode=mode,
         )
 
         if not skills:
@@ -342,7 +414,16 @@ class SkillManager:
         max_chars = self.max_skill_tokens * 3  # Rough char estimate
 
         for skill in skills:
-            skill_content = f"\n### {skill.name}\n{skill.content}\n"
+            skill_sections = [f"\n### {skill.name}"]
+            if skill.metadata.description:
+                skill_sections.append(f"{skill.metadata.description}")
+            if skill.metadata.tools:
+                skill_sections.append(f"Preferred tools: {', '.join(skill.metadata.tools)}")
+            if skill.metadata.constraints:
+                skill_sections.append(f"Constraints: {', '.join(skill.metadata.constraints)}")
+            skill_sections.append(skill.content)
+
+            skill_content = "\n".join(skill_sections) + "\n"
 
             if total_chars + len(skill_content) > max_chars:
                 # Truncate if too long

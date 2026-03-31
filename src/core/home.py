@@ -263,22 +263,25 @@ class Trace:
         self._current_turn_id: str | None = None
         self._span_count = 0
 
-    def start_turn(self, user_input: str) -> str:
+    def start_turn(self, user_input: str, metadata: dict[str, Any] | None = None) -> str:
         """Start a new turn, returns turn_id."""
         self._turn_count += 1
         self._span_count = 0
         self._current_turn_id = f"{self.session_id[:8]}-t{self._turn_count}"
+        data = {
+            "user_input": user_input[:500],
+            "input": {
+                "role": "user",
+                "content": user_input,
+            },
+        }
+        if metadata:
+            data.update(metadata)
         self.events.append(
             TraceEvent(
                 type="turn_start",
                 name=self._current_turn_id,
-                data={
-                    "user_input": user_input[:500],
-                    "input": {
-                        "role": "user",
-                        "content": user_input,
-                    },
-                },
+                data=data,
             )
         )
         return self._current_turn_id
@@ -324,9 +327,12 @@ class Trace:
         result: str,
         duration: float,
         error: str | None = None,
+        source: str = "built_in",
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Record a tool call, returns span_id."""
         span_id = self._next_span_id()
+        extra_metadata = metadata or {}
         self.events.append(
             TraceEvent(
                 type="tool_call",
@@ -336,6 +342,7 @@ class Trace:
                     "session_id": self.session_id,
                     "turn_id": self._current_turn_id,
                     "tool_name": tool_name,
+                    "tool_source": source,
                     "input": {
                         "arguments": args,
                     },
@@ -347,6 +354,7 @@ class Trace:
                     "args": args,
                     "result": result[:2000] if result else None,
                     "error": error,
+                    **extra_metadata,
                 },
                 duration=duration,
             )

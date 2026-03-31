@@ -35,6 +35,9 @@ class DummySession:
     def save_trace(self):
         return None
 
+    async def aclose(self):
+        return None
+
     def close(self):
         return None
 

@@ -9,10 +9,13 @@ Covers:
 - Error handling and edge cases
 """
 
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.core.errors import ConfigurationError
 from src.core.llm.model_client import (
     DirectModelClient,
     GatewayModelClient,
@@ -305,24 +308,6 @@ class TestClientConfig:
         with patch("src.core.config.load_config", return_value={}):
             with pytest.raises(ValueError, match="required 'model'"):
                 ClientConfig.from_env()
-
-    def test_client_config_from_env_ollama_base_url(self):
-        """Test loading Ollama base URL from project config."""
-        with patch(
-            "src.core.config.load_config",
-            return_value={
-                "model": "llama2",
-                "ollama_base_url": "http://custom:11434",
-            },
-        ):
-            config = ClientConfig.from_env()
-            assert config.ollama_base_url == "http://custom:11434"
-
-    def test_client_config_from_env_ollama_default(self):
-        """Test default Ollama base URL."""
-        with patch("src.core.config.load_config", return_value={"model": "llama2"}):
-            config = ClientConfig.from_env()
-            assert config.ollama_base_url == "http://localhost:11434"
 
     def test_client_config_gateway_settings(self):
         """Test gateway-specific settings."""
@@ -801,7 +786,7 @@ class TestGatewayModelClientStreaming:
         messages = [Message(role="user", content="Hi")]
 
         with patch.object(client, "connect", new_callable=AsyncMock):
-            with pytest.raises(RuntimeError):
+            with pytest.raises(ConfigurationError):
                 async for _ in client.chat_stream(messages):
                     pass
 
@@ -1113,7 +1098,6 @@ class TestDirectModelClientInit:
         assert Provider.GOOGLE in client.PROVIDER_PATTERNS
         assert Provider.OPENAI in client.PROVIDER_PATTERNS
         assert Provider.ANTHROPIC in client.PROVIDER_PATTERNS
-        assert Provider.OLLAMA in client.PROVIDER_PATTERNS
 
     @pytest.mark.asyncio
     async def test_direct_client_connect_google(self):
@@ -1134,7 +1118,25 @@ class TestDirectModelClientInit:
 
         with patch("openai.AsyncOpenAI") as mock_client:
             await client.connect()
-            mock_client.assert_called_once_with(api_key="test_key")
+            mock_client.assert_called_once_with(api_key="test_key", base_url=None)
+            assert Provider.OPENAI in client._providers
+
+    @pytest.mark.asyncio
+    async def test_direct_client_connect_openai_compatible_base_url(self):
+        """Test connecting OpenAI provider with a custom compatible base URL."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test_key",
+            openai_api_base="http://compat.example/v1",
+        )
+        client = DirectModelClient(config)
+
+        with patch("openai.AsyncOpenAI") as mock_client:
+            await client.connect()
+            mock_client.assert_called_once_with(
+                api_key="test_key",
+                base_url="http://compat.example/v1",
+            )
             assert Provider.OPENAI in client._providers
 
     @pytest.mark.asyncio
@@ -1143,21 +1145,14 @@ class TestDirectModelClientInit:
         config = ClientConfig(mode=ClientMode.DIRECT, anthropic_api_key="test_key")
         client = DirectModelClient(config)
 
-        with patch("anthropic.AsyncAnthropic") as mock_client:
+        anthropic_module = types.SimpleNamespace(AsyncAnthropic=MagicMock())
+        with patch.dict(sys.modules, {"anthropic": anthropic_module}):
             await client.connect()
-            mock_client.assert_called_once_with(api_key="test_key")
+            anthropic_module.AsyncAnthropic.assert_called_once_with(
+                api_key="test_key",
+                base_url=None,
+            )
             assert Provider.ANTHROPIC in client._providers
-
-    @pytest.mark.asyncio
-    async def test_direct_client_connect_ollama(self):
-        """Test connecting Ollama provider."""
-        config = ClientConfig(mode=ClientMode.DIRECT, ollama_base_url="http://localhost:11434")
-        client = DirectModelClient(config)
-
-        with patch("httpx.AsyncClient") as mock_client:
-            await client.connect()
-            mock_client.assert_called_once()
-            assert Provider.OLLAMA in client._providers
 
     @pytest.mark.asyncio
     async def test_direct_client_connect_no_providers(self):
@@ -1168,8 +1163,11 @@ class TestDirectModelClientInit:
         # Mock all provider imports to fail
         with patch("google.genai.Client", side_effect=ImportError):
             with patch("openai.AsyncOpenAI", side_effect=ImportError):
-                with patch("anthropic.AsyncAnthropic", side_effect=ImportError):
-                    with patch("httpx.AsyncClient", side_effect=Exception):
+                anthropic_module = types.SimpleNamespace()
+                with patch.dict(sys.modules, {"anthropic": anthropic_module}):
+                    with patch.object(
+                        anthropic_module, "AsyncAnthropic", side_effect=ImportError, create=True
+                    ):
                         with pytest.raises(RuntimeError, match="No providers available"):
                             await client.connect()
 
@@ -1179,12 +1177,12 @@ class TestDirectModelClientInit:
         config = ClientConfig(mode=ClientMode.DIRECT, google_api_key="test_key")
         client = DirectModelClient(config)
 
-        mock_ollama = AsyncMock()
-        mock_ollama.aclose = AsyncMock()
-        client._providers[Provider.OLLAMA] = mock_ollama
+        mock_provider = AsyncMock()
+        mock_provider.aclose = AsyncMock()
+        client._providers[Provider.GOOGLE] = mock_provider
 
         await client.close()
-        mock_ollama.aclose.assert_called_once()
+        mock_provider.aclose.assert_called_once()
         assert len(client._providers) == 0
 
     @pytest.mark.asyncio
@@ -1269,21 +1267,6 @@ class TestDirectModelClientChat:
         with patch.object(client, "_chat_anthropic", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = ChatResponse(content="Hello")
             client._providers[Provider.ANTHROPIC] = MagicMock()
-
-            messages = [Message(role="user", content="Hi")]
-            await client.chat(messages)
-
-            mock_chat.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_direct_chat_ollama(self):
-        """Test chat with Ollama provider."""
-        config = ClientConfig(mode=ClientMode.DIRECT, model="llama2")
-        client = DirectModelClient(config)
-
-        with patch.object(client, "_chat_ollama", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = ChatResponse(content="Hello")
-            client._providers[Provider.OLLAMA] = MagicMock()
 
             messages = [Message(role="user", content="Hi")]
             await client.chat(messages)
@@ -1508,13 +1491,7 @@ class TestModelClientFactory:
         with patch("src.core.config.load_config", return_value={"model": "test-model"}):
             info = ModelClient.get_mode_info()
             assert info["mode"] == "direct"
-            assert all(not v for k, v in info["providers"].items() if k != "ollama")
-
-    def test_model_client_get_mode_info_ollama_always_true(self):
-        """Test that Ollama is always available in mode info."""
-        with patch("src.core.config.load_config", return_value={"model": "test-model"}):
-            info = ModelClient.get_mode_info()
-            assert info["providers"]["ollama"] is True
+            assert all(not v for v in info["providers"].values())
 
 
 # ============================================================================
@@ -1530,7 +1507,6 @@ class TestProviderDetection:
         assert Provider.GOOGLE.value == "google"
         assert Provider.OPENAI.value == "openai"
         assert Provider.ANTHROPIC.value == "anthropic"
-        assert Provider.OLLAMA.value == "ollama"
 
     def test_detect_provider_gemini(self):
         """Test detecting Gemini models."""
@@ -1670,7 +1646,8 @@ class TestEdgeCasesAndIntegration:
 
         with patch("google.genai.Client"):
             with patch("openai.AsyncOpenAI"):
-                with patch("anthropic.AsyncAnthropic"):
+                anthropic_module = types.SimpleNamespace(AsyncAnthropic=MagicMock())
+                with patch.dict(sys.modules, {"anthropic": anthropic_module}):
                     await client.connect()
                     assert len(client._providers) >= 3
 

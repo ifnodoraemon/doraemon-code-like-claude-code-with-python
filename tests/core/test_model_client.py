@@ -16,6 +16,7 @@ from src.core.llm.model_client import (
     GatewayModelClient,
     ModelClient,
 )
+from src.core.llm.model_client_direct import _OPENAI_PROTOCOL_CACHE
 from src.core.llm.model_utils import ChatResponse, ClientConfig, ClientMode, Message, Provider
 
 
@@ -267,6 +268,81 @@ class TestDirectModelClient:
             "total_tokens": 4,
         }
 
+    def test_build_openai_responses_params_uses_structured_input_items(self):
+        """Responses API input should use official structured content blocks."""
+        params = DirectModelClient._build_openai_responses_params(
+            model="gpt-5.4",
+            msg_list=[
+                {"role": "user", "content": "Reply with exactly pong."},
+                {"role": "system", "content": "Be concise."},
+            ],
+            tools=None,
+            temperature=0.0,
+            max_output_tokens=None,
+        )
+
+        assert params["input"] == [
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Reply with exactly pong."}],
+            },
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": "Be concise."}],
+            },
+        ]
+        assert "temperature" not in params
+
+    def test_build_openai_responses_params_encodes_tool_history_for_responses(self):
+        """Assistant tool calls and tool outputs should be encoded in Responses format."""
+        params = DirectModelClient._build_openai_responses_params(
+            model="gpt-5.4",
+            msg_list=[
+                {
+                    "role": "assistant",
+                    "content": "I'll create the file now.",
+                    "tool_calls": [
+                        {
+                            "id": "call_write_1",
+                            "type": "function",
+                            "function": {
+                                "name": "write",
+                                "arguments": '{"path":"add.py","content":"def add(a, b):\\n    return a + b"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_write_1",
+                    "name": "write",
+                    "content": "Successfully wrote 32 bytes to add.py",
+                },
+            ],
+            tools=None,
+            temperature=0.7,
+            max_output_tokens=None,
+        )
+
+        assert params["input"] == [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "I'll create the file now."}],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_write_1",
+                "name": "write",
+                "arguments": '{"path":"add.py","content":"def add(a, b):\\n    return a + b"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_write_1",
+                "output": "Successfully wrote 32 bytes to add.py",
+            },
+        ]
+
     @pytest.mark.asyncio
     async def test_chat_openai_skips_responses_for_custom_base_url(self):
         """Third-party OpenAI-compatible upstreams should go straight to chat.completions."""
@@ -297,8 +373,164 @@ class TestDirectModelClient:
         assert response.content == "pong"
 
     @pytest.mark.asyncio
-    async def test_chat_openai_skips_responses_for_tool_history(self):
-        """Chat-style tool history should bypass Responses API until we encode it natively."""
+    async def test_chat_openai_allows_responses_for_packy_base_url(self):
+        """PackyAPI should use Responses API because its chat endpoint is unavailable."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://www.packyapi.com/v1",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.responses.create.return_value = types.SimpleNamespace(
+            output_text="pong",
+            output=[],
+            usage=types.SimpleNamespace(input_tokens=3, output_tokens=1),
+            status="completed",
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai([Message(role="user", content="ping")])
+
+        mock_provider.responses.create.assert_called_once()
+        mock_provider.chat.completions.create.assert_not_called()
+        assert response.content == "pong"
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_locks_responses_protocol_after_success(self):
+        """Once Responses succeeds, later turns should stay on Responses."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://www.packyapi.com/v1",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.responses.create.side_effect = [
+            types.SimpleNamespace(
+                output_text="first",
+                output=[],
+                usage=types.SimpleNamespace(input_tokens=3, output_tokens=1),
+                status="completed",
+            ),
+            types.SimpleNamespace(
+                output_text="second",
+                output=[],
+                usage=types.SimpleNamespace(input_tokens=4, output_tokens=1),
+                status="completed",
+            ),
+        ]
+        client._providers[Provider.OPENAI] = mock_provider
+
+        first = await client._chat_openai([Message(role="user", content="ping")])
+        second = await client._chat_openai(
+            [
+                Message(
+                    role="assistant",
+                    content="calling tool",
+                    tool_calls=[{"id": "call_1", "type": "function", "function": {"name": "read", "arguments": "{}"}}],
+                ),
+                Message(role="tool", content="result", tool_call_id="call_1", name="read"),
+            ]
+        )
+
+        assert first.content == "first"
+        assert second.content == "second"
+        assert client._openai_protocol == "responses"
+        assert mock_provider.responses.create.call_count == 2
+        mock_provider.chat.completions.create.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_locks_chat_completions_after_responses_failure(self):
+        """Once fallback to chat.completions succeeds, later turns should stay there."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://api-inference.modelscope.cn/v1",
+            model="ZhipuAI/GLM-5",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.side_effect = [
+            types.SimpleNamespace(
+                choices=[
+                    types.SimpleNamespace(
+                        message=types.SimpleNamespace(content="first", tool_calls=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=types.SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4),
+            ),
+            types.SimpleNamespace(
+                choices=[
+                    types.SimpleNamespace(
+                        message=types.SimpleNamespace(content="second", tool_calls=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=types.SimpleNamespace(prompt_tokens=4, completion_tokens=1, total_tokens=5),
+            ),
+        ]
+        client._providers[Provider.OPENAI] = mock_provider
+
+        first = await client._chat_openai([Message(role="user", content="ping")])
+        second = await client._chat_openai([Message(role="user", content="pong")])
+
+        assert first.content == "first"
+        assert second.content == "second"
+        assert client._openai_protocol == "chat_completions"
+        mock_provider.responses.create.assert_not_called()
+        assert mock_provider.chat.completions.create.call_count == 2
+
+    def test_openai_protocol_cache_seeds_new_client(self):
+        """A successful probe should seed later client sessions for the same upstream."""
+        key = ("https://www.packyapi.com/v1", "gpt-5.4")
+        _OPENAI_PROTOCOL_CACHE[key] = "responses"
+
+        try:
+            client = DirectModelClient(
+                ClientConfig(
+                    mode=ClientMode.DIRECT,
+                    openai_api_key="test-key",
+                    openai_api_base="https://www.packyapi.com/v1",
+                    model="gpt-5.4",
+                )
+            )
+            assert client._openai_protocol == "responses"
+        finally:
+            _OPENAI_PROTOCOL_CACHE.pop(key, None)
+
+    @pytest.mark.asyncio
+    async def test_close_keeps_global_protocol_cache(self):
+        """Closing a client should not erase the shared provider capability cache."""
+        key = ("https://www.packyapi.com/v1", "gpt-5.4")
+        _OPENAI_PROTOCOL_CACHE.pop(key, None)
+
+        client = DirectModelClient(
+            ClientConfig(
+                mode=ClientMode.DIRECT,
+                openai_api_key="test-key",
+                openai_api_base="https://www.packyapi.com/v1",
+                model="gpt-5.4",
+            )
+        )
+        client._providers[Provider.OPENAI] = AsyncMock()
+        client._openai_protocol = "responses"
+        _OPENAI_PROTOCOL_CACHE[key] = "responses"
+
+        await client.close()
+
+        assert _OPENAI_PROTOCOL_CACHE[key] == "responses"
+        _OPENAI_PROTOCOL_CACHE.pop(key, None)
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_uses_responses_for_tool_history(self):
+        """Chat-style tool history should be encoded for Responses API replay."""
         config = ClientConfig(
             mode=ClientMode.DIRECT,
             openai_api_key="test-key",
@@ -307,14 +539,11 @@ class TestDirectModelClient:
         client = DirectModelClient(config)
 
         mock_provider = AsyncMock()
-        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
-            choices=[
-                types.SimpleNamespace(
-                    message=types.SimpleNamespace(content="done", tool_calls=None),
-                    finish_reason="stop",
-                )
-            ],
-            usage=types.SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4),
+        mock_provider.responses.create.return_value = types.SimpleNamespace(
+            output_text="done",
+            output=[],
+            usage=types.SimpleNamespace(input_tokens=3, output_tokens=1),
+            status="completed",
         )
         client._providers[Provider.OPENAI] = mock_provider
 
@@ -329,8 +558,8 @@ class TestDirectModelClient:
             ]
         )
 
-        mock_provider.responses.create.assert_not_called()
-        mock_provider.chat.completions.create.assert_called_once()
+        mock_provider.responses.create.assert_called_once()
+        mock_provider.chat.completions.create.assert_not_called()
         assert response.content == "done"
 
     @pytest.mark.asyncio
@@ -405,6 +634,7 @@ class TestDirectModelClient:
         config = ClientConfig(
             mode=ClientMode.DIRECT,
             openai_api_key="test-key",
+            openai_api_base="https://www.packyapi.com/v1",
             model="gpt-5.4",
         )
         client = DirectModelClient(config)
@@ -431,7 +661,6 @@ class TestDirectModelClient:
         response = await client._chat_openai(
             [
                 Message(role="user", content="ping"),
-                Message(role="tool", content="pong", tool_call_id="call_1", name="read"),
             ]
         )
 

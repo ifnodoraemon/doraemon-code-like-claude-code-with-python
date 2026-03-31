@@ -8,8 +8,7 @@ Architecture:
                 │
                 ├── Google (Gemini)
                 ├── OpenAI (GPT)
-                ├── Anthropic (Claude)
-                └── Ollama (Local)
+                └── Anthropic (Claude)
 
 Usage:
     # Start gateway server

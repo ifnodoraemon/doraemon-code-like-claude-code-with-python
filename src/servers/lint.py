@@ -1,5 +1,5 @@
 """
-Unified Code Quality and Linting MCP Server
+Unified Code Quality and Linting Tools
 
 Provides code analysis, linting, and type checking capabilities.
 Similar to Claude Code's ReadLints tool but more comprehensive.
@@ -32,16 +32,12 @@ import os
 import subprocess
 from dataclasses import dataclass
 
-from mcp.server.fastmcp import FastMCP
-
 from src.core.logger import configure_root_logger
 from src.core.security.security import validate_path
 
 # Setup logging
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-mcp = FastMCP("AgentLint")
 
 
 # ========================================
@@ -511,7 +507,6 @@ def _lint_summary(path: str) -> str:
 # ========================================
 
 
-@mcp.tool()
 def lint(
     path: str = ".",
     operation: str = "check",
@@ -628,6 +623,3 @@ def lint(
 
     return f"Error: Unknown operation '{operation}'"
 
-
-if __name__ == "__main__":
-    mcp.run()

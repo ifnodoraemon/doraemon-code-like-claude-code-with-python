@@ -21,8 +21,6 @@ import time
 from dataclasses import dataclass
 from typing import Literal
 
-from mcp.server.fastmcp import FastMCP
-
 from src.core.logger import configure_root_logger
 from src.core.security.security import validate_path
 from src.core.security.shell_security import (
@@ -38,8 +36,6 @@ from src.core.security.shell_security import (
 # Setup logging
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-mcp = FastMCP("AgentRunUnified")
 
 
 # ========================================
@@ -178,7 +174,6 @@ _register_background_process = register_background_process
 # ========================================
 
 
-@mcp.tool()
 def run(
     command: str,
     mode: Literal["shell", "python", "background", "install"] = "shell",
@@ -447,6 +442,3 @@ def _run_install(package_name: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
-
-if __name__ == "__main__":
-    mcp.run()

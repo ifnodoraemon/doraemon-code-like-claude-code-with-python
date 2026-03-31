@@ -50,6 +50,20 @@ class TestSkillMetadata:
         assert metadata.requires == ["basic-skill"]
         assert metadata.files == ["guide.md", "examples.py"]
 
+    def test_from_dict_with_mode_tools_and_constraints(self):
+        """Structured metadata should preserve mode/tool/constraint fields."""
+        data = {
+            "name": "Build Skill",
+            "description": "Build-only instructions",
+            "mode": ["build"],
+            "tools": ["read", "write", "run"],
+            "constraints": ["no_network"],
+        }
+        metadata = SkillMetadata.from_dict(data)
+        assert metadata.mode == ["build"]
+        assert metadata.tools == ["read", "write", "run"]
+        assert metadata.constraints == ["no_network"]
+
 
 class TestSkill:
     """Tests for Skill class."""
@@ -134,6 +148,19 @@ class TestSkill:
         skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
         score = skill.matches_context("working with .py files")
         assert score > 0.0
+
+    def test_matches_context_respects_mode(self):
+        """Skills should not activate outside their declared product mode."""
+        metadata = SkillMetadata(
+            name="Build Skill",
+            description="Build only",
+            triggers=["python"],
+            mode=["build"],
+        )
+        skill = Skill(metadata=metadata, content="Content", path=Path("/test"))
+
+        assert skill.matches_context("python", mode="plan") == 0.0
+        assert skill.matches_context("python", mode="build") > 0.0
 
 
 class TestSkillLoader:
@@ -241,6 +268,37 @@ files:
         assert "examples.txt" in skill.additional_content
         assert skill.additional_content["guide.md"] == "# Guide"
 
+    def test_load_skill_with_structured_metadata(self, tmp_path):
+        """Test loading a skill with mode/tool/constraint metadata."""
+        skill_dir = tmp_path / "structured-skill"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text(
+            """---
+name: Structured Skill
+description: Mode-aware skill
+triggers:
+  - python
+mode:
+  - build
+tools:
+  - read
+  - write
+constraints:
+  - no_network
+---
+
+# Structured Content
+"""
+        )
+
+        loader = SkillLoader()
+        skill = loader.load_skill(skill_dir)
+        assert skill is not None
+        assert skill.metadata.mode == ["build"]
+        assert skill.metadata.tools == ["read", "write"]
+        assert skill.metadata.constraints == ["no_network"]
+
     def test_parse_skill_file_no_frontmatter(self):
         """Test parsing skill file without frontmatter."""
         loader = SkillLoader()
@@ -291,6 +349,47 @@ Content
         skills = loader.get_relevant_skills("unrelated topic", threshold=0.9)
         assert len(skills) == 0
 
+    def test_get_relevant_skills_respects_mode(self, tmp_path):
+        """Loader should filter skills by declared product mode."""
+        skills_dir = tmp_path / ".agent" / "skills"
+
+        plan_dir = skills_dir / "plan-skill"
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "SKILL.md").write_text(
+            """---
+name: Plan Skill
+description: Planning instructions
+triggers:
+  - architecture
+mode:
+  - plan
+---
+Plan content
+"""
+        )
+
+        build_dir = skills_dir / "build-skill"
+        build_dir.mkdir(parents=True)
+        (build_dir / "SKILL.md").write_text(
+            """---
+name: Build Skill
+description: Build instructions
+triggers:
+  - architecture
+mode:
+  - build
+---
+Build content
+"""
+        )
+
+        loader = SkillLoader(project_dir=tmp_path)
+        plan_skills = loader.get_relevant_skills("architecture", mode="plan")
+        build_skills = loader.get_relevant_skills("architecture", mode="build")
+
+        assert [skill.name for skill in plan_skills] == ["Plan Skill"]
+        assert [skill.name for skill in build_skills] == ["Build Skill"]
+
 
 class TestSkillManager:
     """Tests for SkillManager."""
@@ -312,6 +411,58 @@ class TestSkillManager:
         manager = SkillManager(project_dir=tmp_path)
         result = manager.get_skills_for_context("python code")
         assert result == ""
+
+    def test_get_skills_for_context_respects_mode(self, tmp_path):
+        """SkillManager should only activate skills valid for the current mode."""
+        skills_dir = tmp_path / ".agent" / "skills"
+
+        plan_dir = skills_dir / "plan-skill"
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "SKILL.md").write_text(
+            """---
+name: Plan Skill
+description: Planning instructions
+triggers:
+  - architecture
+mode:
+  - plan
+---
+
+Use task and memory before editing.
+"""
+        )
+
+        build_dir = skills_dir / "build-skill"
+        build_dir.mkdir(parents=True)
+        (build_dir / "SKILL.md").write_text(
+            """---
+name: Build Skill
+description: Build instructions
+triggers:
+  - architecture
+mode:
+  - build
+tools:
+  - write
+constraints:
+  - no_network
+---
+
+Edit code and run checks.
+"""
+        )
+
+        manager = SkillManager(project_dir=tmp_path)
+
+        plan_result = manager.get_skills_for_context("architecture", mode="plan")
+        assert "Plan Skill" in plan_result
+        assert "Build Skill" not in plan_result
+
+        build_result = manager.get_skills_for_context("architecture", mode="build")
+        assert "Build Skill" in build_result
+        assert "Preferred tools: write" in build_result
+        assert "Constraints: no_network" in build_result
+        assert "Plan Skill" not in build_result
 
     def test_get_active_skills_empty(self):
         """Test getting active skills when none loaded."""

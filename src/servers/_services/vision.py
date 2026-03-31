@@ -83,7 +83,9 @@ class OpenAIAdapter(VisionAdapter):
     def __init__(self):
         config = load_config(validate=False)
         api_key = config.get("openai_api_key")
-        self.client = OpenAI(api_key=api_key) if api_key else None
+        self.client = (
+            OpenAI(api_key=api_key, base_url=config.get("openai_api_base")) if api_key else None
+        )
         self.model_name = config.get("model")
 
     def _encode_image(self, image_path: str) -> str:

@@ -265,11 +265,15 @@ class PermissionManager:
     TOOL_OPERATIONS = {
         "read": OperationType.READ,
         "search": OperationType.READ,
-        "semantic_search": OperationType.READ,
         "write": OperationType.WRITE,
         "run": OperationType.EXECUTE,
         "web_search": OperationType.NETWORK,
-        "fetch_url": OperationType.NETWORK,
+        "web_fetch": OperationType.NETWORK,
+        "memory_get": OperationType.READ,
+        "memory_search": OperationType.READ,
+        "memory_list": OperationType.READ,
+        "memory_put": OperationType.WRITE,
+        "memory_delete": OperationType.WRITE,
     }
 
     def __init__(

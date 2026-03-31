@@ -8,10 +8,25 @@ Provides format-aware document parsing for various file types:
 - XLSX: Excel spreadsheet parsing
 """
 
-import docx
-import openpyxl
-import pdfplumber
-from pptx import Presentation
+try:
+    import docx
+except ImportError:
+    docx = None
+
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None
+
+try:
+    import pdfplumber
+except ImportError:
+    pdfplumber = None
+
+try:
+    from pptx import Presentation
+except ImportError:
+    Presentation = None
 
 
 def parse_pdf(path: str) -> str:
@@ -24,6 +39,9 @@ def parse_pdf(path: str) -> str:
     Returns:
         Extracted text or error message
     """
+    if pdfplumber is None:
+        return "[PDF Error: pdfplumber not installed]"
+
     text = []
     try:
         with pdfplumber.open(path) as pdf:
@@ -47,6 +65,9 @@ def parse_docx(path: str) -> str:
     Returns:
         Extracted text or error message
     """
+    if docx is None:
+        return "[DOCX Error: python-docx not installed]"
+
     try:
         doc = docx.Document(path)
         return "\n".join([p.text for p in doc.paragraphs])
@@ -64,6 +85,9 @@ def parse_pptx(path: str) -> str:
     Returns:
         Extracted text or error message
     """
+    if Presentation is None:
+        return "[PPTX Error: python-pptx not installed]"
+
     try:
         prs = Presentation(path)
         text = []
@@ -86,6 +110,9 @@ def parse_xlsx(path: str) -> str:
     Returns:
         Extracted text with sheet names or error message
     """
+    if openpyxl is None:
+        return "[XLSX Error: openpyxl not installed]"
+
     try:
         wb = openpyxl.load_workbook(path, data_only=True)
         text = []

@@ -13,7 +13,7 @@
     "id": "mem-assert-001",
     "prompt": "My project codename is 'Omega'. Save this to my user persona.",
     "assertions": [
-      {"type": "tool_used", "tool": "update_user_persona"}
+      {"type": "tool_used", "tool": "memory_put"}
     ]
   }
 ]

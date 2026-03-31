@@ -1,5 +1,5 @@
 """
-Unified Filesystem Tools - Consolidated MCP Server
+Unified Filesystem Tools
 
 This module provides 3 unified tools that replace 15+ scattered tools:
 - read: Unified reading (file, outline, directory, tree)
@@ -28,16 +28,12 @@ import shutil
 from datetime import datetime
 from typing import Literal
 
-from mcp.server.fastmcp import FastMCP
-
 from src.core.logger import configure_root_logger
 from src.core.security.security import validate_path
 from src.servers._services import code_nav, document, outline, vision
 
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-mcp = FastMCP("AgentFilesystemUnified")
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_LINES_DEFAULT = 2000
@@ -571,7 +567,6 @@ def create_directory(path: str) -> str:
 # ========================================
 
 
-@mcp.tool()
 def read(
     path: str,
     mode: Literal["file", "outline", "directory", "tree"] = "file",
@@ -631,7 +626,6 @@ def read(
 # ========================================
 
 
-@mcp.tool()
 def write(
     path: str,
     content: str | None = None,
@@ -716,7 +710,6 @@ def write(
 # ========================================
 
 
-@mcp.tool()
 def search(
     query: str,
     mode: Literal["content", "files", "symbol"] = "content",
@@ -774,7 +767,6 @@ def search(
 # ========================================
 
 
-@mcp.tool()
 def notebook_read(path: str) -> str:
     """
     Read a Jupyter notebook (.ipynb) file.
@@ -841,7 +833,6 @@ def notebook_read(path: str) -> str:
         return f"Error reading notebook: {str(e)}"
 
 
-@mcp.tool()
 def notebook_edit(
     path: str,
     cell_index: int,
@@ -917,7 +908,6 @@ def notebook_edit(
         return f"Error editing notebook: {str(e)}"
 
 
-@mcp.tool()
 def multi_edit(
     path: str,
     edits: list[dict],
@@ -986,10 +976,3 @@ def multi_edit(
     except Exception as e:
         return f"Error in multi_edit: {str(e)}"
 
-
-# ========================================
-# Server Entry Point
-# ========================================
-
-if __name__ == "__main__":
-    mcp.run()

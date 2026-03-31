@@ -16,9 +16,8 @@ router = APIRouter()
 async def list_tools(mode: str = "build"):
     """List available tools for a mode."""
     selector = ToolSelector()
-    registry = get_default_registry()
-
     tool_names = selector.get_tools_for_mode(mode)
+    registry = get_default_registry(tool_names)
     genai_tools = registry.get_genai_tools(tool_names)
 
     tools = []

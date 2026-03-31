@@ -43,6 +43,7 @@ from .base import (
 from .doraemon import (
     DoraemonAgent,
     create_doraemon_agent,
+    create_doraemon_agent_with_tools,
     create_doraemon_agent_with_mcp,
 )
 from .react import ReActAgent
@@ -66,6 +67,7 @@ __all__ = [
     "ReActAgent",
     "DoraemonAgent",
     "create_doraemon_agent",
+    "create_doraemon_agent_with_tools",
     "create_doraemon_agent_with_mcp",
     "AgentState",
     "AgentResult",

@@ -438,7 +438,10 @@ class DoraemonAgentAdapter(AgentAdapter):
             }
         finally:
             try:
-                session.close()
+                if hasattr(session, "aclose"):
+                    await session.aclose()
+                else:
+                    session.close()
             finally:
                 await model_client.close()
 

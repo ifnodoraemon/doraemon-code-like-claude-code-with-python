@@ -1,5 +1,5 @@
 """
-Language Server Protocol (LSP) MCP Server
+Language Server Protocol (LSP) Tools
 
 Provides IDE-level code intelligence for Doraemon:
 - Code diagnostics (syntax errors, linting)
@@ -20,16 +20,12 @@ import re
 import subprocess
 from dataclasses import dataclass
 
-from mcp.server.fastmcp import FastMCP
-
 from src.core.logger import configure_root_logger
 from src.core.security.security import validate_path
 
 # Setup logging
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-mcp = FastMCP("AgentLSP")
 
 
 @dataclass
@@ -433,11 +429,10 @@ async def _require_lsp() -> tuple[PylspClient | None, str | None]:
 
 
 # ========================================
-# MCP Tools
+# Tool entry points
 # ========================================
 
 
-@mcp.tool()
 async def lsp_diagnostics(path: str, include_mypy: bool = False) -> str:
     """Get code diagnostics (errors, warnings) for a Python file."""
     valid_path, err = _validate_py_file(path)
@@ -463,7 +458,6 @@ async def lsp_diagnostics(path: str, include_mypy: bool = False) -> str:
     return f"Diagnostics for {path}:\n\n" + "\n".join(results)
 
 
-@mcp.tool()
 async def lsp_completions(path: str, line: int, column: int) -> str:
     """Get code completion suggestions at a position (1-indexed)."""
     valid_path, err = _validate_py_file(path)
@@ -486,7 +480,6 @@ async def lsp_completions(path: str, line: int, column: int) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
 async def lsp_hover(path: str, line: int, column: int) -> str:
     """Get type/documentation info at a position (1-indexed)."""
     valid_path, err = _validate_py_file(path)
@@ -502,7 +495,6 @@ async def lsp_hover(path: str, line: int, column: int) -> str:
     return f"Info at {path}:{line}:{column}:\n\n{hover_info}"
 
 
-@mcp.tool()
 async def lsp_references(path: str, symbol: str) -> str:
     """Find all references to a symbol via grep."""
     try:
@@ -523,7 +515,6 @@ async def lsp_references(path: str, symbol: str) -> str:
         return f"Error searching: {e}"
 
 
-@mcp.tool()
 async def lsp_rename(
     path: str,
     old_name: str,
@@ -586,7 +577,6 @@ async def lsp_rename(
         return f"Error: {e}"
 
 
-@mcp.tool()
 async def lsp_definition(path: str, symbol: str) -> str:
     """Find where a symbol is defined (class/def/assignment)."""
     try:
@@ -609,6 +599,3 @@ async def lsp_definition(path: str, symbol: str) -> str:
 
     return f"Definition not found for '{symbol}'"
 
-
-if __name__ == "__main__":
-    mcp.run()

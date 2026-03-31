@@ -846,7 +846,6 @@ class TestParallelExecutor:
         analyzer = DependencyAnalyzer()
         assert "read" in analyzer.READ_TOOLS
         assert "search" in analyzer.READ_TOOLS
-        assert "semantic_search" in analyzer.READ_TOOLS
 
     def test_analyzer_known_dependencies(self):
         """Test KNOWN_DEPENDENCIES mapping."""

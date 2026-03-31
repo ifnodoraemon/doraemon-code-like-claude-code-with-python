@@ -1,11 +1,12 @@
 """
-Playwright Browser MCP Server
+Playwright Browser Tools
 
 Provides browser automation using Playwright. This is an enhanced version
 with more capabilities for web interaction.
 
-For advanced Chrome DevTools Protocol features, consider using the official
-Puppeteer MCP server: npx -y @modelcontextprotocol/server-puppeteer
+If you need an external browser automation endpoint, prefer the official
+Puppeteer MCP server in its own container or process:
+`npx -y @modelcontextprotocol/server-puppeteer`
 
 Tools provided:
 - browse_page: Navigate and extract page content
@@ -20,8 +21,6 @@ Tools provided:
 import asyncio
 import logging
 from pathlib import Path
-
-from mcp.server.fastmcp import FastMCP
 from playwright.async_api import Browser, Page, async_playwright
 
 from src.core.logger import configure_root_logger
@@ -29,8 +28,6 @@ from src.core.security.security import validate_path
 
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-mcp = FastMCP("AgentBrowser")
 
 _browser: Browser | None = None
 _playwright = None
@@ -71,7 +68,6 @@ async def get_or_create_page(page_id: str | None = None) -> tuple[Page, str]:
     return page, new_id
 
 
-@mcp.tool()
 async def browse_page(
     url: str,
     page_id: str | None = None,
@@ -104,7 +100,6 @@ async def browse_page(
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def take_screenshot(
     url: str,
     path: str,
@@ -155,7 +150,6 @@ async def take_screenshot(
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_click(
     page_id: str,
     selector: str,
@@ -183,7 +177,6 @@ async def browser_click(
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_fill(
     page_id: str,
     selector: str,
@@ -216,7 +209,6 @@ async def browser_fill(
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_evaluate(
     page_id: str,
     script: str,
@@ -244,7 +236,6 @@ async def browser_evaluate(
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_wait(
     page_id: str,
     selector: str,
@@ -272,7 +263,6 @@ async def browser_wait(
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_pdf(
     page_id: str,
     path: str,
@@ -302,7 +292,6 @@ async def browser_pdf(
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_get_html(page_id: str) -> str:
     """
     Get the HTML content of a page.
@@ -324,7 +313,6 @@ async def browser_get_html(page_id: str) -> str:
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_close_page(page_id: str) -> str:
     """
     Close a specific page.
@@ -346,7 +334,6 @@ async def browser_close_page(page_id: str) -> str:
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 async def browser_list_pages() -> str:
     """
     List all open pages.
@@ -363,6 +350,3 @@ async def browser_list_pages() -> str:
 
     return json.dumps(pages_info, indent=2)
 
-
-if __name__ == "__main__":
-    mcp.run()

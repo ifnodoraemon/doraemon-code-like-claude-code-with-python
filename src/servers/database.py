@@ -3,16 +3,12 @@ import logging
 import re
 import sqlite3
 
-from mcp.server.fastmcp import FastMCP
-
 from src.core.logger import configure_root_logger
 from src.core.security.security import validate_path
 
 # Setup logging
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-mcp = FastMCP("AgentDatabase")
 
 
 def _get_connection(db_path: str) -> sqlite3.Connection:
@@ -38,7 +34,6 @@ def _contains_multiple_statements(query: str) -> bool:
     return len(parts) > 1
 
 
-@mcp.tool()
 def db_read_query(query: str, db_path: str, params: list | None = None) -> str:
     """
     Execute a SELECT query on a SQLite database.
@@ -81,7 +76,6 @@ def db_read_query(query: str, db_path: str, params: list | None = None) -> str:
             conn.close()
 
 
-@mcp.tool()
 def db_write_query(query: str, db_path: str, params: list | None = None) -> str:
     """
     Execute an INSERT, UPDATE, DELETE, or CREATE query on a SQLite database.
@@ -126,7 +120,6 @@ def db_write_query(query: str, db_path: str, params: list | None = None) -> str:
             conn.close()
 
 
-@mcp.tool()
 def db_list_tables(db_path: str) -> str:
     """
     List all tables in the SQLite database.
@@ -138,7 +131,6 @@ def db_list_tables(db_path: str) -> str:
     return str(db_read_query(query, db_path))
 
 
-@mcp.tool()
 def db_describe_table(table_name: str, db_path: str) -> str:
     """
     Get the schema of a specific table.
@@ -176,6 +168,3 @@ def db_describe_table(table_name: str, db_path: str) -> str:
         if conn:
             conn.close()
 
-
-if __name__ == "__main__":
-    mcp.run()

@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.core.security.security import validate_path
-from src.servers.memory import save_note, search_notes
+from src.servers.memory import memory_put, memory_search
 
 
 # --------------------------
@@ -49,11 +49,11 @@ def test_memory_ingestion_and_retrieval():
     """Eval: Saved notes should be retrievable by semantic search."""
     # 1. Save a unique fact
     unique_fact = "Doraemon agent was created in 2025 by a visionary developer."
-    save_note("History", unique_fact, collection_name="test_eval")
+    memory_put("History", unique_fact, collection_name="test_eval")
 
     # 2. Retrieve using semantic query (not exact match)
     query = "When was this AI agent born?"
-    result = search_notes(query, collection_name="test_eval")
+    result = memory_search(query, collection_name="test_eval")
 
     # 3. Assertions
     assert "2025" in result

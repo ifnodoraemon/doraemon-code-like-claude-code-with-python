@@ -57,9 +57,9 @@
 │  ┌───────────────────────────────────────────────────────────────┐  │
 │  │                    Provider Adapters                           │  │
 │  │  ┌────────┐  ┌────────┐  ┌──────────┐  ┌────────┐            │  │
-│  │  │ Google │  │ OpenAI │  │Anthropic │  │ Ollama │            │  │
-│  │  │ Gemini │  │  GPT   │  │  Claude  │  │ Local  │            │  │
-│  │  └────────┘  └────────┘  └──────────┘  └────────┘            │  │
+│  │  │ Google │  │ OpenAI │  │Anthropic │                        │  │
+│  │  │ Gemini │  │  GPT   │  │  Claude  │                        │  │
+│  │  └────────┘  └────────┘  └──────────┘                        │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -79,7 +79,6 @@ pip install fastapi uvicorn httpx google-genai openai anthropic
 export GOOGLE_API_KEY="your-google-key"
 export OPENAI_API_KEY="your-openai-key"
 export ANTHROPIC_API_KEY="your-anthropic-key"
-export OLLAMA_ENABLED="true"
 
 # 可选：设置 Gateway 的 API Key
 export AGENT_API_KEY="your-gateway-key"
@@ -165,10 +164,6 @@ async with GatewayClient() as client:
 - `claude-3-5-sonnet-20241022`
 - `claude-3-5-haiku-20241022` (aliases: haiku)
 
-### Ollama (Local)
-- 自动检测本地安装的模型
-- `llama3.3:70b`, `qwen2.5:72b`, `deepseek-r1:70b` 等
-
 ## 模型路由
 
 Gateway 根据模型 ID 前缀自动路由：
@@ -178,7 +173,6 @@ Gateway 根据模型 ID 前缀自动路由：
 | `gemini-` | Google |
 | `gpt-`, `o1`, `o3` | OpenAI |
 | `claude-` | Anthropic |
-| 其他 | Ollama (本地) |
 
 ## 配置选项
 
@@ -189,8 +183,6 @@ Gateway 根据模型 ID 前缀自动路由：
 | `GOOGLE_API_KEY` | Google API Key | - |
 | `OPENAI_API_KEY` | OpenAI API Key | - |
 | `ANTHROPIC_API_KEY` | Anthropic API Key | - |
-| `OLLAMA_ENABLED` | 启用 Ollama | true |
-| `OLLAMA_API_BASE` | Ollama 地址 | http://localhost:11434 |
 | `AGENT_API_KEY` | Gateway API Key | - |
 | `GATEWAY_HOST` | 监听地址 | 0.0.0.0 |
 | `GATEWAY_PORT` | 监听端口 | 8000 |

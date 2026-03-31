@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import json
 
-from mcp.server.fastmcp import FastMCP
-
 from src.core.tasks import TaskClaimError, TaskManager, TaskStatus
 
-mcp = FastMCP("AgentTaskServer")
 manager = TaskManager()
 
 
@@ -33,7 +30,6 @@ def _normalize_dependencies(value: str | None) -> list[str] | None:
     return [part for part in parts if part]
 
 
-@mcp.tool()
 def task(
     operation: str = "list",
     title: str | None = None,
@@ -160,6 +156,3 @@ def task(
 
     return _dump({"ok": False, "error": f"unknown operation: {operation}"})
 
-
-if __name__ == "__main__":
-    mcp.run()
