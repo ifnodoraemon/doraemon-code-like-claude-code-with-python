@@ -251,9 +251,10 @@ class AgentSession:
 
         self._agent: DoraemonAgent | None = None
         self._state: AgentState | None = None
-        self._mcp_registry: Any = None
+        self._tool_registry: Any = None
         self._trace: Trace | None = None
         self._session_id: str | None = None
+        self._mcp_extensions: list[str] = []
 
     @property
     def session_id(self) -> str:
@@ -263,14 +264,18 @@ class AgentSession:
         return self._session_id
 
     async def initialize(self) -> None:
-        """Initialize the agent session with MCP support."""
+        """Initialize the agent session with the built-in tool registry."""
         self._state = AgentState(mode=self.mode, max_turns=self.max_turns)
 
         if self.registry is None:
-            from src.host.mcp_registry import create_unified_registry
+            from src.host.mcp_registry import create_tool_registry
 
-            self._mcp_registry = await create_unified_registry(self.config_path)
-            self.registry = self._mcp_registry
+            self._tool_registry = await create_tool_registry(self.config_path, mode=self.mode)
+            self.registry = self._tool_registry
+            self._mcp_extensions = getattr(self._tool_registry, "_active_mcp_extensions", []).copy()
+        elif not self._mcp_extensions:
+            self._tool_registry = self.registry
+            self._mcp_extensions = getattr(self.registry, "_active_mcp_extensions", []).copy()
 
         if self.enable_trace:
             from src.core.home import set_project_dir
@@ -290,6 +295,7 @@ class AgentSession:
             enable_trace=self.enable_trace,
             trace=self._trace,
             session_id=self.session_id,
+            active_mcp_extensions=self._mcp_extensions,
         )
         self._agent.state = self._state
 
@@ -349,6 +355,12 @@ class AgentSession:
         if self._trace:
             return self._trace.save()
         return None
+
+    async def aclose(self) -> Path | None:
+        """Close session resources and save trace."""
+        for client in getattr(self.registry, "_mcp_clients", []):
+            await client.close()
+        return self.save_trace()
 
     def close(self) -> Path | None:
         """Close session and save trace."""
