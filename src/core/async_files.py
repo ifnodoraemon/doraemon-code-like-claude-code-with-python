@@ -16,7 +16,7 @@ from typing import Any, Callable
 from src.core.security.security import validate_path
 
 
-async def async_read_file(
+async def async_read_path(
     path: str,
     offset: int = 0,
     limit: int | None = None,
@@ -67,7 +67,7 @@ async def async_read_file(
     return await asyncio.to_thread(_read)
 
 
-async def async_write_file(
+async def async_write_path(
     path: str,
     content: str,
     encoding: str = "utf-8",
@@ -99,7 +99,7 @@ async def async_write_file(
     return await asyncio.to_thread(_write)
 
 
-async def async_list_directory(
+async def async_list_path(
     path: str = ".",
     show_hidden: bool = False,
     pattern: str | None = None,
@@ -153,7 +153,7 @@ async def async_get_file_size(path: str) -> int:
     return await asyncio.to_thread(_get_size)
 
 
-async def async_copy_file(src: str, dst: str) -> str:
+async def async_copy_path(src: str, dst: str) -> str:
     """Asynchronously copy a file."""
     import shutil
 
@@ -171,7 +171,7 @@ async def async_copy_file(src: str, dst: str) -> str:
     return await asyncio.to_thread(_copy)
 
 
-async def async_move_file(src: str, dst: str) -> str:
+async def async_move_path(src: str, dst: str) -> str:
     """Asynchronously move a file."""
     import shutil
 
@@ -189,7 +189,7 @@ async def async_move_file(src: str, dst: str) -> str:
     return await asyncio.to_thread(_move)
 
 
-async def async_delete_file(path: str) -> str:
+async def async_delete_path(path: str) -> str:
     """Asynchronously delete a file."""
     valid_path = validate_path(path)
 

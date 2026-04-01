@@ -190,11 +190,11 @@ class PylspClient:
         # Read file content in executor to avoid blocking the event loop
         loop = asyncio.get_running_loop()
 
-        def _read_file():
+        def _read_path_content():
             with open(file_path, encoding="utf-8", errors="replace") as f:
                 return f.read()
 
-        content = await loop.run_in_executor(None, _read_file)
+        content = await loop.run_in_executor(None, _read_path_content)
 
         await self._send_notification(
             "textDocument/didOpen",
@@ -227,11 +227,11 @@ class PylspClient:
         # Open the document first (in executor to avoid blocking)
         loop = asyncio.get_running_loop()
 
-        def _read_file():
+        def _read_path_content():
             with open(file_path, encoding="utf-8", errors="replace") as f:
                 return f.read()
 
-        content = await loop.run_in_executor(None, _read_file)
+        content = await loop.run_in_executor(None, _read_path_content)
 
         await self._send_notification(
             "textDocument/didOpen",
@@ -294,11 +294,11 @@ class PylspClient:
         # Open the document first (in executor to avoid blocking)
         loop = asyncio.get_running_loop()
 
-        def _read_file():
+        def _read_path_content():
             with open(file_path, encoding="utf-8", errors="replace") as f:
                 return f.read()
 
-        content = await loop.run_in_executor(None, _read_file)
+        content = await loop.run_in_executor(None, _read_path_content)
 
         await self._send_notification(
             "textDocument/didOpen",
@@ -598,4 +598,3 @@ async def lsp_definition(path: str, symbol: str) -> str:
             continue
 
     return f"Definition not found for '{symbol}'"
-

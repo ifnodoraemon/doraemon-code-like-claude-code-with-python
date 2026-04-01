@@ -68,7 +68,7 @@ class TestMessage:
         msg = Message(
             role="assistant",
             content=None,
-            tool_calls=[{"name": "read_file", "arguments": {"path": "/test"}}],
+            tool_calls=[{"name": "read", "arguments": {"path": "/test"}}],
         )
         d = msg.to_dict()
 
@@ -83,7 +83,7 @@ class TestToolDefinition:
     def test_to_openai_format(self):
         """Test conversion to OpenAI format."""
         tool = ToolDefinition(
-            name="read_file",
+            name="read",
             description="Read a file",
             parameters={
                 "type": "object",
@@ -97,7 +97,7 @@ class TestToolDefinition:
         openai_format = tool.to_openai_format()
 
         assert openai_format["type"] == "function"
-        assert openai_format["function"]["name"] == "read_file"
+        assert openai_format["function"]["name"] == "read"
         assert openai_format["function"]["description"] == "Read a file"
 
 
@@ -159,23 +159,23 @@ class TestToolCall:
         """Test creating ToolCall from dict."""
         data = {
             "id": "call_123",
-            "name": "read_file",
+            "name": "read",
             "arguments": {"path": "/test.txt"},
         }
         tool_call = ToolCall.from_dict(data)
 
         assert tool_call.id == "call_123"
-        assert tool_call.name == "read_file"
+        assert tool_call.name == "read"
         assert tool_call.arguments["path"] == "/test.txt"
 
     def test_to_dict(self):
         """Test converting ToolCall to dict."""
         tool_call = ToolCall(
             id="call_123",
-            name="read_file",
+            name="read",
             arguments={"path": "/test.txt"},
         )
         d = tool_call.to_dict()
 
         assert d["id"] == "call_123"
-        assert d["name"] == "read_file"
+        assert d["name"] == "read"

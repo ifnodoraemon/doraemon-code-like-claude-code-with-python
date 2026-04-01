@@ -126,7 +126,6 @@ READ_ONLY_TOOLS = {
     "read",
     "search",
     "glob",
-    "list_directory",
     "memory_get",
     "memory_list",
     "memory_search",

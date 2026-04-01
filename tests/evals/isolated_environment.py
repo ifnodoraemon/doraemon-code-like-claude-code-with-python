@@ -406,7 +406,7 @@ class IsolatedEnvironment:
         self._created_files.add(str(file_path.relative_to(self._root_dir)))
         return file_path
 
-    def create_directory(self, path: str | Path) -> Path:
+    def create_dir(self, path: str | Path) -> Path:
         """
         Create a directory in the isolated environment.
 
@@ -416,9 +416,9 @@ class IsolatedEnvironment:
         Returns:
             Absolute path to the created directory
         """
-        dir_path = self._root_dir / path
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path
+        directory_path = self._root_dir / path
+        directory_path.mkdir(parents=True, exist_ok=True)
+        return directory_path
 
     def copy_from_template(self, template_name: str, dest: str | None = None) -> Path:
         """
@@ -451,7 +451,7 @@ class IsolatedEnvironment:
 
         return dest_path
 
-    def read_file(self, path: str | Path) -> str:
+    def read_path(self, path: str | Path) -> str:
         """
         Read a file from the isolated environment.
 

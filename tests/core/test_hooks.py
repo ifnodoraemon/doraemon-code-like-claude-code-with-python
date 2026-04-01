@@ -173,10 +173,10 @@ class TestHookContext:
             session_id="session_456",
             project_dir="/project",
             permission_mode="allow",
-            tool_name="write_file",
+            tool_name="write",
             tool_input=tool_input,
         )
-        assert ctx.tool_name == "write_file"
+        assert ctx.tool_name == "write"
         assert ctx.tool_input == tool_input
 
     def test_creation_with_tool_output(self):
@@ -186,7 +186,7 @@ class TestHookContext:
             session_id="session_789",
             project_dir="/project",
             permission_mode="allow",
-            tool_name="read_file",
+            tool_name="read",
             tool_output="file contents",
         )
         assert ctx.tool_output == "file contents"
@@ -223,7 +223,7 @@ class TestHookIntegration:
         """Test complete hook workflow with allow decision."""
         # Define hook
         hook = HookDefinition(
-            event=HookEvent.PRE_TOOL_USE, matcher="write_file", command="validate.sh"
+            event=HookEvent.PRE_TOOL_USE, matcher="write", command="validate.sh"
         )
 
         # Create context
@@ -232,7 +232,7 @@ class TestHookIntegration:
             session_id="test_session",
             project_dir="/project",
             permission_mode="ask",
-            tool_name="write_file",
+            tool_name="write",
             tool_input={"path": "test.py"},
         )
 
@@ -245,14 +245,14 @@ class TestHookIntegration:
 
     def test_hook_workflow_deny(self):
         """Test hook workflow with deny decision."""
-        HookDefinition(event=HookEvent.PRE_TOOL_USE, matcher="delete_.*")
+        HookDefinition(event=HookEvent.PRE_TOOL_USE, matcher="write")
 
         HookContext(
             event=HookEvent.PRE_TOOL_USE,
             session_id="test",
             project_dir="/project",
             permission_mode="ask",
-            tool_name="delete_file",
+            tool_name="write",
         )
 
         result = HookResult(success=True, decision=HookDecision.DENY, reason="Deletion not allowed")
@@ -272,7 +272,7 @@ class TestHookIntegration:
             session_id="test",
             project_dir="/project",
             permission_mode="allow",
-            tool_name="write_file",
+            tool_name="write",
             tool_input=original_input,
         )
 

@@ -1,8 +1,8 @@
 """
 Comprehensive unit tests for the Unified Filesystem Server.
 
-Tests all major functions with mocking: read_file, write_file, list_directory,
-create_directory, delete_file, move_file, copy_file, edit_file, and more.
+Tests all major functions with mocking: _read_path_content, _write_path_content, _list_path_entries,
+_create_path_directory, _delete_path, _move_path, _copy_path, _replace_path_content, and more.
 
 Includes 50+ tests covering success cases, error cases, and edge cases.
 """
@@ -15,21 +15,21 @@ import pytest
 
 from src.servers.filesystem import (
     _human_size,
-    copy_file,
-    create_directory,
-    delete_file,
-    edit_file,
-    edit_file_multiline,
+    _copy_path,
+    _create_path_directory,
+    _delete_path,
+    _replace_path_content,
+    _apply_path_edits,
     find_symbol,
     glob_files,
     grep_search,
-    list_directory,
-    list_directory_tree,
-    move_file,
-    read_file,
-    read_file_outline,
-    rename_file,
-    write_file,
+    _list_path_entries,
+    _list_path_tree,
+    _move_path,
+    _read_path_content,
+    _read_path_outline,
+    _rename_path,
+    _write_path_content,
 )
 
 # ========================================
@@ -113,57 +113,57 @@ class TestHumanSize:
 
 
 # ========================================
-# Read File Tests
+# Read Path Tests
 # ========================================
 
 
-class TestReadFile:
-    """Tests for read_file function."""
+class TestReadPath:
+    """Tests for _read_path_content function."""
 
-    def test_read_file_full(self, temp_dir):
+    def test_read_path_full(self, temp_dir):
         """Test reading entire file."""
         os.chdir(temp_dir)
-        content = read_file("test.txt")
+        content = _read_path_content("test.txt")
         assert "Line 1" in content
         assert "Line 5" in content
 
-    def test_read_file_with_offset(self, temp_dir):
+    def test_read_path_with_offset(self, temp_dir):
         """Test reading file with offset."""
         os.chdir(temp_dir)
-        content = read_file("test.txt", offset=2, limit=2)
+        content = _read_path_content("test.txt", offset=2, limit=2)
         assert "Line 3" in content
         assert "Line 4" in content
         assert "Line 1" not in content
 
-    def test_read_file_with_offset_only(self, temp_dir):
+    def test_read_path_with_offset_only(self, temp_dir):
         """Test reading file with offset but no limit."""
         os.chdir(temp_dir)
-        content = read_file("test.txt", offset=3)
+        content = _read_path_content("test.txt", offset=3)
         assert "Line 4" in content
         assert "Line 5" in content
 
-    def test_read_file_not_found(self, temp_dir):
+    def test_read_path_not_found(self, temp_dir):
         """Test reading non-existent file."""
         os.chdir(temp_dir)
-        result = read_file("nonexistent.txt")
+        result = _read_path_content("nonexistent.txt")
         assert "Error" in result or "not found" in result.lower()
 
-    def test_read_file_encoding(self, temp_dir):
+    def test_read_path_encoding(self, temp_dir):
         """Test reading file with specific encoding."""
         os.chdir(temp_dir)
-        content = read_file("test.txt", encoding="utf-8")
+        content = _read_path_content("test.txt", encoding="utf-8")
         assert "Line 1" in content
 
-    def test_read_file_offset_beyond_file(self, temp_dir):
+    def test_read_path_offset_beyond_file(self, temp_dir):
         """Test reading with offset beyond file length."""
         os.chdir(temp_dir)
-        result = read_file("test.txt", offset=100, limit=10)
+        result = _read_path_content("test.txt", offset=100, limit=10)
         assert "No lines found" in result
 
-    def test_read_file_limit_zero(self, temp_dir):
+    def test_read_path_limit_zero(self, temp_dir):
         """Test reading with limit of zero (reads all lines from offset)."""
         os.chdir(temp_dir)
-        result = read_file("test.txt", offset=0, limit=0)
+        result = _read_path_content("test.txt", offset=0, limit=0)
         # When limit is 0, it's treated as None, so all lines are read
         assert "Line 1" in result
         assert "Line 5" in result
@@ -171,328 +171,328 @@ class TestReadFile:
     @patch("os.path.getsize")
     @patch("builtins.open", new_callable=mock_open, read_data="test content")
     @patch("os.path.exists")
-    def test_read_file_with_mock(self, mock_exists, mock_file, mock_size):
-        """Test read_file with mocked file operations."""
+    def test_read_path_with_mock(self, mock_exists, mock_file, mock_size):
+        """Test _read_path_content with mocked file operations."""
         mock_exists.return_value = True
         mock_size.return_value = 100
-        result = read_file("test.txt")
+        result = _read_path_content("test.txt")
         assert "test content" in result
 
     @patch("os.path.getsize")
     @patch("builtins.open", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
-    def test_read_file_permission_error(self, mock_exists, mock_file, mock_size):
-        """Test read_file with permission error."""
+    def test_read_path_permission_error(self, mock_exists, mock_file, mock_size):
+        """Test _read_path_content with permission error."""
         mock_exists.return_value = True
         mock_size.return_value = 100
-        result = read_file("test.txt")
+        result = _read_path_content("test.txt")
         assert "Error" in result
 
 
 # ========================================
-# Write File Tests
+# Write Path Tests
 # ========================================
 
 
-class TestWriteFile:
-    """Tests for write_file function."""
+class TestWritePath:
+    """Tests for _write_path_content function."""
 
-    def test_write_file_success(self, temp_dir):
+    def test_write_path_success(self, temp_dir):
         """Test successful file write."""
         os.chdir(temp_dir)
-        result = write_file("new_file.txt", "test content")
+        result = _write_path_content("new_file.txt", "test content")
         assert "Successfully wrote" in result
         assert os.path.exists(os.path.join(temp_dir, "new_file.txt"))
 
-    def test_write_file_creates_parent_dirs(self, temp_dir):
-        """Test that write_file creates parent directories."""
+    def test_write_path_creates_parent_dirs(self, temp_dir):
+        """Test that _write_path_content creates parent directories."""
         os.chdir(temp_dir)
-        result = write_file("new_dir/subdir/file.txt", "content")
+        result = _write_path_content("new_dir/subdir/file.txt", "content")
         assert "Successfully wrote" in result
         assert os.path.exists(os.path.join(temp_dir, "new_dir/subdir/file.txt"))
 
-    def test_write_file_overwrites_existing(self, temp_dir):
-        """Test that write_file overwrites existing files."""
+    def test_write_path_overwrites_existing(self, temp_dir):
+        """Test that _write_path_content overwrites existing files."""
         os.chdir(temp_dir)
-        write_file("test.txt", "new content")
+        _write_path_content("test.txt", "new content")
         with open(os.path.join(temp_dir, "test.txt")) as f:
             content = f.read()
         assert content == "new content"
 
-    def test_write_file_empty_content(self, temp_dir):
+    def test_write_path_empty_content(self, temp_dir):
         """Test writing empty content."""
         os.chdir(temp_dir)
-        result = write_file("empty.txt", "")
+        result = _write_path_content("empty.txt", "")
         assert "Successfully wrote" in result
 
     @patch("builtins.open", side_effect=OSError("Disk full"))
     @patch("os.makedirs")
-    def test_write_file_io_error(self, mock_makedirs, mock_file):
-        """Test write_file with IO error."""
-        result = write_file("test.txt", "content")
+    def test_write_path_io_error(self, mock_makedirs, mock_file):
+        """Test _write_path_content with IO error."""
+        result = _write_path_content("test.txt", "content")
         assert "Error" in result
 
-    def test_write_file_large_content(self, temp_dir):
+    def test_write_path_large_content(self, temp_dir):
         """Test writing large content."""
         os.chdir(temp_dir)
         large_content = "x" * 1000000
-        result = write_file("large.txt", large_content)
+        result = _write_path_content("large.txt", large_content)
         assert "Successfully wrote" in result
 
 
 # ========================================
-# List Directory Tests
+# List Path Tests
 # ========================================
 
 
-class TestListDirectory:
-    """Tests for list_directory function."""
+class TestListPathEntries:
+    """Tests for _list_path_entries function."""
 
-    def test_list_directory_basic(self, temp_dir):
+    def test_list_path_entries_basic(self, temp_dir):
         """Test basic directory listing."""
         os.chdir(temp_dir)
-        result = list_directory(".")
+        result = _list_path_entries(".")
         assert "test.txt" in result
         assert "test_module.py" in result
         assert "subdir" in result
 
-    def test_list_directory_detailed(self, temp_dir):
+    def test_list_path_entries_detailed(self, temp_dir):
         """Test detailed directory listing."""
         os.chdir(temp_dir)
-        result = list_directory(".", detailed=True)
+        result = _list_path_entries(".", detailed=True)
         assert "[file]" in result or "[dir]" in result
 
-    def test_list_directory_not_detailed(self, temp_dir):
+    def test_list_path_entries_not_detailed(self, temp_dir):
         """Test non-detailed directory listing."""
         os.chdir(temp_dir)
-        result = list_directory(".", detailed=False)
+        result = _list_path_entries(".", detailed=False)
         assert "test.txt" in result
 
-    def test_list_directory_not_found(self, temp_dir):
+    def test_list_path_entries_not_found(self, temp_dir):
         """Test listing non-existent directory."""
         os.chdir(temp_dir)
-        result = list_directory("nonexistent_dir")
+        result = _list_path_entries("nonexistent_dir")
         assert "Error" in result or "not found" in result.lower()
 
-    def test_list_directory_empty(self, temp_dir):
+    def test_list_path_entries_empty(self, temp_dir):
         """Test listing empty directory."""
         os.chdir(temp_dir)
         empty_dir = os.path.join(temp_dir, "empty")
         os.makedirs(empty_dir)
-        result = list_directory("empty")
+        result = _list_path_entries("empty")
         assert "(empty directory)" in result
 
-    def test_list_directory_hide_hidden_files(self, temp_dir):
+    def test_list_path_entries_hide_hidden_files(self, temp_dir):
         """Test hiding hidden files."""
         os.chdir(temp_dir)
         hidden_file = os.path.join(temp_dir, ".hidden")
         with open(hidden_file, "w") as f:
             f.write("hidden")
-        result = list_directory(".", show_hidden=False)
+        result = _list_path_entries(".", show_hidden=False)
         assert ".hidden" not in result
 
-    def test_list_directory_show_hidden_files(self, temp_dir):
+    def test_list_path_entries_show_hidden_files(self, temp_dir):
         """Test showing hidden files."""
         os.chdir(temp_dir)
         hidden_file = os.path.join(temp_dir, ".hidden")
         with open(hidden_file, "w") as f:
             f.write("hidden")
-        result = list_directory(".", show_hidden=True)
+        result = _list_path_entries(".", show_hidden=True)
         assert ".hidden" in result
 
     @patch("os.listdir", side_effect=OSError("Permission denied"))
-    def test_list_directory_permission_error(self, mock_listdir):
-        """Test list_directory with permission error."""
-        result = list_directory(".")
+    def test_list_path_entries_permission_error(self, mock_listdir):
+        """Test _list_path_entries with permission error."""
+        result = _list_path_entries(".")
         assert "Error" in result
 
 
 # ========================================
-# Edit File Tests
+# Replace Path Content Tests
 # ========================================
 
 
-class TestEditFile:
-    """Tests for edit_file function."""
+class TestReplacePathContent:
+    """Tests for _replace_path_content function."""
 
-    def test_edit_file_single_replacement(self, temp_dir):
+    def test_replace_path_content_single_replacement(self, temp_dir):
         """Test single replacement in file."""
         os.chdir(temp_dir)
-        result = edit_file("test.txt", "Line 1", "Modified Line 1", count=1)
+        result = _replace_path_content("test.txt", "Line 1", "Modified Line 1", count=1)
         assert "Successfully edited" in result
         with open(os.path.join(temp_dir, "test.txt")) as f:
             content = f.read()
         assert "Modified Line 1" in content
 
-    def test_edit_file_all_replacements(self, temp_dir):
+    def test_replace_path_content_all_replacements(self, temp_dir):
         """Test replacing all occurrences."""
         os.chdir(temp_dir)
-        result = edit_file("test.txt", "Line", "Modified", count=-1)
+        result = _replace_path_content("test.txt", "Line", "Modified", count=-1)
         assert "Successfully edited" in result
         with open(os.path.join(temp_dir, "test.txt")) as f:
             content = f.read()
         assert "Modified" in content
         assert content.count("Modified") == 5
 
-    def test_edit_file_not_found(self, temp_dir):
+    def test_replace_path_content_not_found(self, temp_dir):
         """Test editing non-existent file."""
         os.chdir(temp_dir)
-        result = edit_file("nonexistent.txt", "old", "new")
+        result = _replace_path_content("nonexistent.txt", "old", "new")
         assert "Error" in result or "not found" in result.lower()
 
-    def test_edit_file_search_string_not_found(self, temp_dir):
+    def test_replace_path_content_search_string_not_found(self, temp_dir):
         """Test editing with search string not found."""
         os.chdir(temp_dir)
-        result = edit_file("test.txt", "nonexistent", "new")
+        result = _replace_path_content("test.txt", "nonexistent", "new")
         assert "Error" in result or "not found" in result.lower()
 
-    def test_edit_file_multiple_replacements(self, temp_dir):
+    def test_replace_path_content_multiple_replacements(self, temp_dir):
         """Test replacing multiple occurrences."""
         os.chdir(temp_dir)
-        result = edit_file("test.txt", "Line", "Modified", count=3)
+        result = _replace_path_content("test.txt", "Line", "Modified", count=3)
         assert "Successfully edited" in result
 
     @patch("builtins.open", side_effect=OSError("Permission denied"))
-    def test_edit_file_io_error(self, mock_file):
-        """Test edit_file with IO error."""
-        result = edit_file("test.txt", "old", "new")
+    def test_replace_path_content_io_error(self, mock_file):
+        """Test _replace_path_content with IO error."""
+        result = _replace_path_content("test.txt", "old", "new")
         assert "Error" in result
 
 
 # ========================================
-# Edit File Multiline Tests
+# Apply Path Edits Tests
 # ========================================
 
 
-class TestEditFileMultiline:
-    """Tests for edit_file_multiline function."""
+class TestApplyPathEdits:
+    """Tests for _apply_path_edits function."""
 
-    def test_edit_file_multiline_success(self, temp_dir):
+    def test_apply_path_edits_success(self, temp_dir):
         """Test multiple edits in sequence."""
         os.chdir(temp_dir)
         edits = [
             {"old_string": "Line 1", "new_string": "Modified 1"},
             {"old_string": "Line 2", "new_string": "Modified 2"},
         ]
-        result = edit_file_multiline("test.txt", edits)
+        result = _apply_path_edits("test.txt", edits)
         assert "Successfully applied" in result
         with open(os.path.join(temp_dir, "test.txt")) as f:
             content = f.read()
         assert "Modified 1" in content
         assert "Modified 2" in content
 
-    def test_edit_file_multiline_not_found(self, temp_dir):
+    def test_apply_path_edits_not_found(self, temp_dir):
         """Test multiline edit on non-existent file."""
         os.chdir(temp_dir)
         edits = [{"old_string": "old", "new_string": "new"}]
-        result = edit_file_multiline("nonexistent.txt", edits)
+        result = _apply_path_edits("nonexistent.txt", edits)
         assert "Error" in result or "not found" in result.lower()
 
-    def test_edit_file_multiline_missing_old_string(self, temp_dir):
+    def test_apply_path_edits_missing_old_string(self, temp_dir):
         """Test multiline edit with missing old_string."""
         os.chdir(temp_dir)
         edits = [{"new_string": "new"}]
-        result = edit_file_multiline("test.txt", edits)
+        result = _apply_path_edits("test.txt", edits)
         assert "Error" in result
 
-    def test_edit_file_multiline_missing_new_string(self, temp_dir):
+    def test_apply_path_edits_missing_new_string(self, temp_dir):
         """Test multiline edit with missing new_string."""
         os.chdir(temp_dir)
         edits = [{"old_string": "old"}]
-        result = edit_file_multiline("test.txt", edits)
+        result = _apply_path_edits("test.txt", edits)
         assert "Error" in result
 
-    def test_edit_file_multiline_search_not_found(self, temp_dir):
+    def test_apply_path_edits_search_not_found(self, temp_dir):
         """Test multiline edit with search string not found."""
         os.chdir(temp_dir)
         edits = [{"old_string": "nonexistent", "new_string": "new"}]
-        result = edit_file_multiline("test.txt", edits)
+        result = _apply_path_edits("test.txt", edits)
         assert "Error" in result
 
 
 # ========================================
-# Move File Tests
+# Move Path Tests
 # ========================================
 
 
-class TestMoveFile:
-    """Tests for move_file function."""
+class TestMovePath:
+    """Tests for _move_path function."""
 
-    def test_move_file_success(self, temp_dir):
+    def test_move_path_success(self, temp_dir):
         """Test successful file move."""
         os.chdir(temp_dir)
-        result = move_file("test.txt", "moved.txt")
+        result = _move_path("test.txt", "moved.txt")
         assert "Successfully moved" in result
         assert os.path.exists(os.path.join(temp_dir, "moved.txt"))
         assert not os.path.exists(os.path.join(temp_dir, "test.txt"))
 
-    def test_move_file_to_subdirectory(self, temp_dir):
+    def test_move_path_to_subdirectory(self, temp_dir):
         """Test moving file to subdirectory."""
         os.chdir(temp_dir)
-        result = move_file("test.txt", "subdir/test.txt")
+        result = _move_path("test.txt", "subdir/test.txt")
         assert "Successfully moved" in result
         assert os.path.exists(os.path.join(temp_dir, "subdir/test.txt"))
 
-    def test_move_file_source_not_found(self, temp_dir):
+    def test_move_path_source_not_found(self, temp_dir):
         """Test moving non-existent file."""
         os.chdir(temp_dir)
-        result = move_file("nonexistent.txt", "dest.txt")
+        result = _move_path("nonexistent.txt", "dest.txt")
         assert "Error" in result or "not found" in result.lower()
 
-    def test_move_file_creates_dest_dir(self, temp_dir):
-        """Test that move_file creates destination directory."""
+    def test_move_path_creates_dest_dir(self, temp_dir):
+        """Test that _move_path creates destination directory."""
         os.chdir(temp_dir)
-        result = move_file("test.txt", "new_dir/test.txt")
+        result = _move_path("test.txt", "new_dir/test.txt")
         assert "Successfully moved" in result
 
     @patch("shutil.move", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
     @patch("os.makedirs")
-    def test_move_file_io_error(self, mock_makedirs, mock_exists, mock_move):
-        """Test move_file with IO error."""
+    def test_move_path_io_error(self, mock_makedirs, mock_exists, mock_move):
+        """Test _move_path with IO error."""
         mock_exists.return_value = True
-        result = move_file("test.txt", "dest.txt")
+        result = _move_path("test.txt", "dest.txt")
         assert "Error" in result
 
 
 # ========================================
-# Copy File Tests
+# Copy Path Tests
 # ========================================
 
 
-class TestCopyFile:
-    """Tests for copy_file function."""
+class TestCopyPath:
+    """Tests for _copy_path function."""
 
-    def test_copy_file_success(self, temp_dir):
+    def test_copy_path_success(self, temp_dir):
         """Test successful file copy."""
         os.chdir(temp_dir)
-        result = copy_file("test.txt", "copy.txt")
+        result = _copy_path("test.txt", "copy.txt")
         assert "Successfully copied" in result
         assert os.path.exists(os.path.join(temp_dir, "copy.txt"))
         assert os.path.exists(os.path.join(temp_dir, "test.txt"))
 
-    def test_copy_file_destination_exists_no_overwrite(self, temp_dir):
+    def test_copy_path_destination_exists_no_overwrite(self, temp_dir):
         """Test copying to existing destination without overwrite."""
         os.chdir(temp_dir)
-        result = copy_file("test.txt", "test_module.py")
+        result = _copy_path("test.txt", "test_module.py")
         assert "Error" in result or "already exists" in result.lower()
 
-    def test_copy_file_destination_exists_with_overwrite(self, temp_dir):
+    def test_copy_path_destination_exists_with_overwrite(self, temp_dir):
         """Test copying to existing destination with overwrite."""
         os.chdir(temp_dir)
-        result = copy_file("test.txt", "test_module.py", overwrite=True)
+        result = _copy_path("test.txt", "test_module.py", overwrite=True)
         assert "Successfully copied" in result
 
-    def test_copy_file_source_not_found(self, temp_dir):
+    def test_copy_path_source_not_found(self, temp_dir):
         """Test copying non-existent file."""
         os.chdir(temp_dir)
-        result = copy_file("nonexistent.txt", "dest.txt")
+        result = _copy_path("nonexistent.txt", "dest.txt")
         assert "Error" in result or "not found" in result.lower()
 
     def test_copy_directory(self, temp_dir):
         """Test copying directory."""
         os.chdir(temp_dir)
-        result = copy_file("subdir", "subdir_copy")
+        result = _copy_path("subdir", "subdir_copy")
         assert "Successfully copied" in result
         assert os.path.exists(os.path.join(temp_dir, "subdir_copy"))
 
@@ -500,128 +500,128 @@ class TestCopyFile:
     @patch("os.path.exists")
     @patch("os.path.isdir")
     @patch("os.makedirs")
-    def test_copy_file_io_error(self, mock_makedirs, mock_isdir, mock_exists, mock_copy):
-        """Test copy_file with IO error."""
+    def test_copy_path_io_error(self, mock_makedirs, mock_isdir, mock_exists, mock_copy):
+        """Test _copy_path with IO error."""
         mock_exists.side_effect = [True, False]
         mock_isdir.return_value = False
-        result = copy_file("test.txt", "dest.txt")
+        result = _copy_path("test.txt", "dest.txt")
         assert "Error" in result
 
 
 # ========================================
-# Delete File Tests
+# Delete Path Tests
 # ========================================
 
 
-class TestDeleteFile:
-    """Tests for delete_file function."""
+class TestDeletePath:
+    """Tests for _delete_path function."""
 
-    def test_delete_file_success(self, temp_dir):
+    def test_delete_path_success(self, temp_dir):
         """Test successful file deletion."""
         os.chdir(temp_dir)
-        result = delete_file("test.txt")
+        result = _delete_path("test.txt")
         assert "Successfully deleted" in result
         assert not os.path.exists(os.path.join(temp_dir, "test.txt"))
 
     def test_delete_directory_without_recursive(self, temp_dir):
         """Test deleting directory without recursive flag."""
         os.chdir(temp_dir)
-        result = delete_file("subdir")
+        result = _delete_path("subdir")
         assert "Error" in result or "recursive" in result.lower()
 
     def test_delete_directory_with_recursive(self, temp_dir):
         """Test deleting directory with recursive flag."""
         os.chdir(temp_dir)
-        result = delete_file("subdir", recursive=True)
+        result = _delete_path("subdir", recursive=True)
         assert "Successfully deleted" in result
         assert not os.path.exists(os.path.join(temp_dir, "subdir"))
 
-    def test_delete_file_not_found(self, temp_dir):
+    def test_delete_path_not_found(self, temp_dir):
         """Test deleting non-existent file."""
         os.chdir(temp_dir)
-        result = delete_file("nonexistent.txt")
+        result = _delete_path("nonexistent.txt")
         assert "Error" in result or "not found" in result.lower()
 
     @patch("os.remove", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
     @patch("os.path.isdir")
-    def test_delete_file_io_error(self, mock_isdir, mock_exists, mock_remove):
-        """Test delete_file with IO error."""
+    def test_delete_path_io_error(self, mock_isdir, mock_exists, mock_remove):
+        """Test _delete_path with IO error."""
         mock_exists.return_value = True
         mock_isdir.return_value = False
-        result = delete_file("test.txt")
+        result = _delete_path("test.txt")
         assert "Error" in result
 
 
 # ========================================
-# Rename File Tests
+# Rename Path Tests
 # ========================================
 
 
-class TestRenameFile:
-    """Tests for rename_file function."""
+class TestRenamePath:
+    """Tests for _rename_path function."""
 
-    def test_rename_file_success(self, temp_dir):
+    def test_rename_path_success(self, temp_dir):
         """Test successful file rename."""
         os.chdir(temp_dir)
-        result = rename_file("test.txt", "renamed.txt")
+        result = _rename_path("test.txt", "renamed.txt")
         assert "Successfully renamed" in result
         assert os.path.exists(os.path.join(temp_dir, "renamed.txt"))
         assert not os.path.exists(os.path.join(temp_dir, "test.txt"))
 
-    def test_rename_file_not_found(self, temp_dir):
+    def test_rename_path_not_found(self, temp_dir):
         """Test renaming non-existent file."""
         os.chdir(temp_dir)
-        result = rename_file("nonexistent.txt", "new.txt")
+        result = _rename_path("nonexistent.txt", "new.txt")
         assert "Error" in result or "not found" in result.lower()
 
-    def test_rename_file_destination_exists(self, temp_dir):
+    def test_rename_path_destination_exists(self, temp_dir):
         """Test renaming to existing filename."""
         os.chdir(temp_dir)
-        result = rename_file("test.txt", "test_module.py")
+        result = _rename_path("test.txt", "test_module.py")
         assert "Error" in result or "already exists" in result.lower()
 
     @patch("os.rename", side_effect=OSError("Permission denied"))
     @patch("os.path.exists")
-    def test_rename_file_io_error(self, mock_exists, mock_rename):
-        """Test rename_file with IO error."""
+    def test_rename_path_io_error(self, mock_exists, mock_rename):
+        """Test _rename_path with IO error."""
         mock_exists.side_effect = [True, False]
-        result = rename_file("test.txt", "new.txt")
+        result = _rename_path("test.txt", "new.txt")
         assert "Error" in result
 
 
 # ========================================
-# Create Directory Tests
+# Create Path Directory Tests
 # ========================================
 
 
-class TestCreateDirectory:
-    """Tests for create_directory function."""
+class TestCreatePathDirectory:
+    """Tests for _create_path_directory function."""
 
-    def test_create_directory_success(self, temp_dir):
+    def test_create_path_directory_success(self, temp_dir):
         """Test successful directory creation."""
         os.chdir(temp_dir)
-        result = create_directory("new_dir")
+        result = _create_path_directory("new_dir")
         assert "Successfully created" in result
         assert os.path.exists(os.path.join(temp_dir, "new_dir"))
 
-    def test_create_directory_nested(self, temp_dir):
+    def test_create_path_directory_nested(self, temp_dir):
         """Test creating nested directories."""
         os.chdir(temp_dir)
-        result = create_directory("a/b/c/d")
+        result = _create_path_directory("a/b/c/d")
         assert "Successfully created" in result
         assert os.path.exists(os.path.join(temp_dir, "a/b/c/d"))
 
-    def test_create_directory_already_exists(self, temp_dir):
+    def test_create_path_directory_already_exists(self, temp_dir):
         """Test creating directory that already exists."""
         os.chdir(temp_dir)
-        result = create_directory("subdir")
+        result = _create_path_directory("subdir")
         assert "Successfully created" in result
 
     @patch("os.makedirs", side_effect=OSError("Permission denied"))
-    def test_create_directory_io_error(self, mock_makedirs):
-        """Test create_directory with IO error."""
-        result = create_directory("test_dir")
+    def test_create_path_directory_io_error(self, mock_makedirs):
+        """Test _create_path_directory with IO error."""
+        result = _create_path_directory("test_dir")
         assert "Error" in result
 
 
@@ -721,31 +721,31 @@ class TestGrepSearch:
 
 
 class TestDirectoryTree:
-    """Tests for list_directory_tree function."""
+    """Tests for _list_path_tree function."""
 
     def test_directory_tree_basic(self, temp_dir):
         """Test basic directory tree."""
         os.chdir(temp_dir)
-        result = list_directory_tree(".", depth=2)
+        result = _list_path_tree(".", depth=2)
         assert "test.txt" in result
         assert "subdir" in result
 
     def test_directory_tree_depth_limit(self, temp_dir):
         """Test directory tree respects depth limit."""
         os.chdir(temp_dir)
-        result = list_directory_tree(".", depth=1)
+        result = _list_path_tree(".", depth=1)
         assert "Project Tree" in result
 
     def test_directory_tree_max_depth(self, temp_dir):
         """Test directory tree with max depth."""
         os.chdir(temp_dir)
-        result = list_directory_tree(".", depth=100)
+        result = _list_path_tree(".", depth=100)
         assert "Project Tree" in result
 
     def test_directory_tree_depth_zero(self, temp_dir):
         """Test directory tree with depth 0."""
         os.chdir(temp_dir)
-        result = list_directory_tree(".", depth=0)
+        result = _list_path_tree(".", depth=0)
         assert "Project Tree" in result
 
 
@@ -755,12 +755,12 @@ class TestDirectoryTree:
 
 
 class TestReadFileOutline:
-    """Tests for read_file_outline function."""
+    """Tests for _read_path_outline function."""
 
     def test_read_outline_python(self, temp_dir):
         """Test reading Python file outline."""
         os.chdir(temp_dir)
-        result = read_file_outline("test_module.py")
+        result = _read_path_outline("test_module.py")
         assert "TestClass" in result
         assert "method_one" in result
         assert "standalone_function" in result
@@ -768,7 +768,7 @@ class TestReadFileOutline:
     def test_read_outline_not_found(self, temp_dir):
         """Test outline of non-existent file."""
         os.chdir(temp_dir)
-        result = read_file_outline("nonexistent.py")
+        result = _read_path_outline("nonexistent.py")
         assert "Error" in result or "not found" in result.lower()
 
 

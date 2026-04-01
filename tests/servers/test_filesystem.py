@@ -13,10 +13,10 @@ from src.core.security.security import validate_path
 from src.servers.filesystem import (
     glob_files,
     grep_search,
-    list_directory,
-    list_directory_tree,
-    read_file,
-    read_file_outline,
+    _list_path_entries,
+    _list_path_tree,
+    _read_path_content,
+    _read_path_outline,
 )
 
 # ========================================
@@ -101,82 +101,82 @@ class TestPathValidation:
 
 
 # ========================================
-# Read File Tests
+# Read Path Tests
 # ========================================
 
 
-class TestReadFile:
-    """Tests for read_file function."""
+class TestReadPath:
+    """Tests for _read_path_content function."""
 
-    def test_read_file_full(self, temp_dir):
+    def test_read_path_full(self, temp_dir):
         """Test reading entire file."""
         os.chdir(temp_dir)
-        content = read_file("test.txt")
+        content = _read_path_content("test.txt")
         assert "Line 1" in content
         assert "Line 5" in content
 
-    def test_read_file_with_offset(self, temp_dir):
+    def test_read_path_with_offset(self, temp_dir):
         """Test reading file with offset."""
         os.chdir(temp_dir)
-        content = read_file("test.txt", offset=2, limit=2)
+        content = _read_path_content("test.txt", offset=2, limit=2)
         assert "Line 3" in content
         assert "Line 4" in content
         assert "Line 1" not in content
 
-    def test_read_file_not_found(self, temp_dir):
+    def test_read_path_not_found(self, temp_dir):
         """Test reading non-existent file."""
         os.chdir(temp_dir)
-        result = read_file("nonexistent.txt")
+        result = _read_path_content("nonexistent.txt")
         assert "Error" in result or "not found" in result.lower()
 
-    def test_read_file_encoding(self, temp_dir):
+    def test_read_path_encoding(self, temp_dir):
         """Test reading file with specific encoding."""
         os.chdir(temp_dir)
-        content = read_file("test.txt", encoding="utf-8")
+        content = _read_path_content("test.txt", encoding="utf-8")
         assert "Line 1" in content
 
 
 # ========================================
-# List Directory Tests
+# List Path Tests
 # ========================================
 
 
-class TestListDirectory:
-    """Tests for list_directory function."""
+class TestListPathEntries:
+    """Tests for _list_path_entries function."""
 
-    def test_list_directory_basic(self, temp_dir):
+    def test_list_path_entries_basic(self, temp_dir):
         """Test basic directory listing."""
         os.chdir(temp_dir)
-        result = list_directory(".")
+        result = _list_path_entries(".")
         assert "test.txt" in result
         assert "test_module.py" in result
         assert "subdir" in result
 
-    def test_list_directory_detailed(self, temp_dir):
+    def test_list_path_entries_detailed(self, temp_dir):
         """Test detailed directory listing."""
         os.chdir(temp_dir)
-        result = list_directory(".", detailed=True)
+        result = _list_path_entries(".", detailed=True)
         assert "[file]" in result or "[dir]" in result
 
-    def test_list_directory_not_found(self, temp_dir):
+    def test_list_path_entries_not_found(self, temp_dir):
         """Test listing non-existent directory."""
         os.chdir(temp_dir)
-        result = list_directory("nonexistent_dir")
+        result = _list_path_entries("nonexistent_dir")
         assert "Error" in result or "not found" in result.lower()
 
 
 # ========================================
-# Read File Outline Tests
+# Read Path Outline Tests
 # ========================================
 
 
-class TestReadFileOutline:
-    """Tests for read_file_outline function."""
+class TestReadPathOutline:
+    """Tests for _read_path_outline function."""
 
     def test_read_outline_python(self, temp_dir):
         """Test reading Python file outline."""
         os.chdir(temp_dir)
-        result = read_file_outline("test_module.py")
+        result = _read_path_outline("test_module.py")
         assert "TestClass" in result
         assert "method_one" in result
         assert "standalone_function" in result
@@ -184,7 +184,7 @@ class TestReadFileOutline:
     def test_read_outline_not_found(self, temp_dir):
         """Test outline of non-existent file."""
         os.chdir(temp_dir)
-        result = read_file_outline("nonexistent.py")
+        result = _read_path_outline("nonexistent.py")
         assert "Error" in result or "not found" in result.lower()
 
 
@@ -249,19 +249,19 @@ class TestGrepSearch:
 
 
 class TestDirectoryTree:
-    """Tests for list_directory_tree function."""
+    """Tests for _list_path_tree function."""
 
     def test_directory_tree_basic(self, temp_dir):
         """Test basic directory tree."""
         os.chdir(temp_dir)
-        result = list_directory_tree(".", depth=2)
+        result = _list_path_tree(".", depth=2)
         assert "test.txt" in result
         assert "subdir" in result
 
     def test_directory_tree_depth_limit(self, temp_dir):
         """Test directory tree respects depth limit."""
         os.chdir(temp_dir)
-        result = list_directory_tree(".", depth=1)
+        result = _list_path_tree(".", depth=1)
         assert "Project Tree" in result
 
 

@@ -29,7 +29,7 @@ def mock_validate_path():
 class TestReadTool:
     """Test the unified read tool"""
 
-    def test_read_file_mode(self, tmp_path):
+    def test_read_path_mode(self, tmp_path):
         """Test reading a file"""
         test_file = tmp_path / "test.txt"
         test_file.write_text("Hello World\nLine 2\nLine 3")
@@ -38,7 +38,7 @@ class TestReadTool:
         assert "Hello World" in result
         assert "Line 2" in result
 
-    def test_read_file_with_offset_limit(self, tmp_path):
+    def test_read_path_with_offset_limit(self, tmp_path):
         """Test reading file with offset and limit"""
         test_file = tmp_path / "test.txt"
         test_file.write_text("Line 1\nLine 2\nLine 3\nLine 4\nLine 5")
@@ -134,7 +134,7 @@ class TestWriteTool:
         assert test_file.exists()
         assert test_file.read_text() == "Hello World"
 
-    def test_write_create_directory(self, tmp_path):
+    def test_write_create_dir(self, tmp_path):
         """Test creating a directory"""
         test_dir = tmp_path / "newdir"
 
@@ -143,7 +143,7 @@ class TestWriteTool:
         assert test_dir.exists()
         assert test_dir.is_dir()
 
-    def test_write_edit_file(self, tmp_path):
+    def test_write_edit_path(self, tmp_path):
         """Test editing a file"""
         test_file = tmp_path / "test.txt"
         test_file.write_text("Hello World")
@@ -181,7 +181,7 @@ class TestWriteTool:
         assert "Error" in result
         assert "old_string" in result or "new_string" in result
 
-    def test_write_delete_file(self, tmp_path):
+    def test_write_delete_path(self, tmp_path):
         """Test deleting a file"""
         test_file = tmp_path / "test.txt"
         test_file.write_text("content")
@@ -200,7 +200,7 @@ class TestWriteTool:
         assert "Success" in result or "deleted" in result.lower()
         assert not test_dir.exists()
 
-    def test_write_move_file(self, tmp_path):
+    def test_write_move_path(self, tmp_path):
         """Test moving/renaming a file"""
         src = tmp_path / "src.txt"
         dst = tmp_path / "dst.txt"
@@ -221,7 +221,7 @@ class TestWriteTool:
         assert "Error" in result
         assert "destination" in result.lower()
 
-    def test_write_copy_file(self, tmp_path):
+    def test_write_copy_path(self, tmp_path):
         """Test copying a file"""
         src = tmp_path / "src.txt"
         dst = tmp_path / "dst.txt"

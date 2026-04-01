@@ -81,11 +81,11 @@ def create_test_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
 
     # Register simple test tools
-    def test_read_file(path: str) -> str:
+    def test_read(path: str) -> str:
         """Test tool: read a file."""
         return f"Content of {path}"
 
-    def test_write_file(path: str, content: str) -> str:
+    def test_write(path: str, content: str) -> str:
         """Test tool: write a file."""
         return f"Wrote {len(content)} bytes to {path}"
 
@@ -93,8 +93,8 @@ def create_test_tool_registry() -> ToolRegistry:
         """Test tool: execute a command."""
         return f"Executed: {command}"
 
-    registry.register(test_read_file, sensitive=False)
-    registry.register(test_write_file, sensitive=True)
+    registry.register(test_read, sensitive=False)
+    registry.register(test_write, sensitive=True)
     registry.register(test_execute_command, sensitive=True)
 
     return registry

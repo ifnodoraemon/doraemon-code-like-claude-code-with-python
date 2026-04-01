@@ -9,7 +9,7 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_tool_execution(self):
         registry = create_test_tool_registry()
-        result = await registry.call_tool("test_read_file", {"path": "test.txt"})
+        result = await registry.call_tool("test_read", {"path": "test.txt"})
         assert "Content of test.txt" in result
 
     def test_mode_switching(self):

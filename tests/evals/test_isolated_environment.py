@@ -94,19 +94,19 @@ class TestFileOperations:
             assert file_path.exists()
             assert file_path.parent.name == "nested"
 
-    def test_create_directory(self):
+    def test_create_dir(self):
         """Test creating a directory."""
         with IsolatedEnvironment() as env:
-            dir_path = env.create_directory("my_dir/nested")
+            dir_path = env.create_dir("my_dir/nested")
 
             assert dir_path.exists()
             assert dir_path.is_dir()
 
-    def test_read_file(self):
+    def test_read_path(self):
         """Test reading a file."""
         with IsolatedEnvironment() as env:
             env.create_file("test.txt", "Test content")
-            content = env.read_file("test.txt")
+            content = env.read_path("test.txt")
 
             assert content == "Test content"
 

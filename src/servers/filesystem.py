@@ -48,7 +48,7 @@ def _human_size(bytes_size: int) -> str:
     return f"{bytes_size:.1f}PB"
 
 
-def read_file(path: str, offset: int = 0, limit: int | None = None, encoding: str = "utf-8") -> str:
+def _read_path_content(path: str, offset: int = 0, limit: int | None = None, encoding: str = "utf-8") -> str:
     """
     Intelligently read a file with optional partial reading.
     Supports: .txt, .md, .py, .pdf, .docx, .pptx, .xlsx, .png, .jpg
@@ -109,7 +109,7 @@ def read_file(path: str, offset: int = 0, limit: int | None = None, encoding: st
         return f"Error reading file: {str(e)}"
 
 
-def read_file_outline(path: str) -> str:
+def _read_path_outline(path: str) -> str:
     """Read the structural outline of a file (Classes, Functions)."""
     try:
         valid_path = validate_path(path)
@@ -125,7 +125,7 @@ def read_file_outline(path: str) -> str:
     return outline.parse_outline(valid_path)
 
 
-def list_directory(path: str = ".", show_hidden: bool = False, detailed: bool = True) -> str:
+def _list_path_entries(path: str = ".", show_hidden: bool = False, detailed: bool = True) -> str:
     """List files and directories at the given path."""
     valid_path = validate_path(path)
     if not os.path.exists(valid_path):
@@ -167,7 +167,7 @@ def list_directory(path: str = ".", show_hidden: bool = False, detailed: bool = 
         return f"Error: {e}"
 
 
-def list_directory_tree(path: str = ".", depth: int = 2) -> str:
+def _list_path_tree(path: str = ".", depth: int = 2) -> str:
     """Show a recursive directory tree."""
     depth = min(max(1, depth), 10)
     valid_path = validate_path(path)
@@ -339,7 +339,7 @@ def grep_search(pattern: str, include: str = "*", path: str = ".") -> str:
 # ========================================
 
 
-def write_file(path: str, content: str) -> str:
+def _write_path_content(path: str, content: str) -> str:
     """Write text content to a file."""
     try:
         valid_path = validate_path(path)
@@ -362,7 +362,7 @@ def write_file(path: str, content: str) -> str:
         return f"Error writing file: {str(e)}"
 
 
-def edit_file(path: str, old_string: str, new_string: str, count: int = -1) -> str:
+def _replace_path_content(path: str, old_string: str, new_string: str, count: int = -1) -> str:
     """Edit a file by replacing specific content."""
     try:
         valid_path = validate_path(path)
@@ -402,7 +402,7 @@ def edit_file(path: str, old_string: str, new_string: str, count: int = -1) -> s
         return f"Error editing file: {str(e)}"
 
 
-def edit_file_multiline(path: str, edits: list[dict]) -> str:
+def _apply_path_edits(path: str, edits: list[dict]) -> str:
     """Apply multiple search/replace edits in sequence."""
     valid_path = validate_path(path)
 
@@ -442,7 +442,7 @@ def edit_file_multiline(path: str, edits: list[dict]) -> str:
 # ========================================
 
 
-def move_file(src: str, dst: str) -> str:
+def _move_path(src: str, dst: str) -> str:
     """Move a file or directory to a new location."""
     try:
         src_path = validate_path(src)
@@ -469,7 +469,7 @@ def move_file(src: str, dst: str) -> str:
         return f"Error moving file: {str(e)}"
 
 
-def copy_file(src: str, dst: str, overwrite: bool = False) -> str:
+def _copy_path(src: str, dst: str, overwrite: bool = False) -> str:
     """Copy a file or directory to a new location."""
     src_path = validate_path(src)
     dst_path = validate_path(dst)
@@ -498,7 +498,7 @@ def copy_file(src: str, dst: str, overwrite: bool = False) -> str:
         return f"Error copying: {str(e)}"
 
 
-def delete_file(path: str, recursive: bool = False) -> str:
+def _delete_path(path: str, recursive: bool = False) -> str:
     """Delete a file or directory."""
     try:
         valid_path = validate_path(path)
@@ -528,7 +528,7 @@ def delete_file(path: str, recursive: bool = False) -> str:
         return f"Error deleting: {str(e)}"
 
 
-def rename_file(old_path: str, new_name: str) -> str:
+def _rename_path(old_path: str, new_name: str) -> str:
     """Rename a file or directory (in the same directory)."""
     old_valid_path = validate_path(old_path)
 
@@ -550,7 +550,7 @@ def rename_file(old_path: str, new_name: str) -> str:
         return f"Error renaming: {str(e)}"
 
 
-def create_directory(path: str) -> str:
+def _create_path_directory(path: str) -> str:
     """Create a new directory (and parent directories if needed)."""
     valid_path = validate_path(path)
 
@@ -579,7 +579,7 @@ def read(
     """
     Unified read tool for all file/directory reading operations.
 
-    This tool replaces: read_file, read_file_outline, list_directory, list_directory_tree
+    This tool replaces: _read_path_content, _read_path_outline, _list_path_entries, _list_path_tree
 
     Modes:
     - file: Read file content (supports offset/limit for large files)
@@ -607,13 +607,13 @@ def read(
     """
     try:
         if mode == "file":
-            return read_file(path, offset=offset, limit=limit, encoding=encoding)
+            return _read_path_content(path, offset=offset, limit=limit, encoding=encoding)
         elif mode == "outline":
-            return read_file_outline(path)
+            return _read_path_outline(path)
         elif mode == "directory":
-            return list_directory(path, show_hidden=show_hidden, detailed=True)
+            return _list_path_entries(path, show_hidden=show_hidden, detailed=True)
         elif mode == "tree":
-            return list_directory_tree(path, depth=depth)
+            return _list_path_tree(path, depth=depth)
         else:
             return f"Error: Invalid mode '{mode}'. Must be one of: file, outline, directory, tree"
     except Exception as e:
@@ -640,8 +640,8 @@ def write(
     """
     Unified write tool for all file modification operations.
 
-    This tool replaces: write_file, edit_file, delete_file, move_file, copy_file,
-                        rename_file, create_directory
+    This tool replaces: _write_path_content, _replace_path_content, _delete_path, _move_path, _copy_path,
+                        _rename_path, _create_path_directory
 
     Operations:
     - create: Create new file or directory (if content is None, creates directory)
@@ -675,27 +675,27 @@ def write(
     try:
         if operation == "create":
             if content is None:
-                return create_directory(path)
+                return _create_path_directory(path)
             else:
-                return write_file(path, content)
+                return _write_path_content(path, content)
 
         elif operation == "edit":
             if old_string is None or new_string is None:
                 return "Error: edit operation requires both old_string and new_string"
-            return edit_file(path, old_string, new_string, count)
+            return _replace_path_content(path, old_string, new_string, count)
 
         elif operation == "delete":
-            return delete_file(path, recursive=recursive)
+            return _delete_path(path, recursive=recursive)
 
         elif operation == "move":
             if destination is None:
                 return "Error: move operation requires destination parameter"
-            return move_file(path, destination)
+            return _move_path(path, destination)
 
         elif operation == "copy":
             if destination is None:
                 return "Error: copy operation requires destination parameter"
-            return copy_file(path, destination, overwrite=overwrite)
+            return _copy_path(path, destination, overwrite=overwrite)
 
         else:
             return f"Error: Invalid operation '{operation}'. Must be one of: create, edit, delete, move, copy"

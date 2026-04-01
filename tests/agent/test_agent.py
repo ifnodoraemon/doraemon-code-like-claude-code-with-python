@@ -67,11 +67,11 @@ class TestAgentState:
     def test_add_tool_result(self):
         """Should add tool result correctly."""
         state = AgentState()
-        state.add_tool_result("call_123", "read_file", "file content")
+        state.add_tool_result("call_123", "read", "file content")
 
         assert len(state.messages) == 1
         assert state.messages[0].role == "tool"
-        assert state.messages[0].name == "read_file"
+        assert state.messages[0].name == "read"
 
     def test_increment_turn(self):
         """Should increment turn counter."""
@@ -146,7 +146,7 @@ class TestToolDefinition:
     def test_to_api_format(self):
         """Should convert to API format."""
         tool = ToolDefinition(
-            name="read_file",
+            name="read",
             description="Read a file",
             parameters={
                 "type": "object",
@@ -157,13 +157,13 @@ class TestToolDefinition:
         api_format = tool.to_api_format()
 
         assert api_format["type"] == "function"
-        assert api_format["function"]["name"] == "read_file"
+        assert api_format["function"]["name"] == "read"
         assert api_format["function"]["description"] == "Read a file"
 
     def test_sensitive_tool(self):
         """Should mark sensitive tools."""
         tool = ToolDefinition(
-            name="delete_file",
+            name="write",
             description="Delete a file",
             parameters={},
             sensitive=True,

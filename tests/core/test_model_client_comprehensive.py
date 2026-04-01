@@ -116,16 +116,16 @@ class TestToolDefinition:
     def test_tool_definition_creation(self):
         """Test creating a tool definition."""
         tool = ToolDefinition(
-            name="read_file", description="Read a file", parameters={"type": "object"}
+            name="read", description="Read a file", parameters={"type": "object"}
         )
-        assert tool.name == "read_file"
+        assert tool.name == "read"
         assert tool.description == "Read a file"
         assert tool.parameters == {"type": "object"}
 
     def test_tool_to_openai_format(self):
         """Test conversion to OpenAI format."""
         tool = ToolDefinition(
-            name="read_file",
+            name="read",
             description="Read a file",
             parameters={
                 "type": "object",
@@ -135,7 +135,7 @@ class TestToolDefinition:
         )
         openai_format = tool.to_openai_format()
         assert openai_format["type"] == "function"
-        assert openai_format["function"]["name"] == "read_file"
+        assert openai_format["function"]["name"] == "read"
         assert openai_format["function"]["description"] == "Read a file"
         assert openai_format["function"]["parameters"]["type"] == "object"
 
@@ -146,9 +146,11 @@ class TestToolDefinition:
         )
         with patch("google.genai.types.FunctionDeclaration") as mock_func:
             tool.to_genai_format()
-            mock_func.assert_called_once_with(
-                name="test_tool", description="Test tool", parameters={"type": "object"}
-            )
+            mock_func.assert_called_once()
+            _, kwargs = mock_func.call_args
+            assert kwargs["name"] == "test_tool"
+            assert kwargs["description"] == "Test tool"
+            assert str(kwargs["parameters"].type).endswith("OBJECT")
 
 
 class TestToolCall:
@@ -156,29 +158,29 @@ class TestToolCall:
 
     def test_tool_call_creation(self):
         """Test creating a tool call."""
-        tc = ToolCall(id="call_123", name="read_file", arguments={"path": "/test.txt"})
+        tc = ToolCall(id="call_123", name="read", arguments={"path": "/test.txt"})
         assert tc.id == "call_123"
-        assert tc.name == "read_file"
+        assert tc.name == "read"
         assert tc.arguments == {"path": "/test.txt"}
 
     def test_tool_call_to_dict(self):
         """Test converting tool call to dict."""
-        tc = ToolCall(id="call_123", name="read_file", arguments={"path": "/test.txt"})
+        tc = ToolCall(id="call_123", name="read", arguments={"path": "/test.txt"})
         d = tc.to_dict()
         assert d["id"] == "call_123"
-        assert d["name"] == "read_file"
+        assert d["name"] == "read"
         assert d["arguments"] == {"path": "/test.txt"}
 
     def test_tool_call_from_dict(self):
         """Test creating tool call from dict."""
         data = {
             "id": "call_456",
-            "name": "write_file",
+            "name": "write",
             "arguments": {"path": "/out.txt", "content": "data"},
         }
         tc = ToolCall.from_dict(data)
         assert tc.id == "call_456"
-        assert tc.name == "write_file"
+        assert tc.name == "write"
         assert tc.arguments == {"path": "/out.txt", "content": "data"}
 
     def test_tool_call_from_dict_with_missing_fields(self):

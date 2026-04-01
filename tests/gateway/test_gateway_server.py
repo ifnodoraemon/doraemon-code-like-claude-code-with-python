@@ -37,7 +37,7 @@ class TestGatewaySchema:
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "read_file", "arguments": '{"path": "/test"}'},
+                    "function": {"name": "read", "arguments": '{"path": "/test"}'},
                 }
             ],
         )
@@ -64,7 +64,7 @@ class TestGatewaySchema:
                 {
                     "type": "function",
                     "function": {
-                        "name": "read_file",
+                        "name": "read",
                         "description": "Read a file",
                         "parameters": {
                             "type": "object",
@@ -181,7 +181,7 @@ class TestGatewayServerConversions:
                         ToolCallInfo(
                             id="call_1",
                             function=ToolCallFunction(
-                                name="read_file",
+                                name="read",
                                 arguments='{"path":"/tmp/demo.txt"}',
                             ),
                         )
@@ -193,7 +193,7 @@ class TestGatewayServerConversions:
         chat_request = _build_chat_request_from_openai(request)
         tool_call = chat_request.messages[0].tool_calls[0]
 
-        assert tool_call.name == "read_file"
+        assert tool_call.name == "read"
         assert tool_call.arguments == {"path": "/tmp/demo.txt"}
 
     def test_build_chat_request_from_anthropic(self):
