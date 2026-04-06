@@ -29,14 +29,13 @@ from src.agent.types import (
 from src.core.home import Trace, set_project_dir
 from src.core.hooks import HookEvent, HookManager
 from src.core.tool_selector import get_capability_groups_for_mode
-from src.core.hooks import HookEvent, HookManager
+
+logger = logging.getLogger(__name__)
 
 
 class PermissionMatrix:
     """Hard enforcement of tool permissions based on agent mode."""
 
-    # Mode -> Set of allowed tools
-    # "plan" mode is strictly read-only
     MODE_PERMISSIONS = {
         "plan": {
             "read",
@@ -49,11 +48,7 @@ class PermissionMatrix:
             "get_codebase_map",
             "get_file_outline",
         },
-        "build": {
-            # build mode allows all tools (including write, run, etc.)
-            # We use None to signify "allow all" or a comprehensive list
-            "all"
-        },
+        "build": {"all"},
     }
 
     @classmethod
@@ -75,11 +70,6 @@ class DoraemonAgent(ReActAgent):
     - Skills integration
     - Rich display output
     - Trace recording with session persistence
-
-    Trace ID Hierarchy:
-        session_id  - Set once, persists across all turns
-          └── turn_id - Each run() call
-                └── span_id - Each operation (tool_call, llm_call)
     """
 
     def __init__(
@@ -230,7 +220,6 @@ class DoraemonAgent(ReActAgent):
         Execute a tool from the registry with hooks, trace recording,
         and hard permission enforcement.
         """
-        # 1. Hard Permission Check (Anti-Prompt-Injection)
         if not PermissionMatrix.check(self.state.mode, name):
             logger.warning(
                 f"Permission denied: Tool '{name}' is not allowed in '{self.state.mode}' mode"
@@ -339,9 +328,7 @@ class DoraemonAgent(ReActAgent):
         input: str,
         **kwargs,
     ) -> AgentResult:
-        """
-        Run the agent with lifecycle hooks and trace recording.
-        """
+        """Run the agent with lifecycle hooks and trace recording."""
         if self.enable_trace and self._trace:
             self._trace.start_turn(
                 input,
@@ -486,28 +473,7 @@ def create_doraemon_agent(
     session_id: str | None = None,
     active_mcp_extensions: list[str] | None = None,
 ) -> DoraemonAgent:
-    """
-    Factory function to create a DoraemonAgent.
-
-    Args:
-        llm_client: Model client for LLM calls
-        tool_registry: Tool registry for tool execution
-        mode: Agent mode ("plan" or "build")
-        hooks: Hook manager for lifecycle events
-        checkpoints: Checkpoint manager for file snapshots
-        skills: Skill manager for skill loading
-        permission_callback: Callback for HITL approval
-        display_callback: Callback for UI updates
-        max_turns: Maximum number of turns
-        project_dir: Project directory for trace storage
-        enable_trace: Enable trace recording
-        trace: Existing trace object to reuse
-        session_id: Session ID (auto-generated if not provided)
-        active_mcp_extensions: Enabled MCP extension groups for this session
-
-    Returns:
-        Configured DoraemonAgent instance
-    """
+    """Factory function to create a DoraemonAgent."""
     state = AgentState(mode=mode, max_turns=max_turns)
 
     return DoraemonAgent(
@@ -539,25 +505,7 @@ async def create_doraemon_agent_with_tools(
     display_callback: Callable | None = None,
     max_turns: int = 100,
 ) -> DoraemonAgent:
-    """
-    Factory function to create a DoraemonAgent with the built-in tool registry.
-
-    Loads the built-in tool registry from project config.
-
-    Args:
-        llm_client: Model client for LLM calls
-        mode: Agent mode ("plan" or "build")
-        config_path: Path to project config file (defaults to .agent/config.json)
-        hooks: Hook manager for lifecycle events
-        checkpoints: Checkpoint manager for file snapshots
-        skills: Skill manager for skill loading
-        permission_callback: Callback for HITL approval
-        display_callback: Callback for UI updates
-        max_turns: Maximum number of turns
-
-    Returns:
-        Configured DoraemonAgent instance with built-in tools loaded
-    """
+    """Create a DoraemonAgent with the built-in tool registry."""
     from src.host.mcp_registry import create_tool_registry
 
     registry = await create_tool_registry(config_path, mode=mode)

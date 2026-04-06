@@ -4,10 +4,10 @@ Unified Run Tool - Combines shell, python, background, and install operations.
 Follows Occam's Razor principle: one tool with mode parameter instead of 4 separate tools.
 
 Modes:
-  - shell: Execute shell commands (from shell.py)
-  - python: Execute Python code (from computer.py)
-  - background: Run commands in background (from shell.py)
-  - install: Install Python packages (from computer.py)
+  - shell: Execute shell commands
+  - python: Execute Python code
+  - background: Run commands in background
+  - install: Install Python packages
 """
 
 import logging
@@ -33,14 +33,8 @@ from src.core.security.shell_security import (
     truncate_output,
 )
 
-# Setup logging
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-
-# ========================================
-# Configuration (Python execution specific)
-# ========================================
 
 
 @dataclass
@@ -59,11 +53,6 @@ DEFAULT_LIMITS = ResourceLimits(
     max_file_size_mb=int(os.getenv("AGENT_MAX_FILE_SIZE_MB", "50")),
     max_processes=int(os.getenv("AGENT_MAX_PROCESSES", "10")),
 )
-
-
-# ========================================
-# Python Execution Helpers
-# ========================================
 
 
 def _create_sandbox_preexec(limits: ResourceLimits):
@@ -99,15 +88,11 @@ def _indent_code(code: str, spaces: int) -> str:
 
 
 def _get_sandbox_wrapper_code(user_code: str) -> str:
-    """Wrap user code with safety measures.
-
-    Enhanced (C2): blocks access to dangerous modules and built-in functions.
-    """
+    """Wrap user code with safety measures."""
     return f"""
 import sys
 import os
 
-# Block dangerous modules to prevent sandbox escape
 _BLOCKED_MODULES = {{
     'subprocess', 'shutil', 'socket', 'http', 'urllib',
     'ftplib', 'smtplib', 'telnetlib', 'ctypes', 'multiprocessing',
@@ -124,7 +109,6 @@ class _SandboxImportBlocker:
 
 sys.meta_path.insert(0, _SandboxImportBlocker())
 
-# Strictly restrict built-ins to prevent sandbox escape via __builtins__
 import builtins
 _SAFE_BUILTINS = {{
     'abs', 'all', 'any', 'bin', 'bool', 'divmod', 'enumerate', 'filter',
@@ -133,12 +117,11 @@ _SAFE_BUILTINS = {{
     'ord', 'pow', 'print', 'range', 'repr', 'reversed', 'round', 'set',
     'slice', 'sorted', 'str', 'sum', 'tuple', 'type', 'zip',
 }}
-# Remove dangerous built-ins
 for name in list(builtins.__dict__):
     if name not in _SAFE_BUILTINS and not name.startswith('__'):
         try:
             del builtins.__dict__[name]
-        except:
+        except Exception:
             pass
 
 sys.setrecursionlimit(1000)
@@ -177,19 +160,10 @@ def _validate_package_name(name: str) -> tuple[bool, str]:
     return True, ""
 
 
-# ========================================
-# Output truncation helper
-# ========================================
-
 _truncate_output = truncate_output
 _is_command_blocked = is_command_blocked
 _check_git_safety = check_git_safety
 _register_background_process = register_background_process
-
-
-# ========================================
-# Unified Run Tool
-# ========================================
 
 
 def run(
@@ -198,40 +172,18 @@ def run(
     timeout: int = 120,
     working_dir: str | None = None,
 ) -> str:
-    """
-    Unified execution tool - run shell commands, Python code, background processes, or install packages.
-
-    Args:
-        command: The command/code/package to execute
-        mode: Execution mode
-            - "shell": Execute shell command (default)
-            - "python": Execute Python code
-            - "background": Run command in background
-            - "install": Install Python package via pip
-        timeout: Timeout in seconds (default: 120, max: 600)
-        working_dir: Working directory (optional, defaults to current directory)
-
-    Examples:
-        run("ls -la")                           # Shell command
-        run("print('hello')", mode="python")    # Python code
-        run("npm run dev", mode="background")   # Background process
-        run("requests", mode="install")         # pip install requests
-
-    Returns:
-        Command output, execution result, or error message
-    """
+    """Unified execution tool."""
     logger.info(f"run(mode={mode}, command={command[:50]}...)")
 
     if mode == "shell":
         return _run_shell(command, timeout, working_dir)
-    elif mode == "python":
+    if mode == "python":
         return _run_python(command, timeout)
-    elif mode == "background":
+    if mode == "background":
         return _run_background(command, working_dir)
-    elif mode == "install":
+    if mode == "install":
         return _run_install(command)
-    else:
-        return f"Error: Unknown mode '{mode}'. Use: shell, python, background, install"
+    return f"Error: Unknown mode '{mode}'. Use: shell, python, background, install"
 
 
 def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
@@ -258,9 +210,6 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
     timeout = min(max(1, timeout), 600)
 
     try:
-        # Use a list for the command to avoid shell=True injection
-        # We still use the configured shell to execute the command string for compatibility with shell features (pipes, etc.)
-        # but we wrap it in a way that is more controlled.
         process = subprocess.Popen(
             [DEFAULT_SHELL_CONFIG.shell, "-c", command],
             shell=False,
@@ -289,12 +238,10 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
         last_activity_time = time.time()
 
         while True:
-            # Block waiting for output (up to 1s), avoids CPU-burning busy-loop
             try:
                 line = output_queue.get(timeout=1.0)
                 output_lines.append(line)
                 last_activity_time = time.time()
-                # Drain any additional lines already queued
                 while True:
                     try:
                         line = output_queue.get_nowait()
@@ -303,7 +250,7 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
                     except queue.Empty:
                         break
             except queue.Empty:
-                pass  # No output in the last second
+                pass
 
             return_code = process.poll()
             if return_code is not None and not t.is_alive() and output_queue.empty():
@@ -438,7 +385,6 @@ def _run_install(package_name: str) -> str:
         return f"Error: Invalid package name: {error_msg}"
 
     try:
-        # Check if package exists on PyPI (best-effort, skip on network error)
         try:
             check_url = f"https://pypi.org/pypi/{package_name}/json"
             resp = urlopen(check_url, timeout=5)  # noqa: S310
@@ -456,8 +402,7 @@ def _run_install(package_name: str) -> str:
 
         if result.returncode == 0:
             return f"Successfully installed {package_name}."
-        else:
-            return f"Failed to install {package_name}.\nError: {result.stderr}"
+        return f"Failed to install {package_name}.\nError: {result.stderr}"
 
     except Exception as e:
         return f"Error: {str(e)}"

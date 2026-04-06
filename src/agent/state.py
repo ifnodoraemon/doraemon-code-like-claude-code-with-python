@@ -38,7 +38,7 @@ class AgentState:
     max_context_tokens: int = 128000
     estimated_tokens: int = 0
 
-    max_messages: int = 50  # 内存限制
+    max_messages: int = 50
     _compressed_summary: str = ""
 
     goal: str | None = None
@@ -71,8 +71,6 @@ class AgentState:
         if not old_messages:
             return
 
-        # Instead of truncating strings, we store a reference that these messages
-        # should be summarized by the agent during its next reasoning cycle.
         self._compressed_summary += (
             f"\n[Context: {len(old_messages)} messages archived for semantic summarization]"
         )

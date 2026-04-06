@@ -29,10 +29,10 @@ class FileSnapshot:
     """Snapshot of a single file."""
 
     path: str
-    content: str | None  # None if file didn't exist
+    content: str | None
     exists: bool
     size: int
-    mtime: float | None  # Modification time
+    mtime: float | None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -60,9 +60,9 @@ class Checkpoint:
 
     id: str
     created_at: float
-    prompt: str  # User prompt that triggered this checkpoint
+    prompt: str
     files: list[FileSnapshot] = field(default_factory=list)
-    message_count: int = 0  # Number of messages at this point
+    message_count: int = 0
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -93,9 +93,9 @@ class CheckpointConfig:
 
     enabled: bool = True
     save_directory: str = ".agent/checkpoints"
-    max_file_size: int = 1024 * 1024  # 1MB max per file
+    max_file_size: int = 1024 * 1024
     retention_days: int = 30
-    compress: bool = True  # Compress old checkpoints
+    compress: bool = True
 
 
 class CheckpointManager:
@@ -104,17 +104,9 @@ class CheckpointManager:
 
     Usage:
         mgr = CheckpointManager(project="myproject")
-
-        # Before processing user prompt
-        mgr.begin_checkpoint("user's prompt", message_count=5)
-
-        # Before editing a file
+        mgr.begin_checkpoint("user prompt", message_count=5)
         mgr.snapshot_file("/path/to/file.py")
-
-        # After processing (auto-saved)
         mgr.finalize_checkpoint()
-
-        # To rollback
         mgr.rewind(checkpoint_id, mode="both")
     """
 
@@ -129,30 +121,15 @@ class CheckpointManager:
         self._current: Checkpoint | None = None
         self._pending_files: set[str] = set()
 
-        # Initialize storage
         self._base_dir = Path(self.config.save_directory) / project
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load existing checkpoints
         if not self._load_index():
             return
         self._cleanup_old_checkpoints()
 
-    # ----------------------------------------
-    # Public API
-    # ----------------------------------------
-
     def begin_checkpoint(self, prompt: str, message_count: int = 0) -> str:
-        """
-        Begin a new checkpoint before processing a user prompt.
-
-        Args:
-            prompt: The user's prompt
-            message_count: Current number of messages in conversation
-
-        Returns:
-            Checkpoint ID
-        """
+        """Begin a new checkpoint before processing a user prompt."""
         if not self.config.enabled:
             return ""
 
@@ -160,7 +137,7 @@ class CheckpointManager:
         self._current = Checkpoint(
             id=checkpoint_id,
             created_at=time.time(),
-            prompt=prompt[:500],  # Truncate long prompts
+            prompt=prompt[:500],
             message_count=message_count,
         )
         self._pending_files.clear()
@@ -169,19 +146,10 @@ class CheckpointManager:
         return checkpoint_id
 
     def snapshot_file(self, path: str) -> bool:
-        """
-        Take a snapshot of a file before it's modified.
-
-        Args:
-            path: Path to the file
-
-        Returns:
-            True if snapshot was taken
-        """
+        """Take a snapshot of a file before it's modified."""
         if not self.config.enabled or not self._current:
             return False
 
-        # Avoid duplicate snapshots in same checkpoint
         abs_path = str(Path(path).resolve())
         if abs_path in self._pending_files:
             return False
@@ -190,13 +158,11 @@ class CheckpointManager:
             file_path = Path(path)
 
             if file_path.exists():
-                # Cache stat() result to avoid TOCTOU
                 stat_result = file_path.stat()
                 size = stat_result.st_size
                 mtime = stat_result.st_mtime
                 if size > self.config.max_file_size:
                     logger.warning(f"File too large for snapshot: {path} ({size} bytes)")
-                    # Still record metadata, just not content
                     snapshot = FileSnapshot(
                         path=abs_path,
                         content=None,
@@ -214,7 +180,6 @@ class CheckpointManager:
                         mtime=mtime,
                     )
             else:
-                # File doesn't exist yet
                 snapshot = FileSnapshot(
                     path=abs_path,
                     content=None,
@@ -233,19 +198,10 @@ class CheckpointManager:
             return False
 
     def finalize_checkpoint(self, description: str = "") -> str | None:
-        """
-        Finalize the current checkpoint.
-
-        Args:
-            description: Optional description of changes made
-
-        Returns:
-            Checkpoint ID if finalized, None if no checkpoint active
-        """
+        """Finalize the current checkpoint."""
         if not self._current:
             return None
 
-        # Only save if files were modified
         if not self._current.files:
             logger.debug("No files changed, discarding checkpoint")
             self._current = None
@@ -254,7 +210,6 @@ class CheckpointManager:
         self._current.description = description
         self.checkpoints.append(self._current)
 
-        # Save checkpoint data
         checkpoint_id = self._current.id
         self._save_checkpoint(self._current)
         self._save_index()
@@ -272,15 +227,7 @@ class CheckpointManager:
         self._pending_files.clear()
 
     def list_checkpoints(self, limit: int = 20) -> list[dict[str, Any]]:
-        """
-        List recent checkpoints.
-
-        Args:
-            limit: Maximum number to return
-
-        Returns:
-            List of checkpoint summaries
-        """
+        """List recent checkpoints."""
         result = []
         for cp in reversed(self.checkpoints[-limit:]):
             dt = datetime.fromtimestamp(cp.created_at)
@@ -308,23 +255,7 @@ class CheckpointManager:
         checkpoint_id: str,
         mode: Literal["code", "conversation", "both"] = "both",
     ) -> dict[str, Any]:
-        """
-        Rewind to a specific checkpoint.
-
-        Args:
-            checkpoint_id: ID of checkpoint to rewind to
-            mode: What to rewind
-                - "code": Only restore files
-                - "conversation": Only return message count (caller handles)
-                - "both": Restore files and return message count
-
-        Returns:
-            Dict with rewind results:
-            - restored_files: List of files restored
-            - failed_files: List of files that failed to restore
-            - message_count: Number of messages to keep (if mode includes conversation)
-            - checkpoints_removed: Number of checkpoints after this one that were removed
-        """
+        """Rewind to a specific checkpoint."""
         checkpoint = self.get_checkpoint(checkpoint_id)
         if not checkpoint:
             raise ValueError(f"Checkpoint not found: {checkpoint_id}")
@@ -336,7 +267,6 @@ class CheckpointManager:
             "checkpoints_removed": 0,
         }
 
-        # Restore files if requested
         if mode in ("code", "both"):
             for snapshot in checkpoint.files:
                 try:
@@ -346,17 +276,14 @@ class CheckpointManager:
                     logger.error(f"Failed to restore {snapshot.path}: {e}")
                     result["failed_files"].append({"path": snapshot.path, "error": str(e)})
 
-        # Handle conversation rewind
         if mode in ("conversation", "both"):
             result["message_count"] = checkpoint.message_count
 
-        # Remove checkpoints after this one
         cp_index = self.checkpoints.index(checkpoint)
         if cp_index < len(self.checkpoints) - 1:
             removed = self.checkpoints[cp_index + 1 :]
             result["checkpoints_removed"] = len(removed)
 
-            # Delete checkpoint files
             for cp in removed:
                 self._delete_checkpoint_file(cp.id)
 
@@ -372,22 +299,12 @@ class CheckpointManager:
     def rewind_last(
         self, mode: Literal["code", "conversation", "both"] = "code"
     ) -> dict[str, Any] | None:
-        """
-        Rewind to the previous checkpoint (undo last operation).
-
-        Returns:
-            Rewind result or None if no checkpoints
-        """
+        """Rewind to the previous checkpoint."""
         if len(self.checkpoints) < 2:
             return None
 
-        # Rewind to second-to-last checkpoint
         target = self.checkpoints[-2]
         return self.rewind(target.id, mode)
-
-    # ----------------------------------------
-    # Internal Methods
-    # ----------------------------------------
 
     def _generate_id(self) -> str:
         """Generate a unique checkpoint ID."""
@@ -398,7 +315,6 @@ class CheckpointManager:
         file_path = Path(snapshot.path)
 
         if not snapshot.exists:
-            # File didn't exist before - delete it
             if file_path.exists():
                 file_path.unlink()
                 logger.debug(f"Deleted file: {snapshot.path}")
@@ -407,10 +323,7 @@ class CheckpointManager:
         if snapshot.content is None:
             raise ValueError(f"No content available for {snapshot.path}")
 
-        # Create parent directories if needed
         file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write content
         file_path.write_text(snapshot.content, encoding="utf-8")
         logger.debug(f"Restored file: {snapshot.path}")
 
@@ -435,7 +348,6 @@ class CheckpointManager:
         """Load checkpoint data from file."""
         path = self._get_checkpoint_path(checkpoint_id)
         if not path.exists():
-            # Try non-compressed version
             path = self._base_dir / f"{checkpoint_id}.json"
             if not path.exists():
                 return None
@@ -487,13 +399,11 @@ class CheckpointManager:
         try:
             data = json.loads(index_path.read_text(encoding="utf-8"))
 
-            # Load full checkpoint data for each entry
             for entry in data.get("checkpoints", []):
                 checkpoint = self._load_checkpoint(entry["id"])
                 if checkpoint:
                     self.checkpoints.append(checkpoint)
                 else:
-                    # Create minimal checkpoint from index
                     self.checkpoints.append(
                         Checkpoint(
                             id=entry["id"],

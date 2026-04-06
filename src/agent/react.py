@@ -11,6 +11,7 @@ This is the core agentic loop that makes decisions, not the runtime.
 
 import asyncio
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -31,6 +32,8 @@ from .types import (
     ToolCall,
     ToolDefinition,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TraceInterface:
@@ -110,7 +113,6 @@ class ReActAgent(BaseAgent):
         tool_results = []
         errors = []
 
-        # 1. Always include the most recent 3 results for immediate continuity
         recent_limit = 3
         history_len = len(self.state.tool_history)
         recent_start = max(0, history_len - recent_limit)
@@ -121,25 +123,18 @@ class ReActAgent(BaseAgent):
             if tc.error:
                 errors.append(tc.error)
 
-        # 2. Contextual Retrieval: Include results related to the current goal or recent thought
-        # This prevents "memory loss" in long chains
         goal = (self.state.goal or "").lower()
         if goal:
-            # Look further back for results that contain keywords from the goal
-            # We check the remaining history that wasn't included in 'recent'
             for tc in reversed(self.state.tool_history[:recent_start]):
-                # If tool result contains words from the goal, or it was a critical 'write'/'run' tool
                 result_text = (tc.result or "").lower()
                 if any(word in result_text for word in goal.split() if len(word) > 3):
                     if tc not in tool_results:
                         tool_results.insert(0, tc)
 
-                # Always keep critical state-changing tools in observation
                 if tc.name in {"write", "run"}:
                     if tc not in tool_results:
                         tool_results.insert(0, tc)
 
-                # Cap the contextual results to avoid context window overflow
                 if len(tool_results) > 15:
                     break
 
@@ -162,8 +157,6 @@ class ReActAgent(BaseAgent):
         """
         messages = self._build_messages(observation)
         tools = self.get_tool_definitions_for_api()
-        # Allow slow first-turn reasoning on real coding tasks, but still cap a
-        # single LLM call so the agent can surface a bounded timeout.
         llm_timeout = min(self.timeout, 300.0)
 
         try:
@@ -366,7 +359,6 @@ class ReActAgent(BaseAgent):
         If any tool is a 'write' tool, we switch to sequential execution to avoid
         race conditions and state inconsistency.
         """
-        # Identify if any tool in the batch is a modifying tool
         has_modifier = any(
             (tc.get("name") or tc.get("function", {}).get("name", "")) == "write"
             for tc in tool_calls
@@ -388,7 +380,6 @@ class ReActAgent(BaseAgent):
                 results.append((result, error))
             return results
 
-        # Purely read-only tools can run in parallel
         tasks = []
         for tc in tool_calls:
             name = tc.get("name") or tc.get("function", {}).get("name", "")
@@ -693,7 +684,6 @@ When the task is complete, provide a summary of what was done."""
 
     async def _compress_context(self) -> None:
         """Perform semantic compression of the conversation history using the LLM."""
-        # Determine messages to compress: all but the most recent 12
         messages_to_keep = 12
         if len(self.state.messages) <= messages_to_keep:
             return
@@ -701,7 +691,6 @@ When the task is complete, provide a summary of what was done."""
         older_messages = self.state.messages[:-messages_to_keep]
         recent_messages = self.state.messages[-messages_to_keep:]
 
-        # Build a prompt for semantic summarization
         history_text = "\n".join(f"{m.role}: {m.content}" for m in older_messages if m.content)
 
         summary_prompt = (
@@ -713,11 +702,9 @@ When the task is complete, provide a summary of what was done."""
         )
 
         try:
-            # Use a simple LLM call for summarization
             response = await self._call_llm([{"role": "user", "content": summary_prompt}], [])
             summary = response.get("content", "Summary unavailable.")
 
-            # Update state: replace old messages with a single semantic summary message
             self.state.messages = [
                 Message(role="system", content=f"## Semantic Context Summary\n{summary}"),
                 *recent_messages,
@@ -725,7 +712,6 @@ When the task is complete, provide a summary of what was done."""
             self.state._update_token_estimate()
         except Exception as e:
             logger.error(f"Semantic compression failed: {e}")
-            # Fallback to keeping messages if summarization fails
 
     async def _summarize_messages(self, messages: list[Message]) -> str:
         """Deprecated: Integrated into _compress_context for better semantic control."""
