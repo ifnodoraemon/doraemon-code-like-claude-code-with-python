@@ -117,6 +117,11 @@ class StubPlanner:
         return self.plan
 
 
+class RaisingPlanner:
+    def generate_plan(self, goal: str, context=None) -> ExecutionPlan:
+        raise RuntimeError("planner boom")
+
+
 class SimpleRegistry:
     def get_tool_names(self) -> list[str]:
         return [
@@ -265,3 +270,22 @@ async def test_lead_runtime_blocks_root_when_worker_raises(tmp_path):
     assert root is not None
     assert root.status == TaskStatus.BLOCKED
     assert "worker crashed" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_blocks_root_when_planner_raises(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(
+        task_manager=task_manager,
+        results_by_input={},
+    )
+
+    runtime = LeadAgentRuntime(session, planner=RaisingPlanner(), max_workers=1)
+
+    with pytest.raises(RuntimeError, match="planner boom"):
+        await runtime.execute("Implement authentication")
+
+    tasks = task_manager.list_tasks()
+    assert len(tasks) == 1
+    assert tasks[0].status == TaskStatus.BLOCKED
+    assert tasks[0].assigned_agent is None

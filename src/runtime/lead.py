@@ -101,79 +101,86 @@ class LeadAgentRuntime:
             status=TaskStatus.IN_PROGRESS,
             assigned_agent=self.session.session_id,
         )
+        try:
+            plan = self.planner.generate_plan(goal, context=context or {})
+            persistent_ids = self._materialize_plan(task_manager, root_task.id, plan)
 
-        plan = self.planner.generate_plan(goal, context=context or {})
-        persistent_ids = self._materialize_plan(task_manager, root_task.id, plan)
-
-        result = LeadExecutionResult(
-            root_task_id=root_task.id,
-            plan_id=plan.id,
-        )
-
-        pending_planner_ids = {task.id for task in plan.tasks}
-        while pending_planner_ids:
-            ready_batch = self._collect_ready_batch(
-                task_manager,
-                root_task.id,
-                plan,
-                persistent_ids,
-                pending_planner_ids,
+            result = LeadExecutionResult(
+                root_task_id=root_task.id,
+                plan_id=plan.id,
             )
-            if not ready_batch:
-                task_manager.update_task(
-                    root_task.id,
-                    status=TaskStatus.BLOCKED,
-                    assigned_agent=None,
-                )
-                result.success = False
-                result.summary = "Task graph stalled before all planned tasks became ready"
-                return result
 
-            outcomes = await asyncio.gather(
-                *[
-                    self._execute_planner_task(
-                        planner_task=planner_task,
-                        persistent_task_id=persistent_ids[planner_task.id],
-                        task_manager=task_manager,
-                        result=result,
+            pending_planner_ids = {task.id for task in plan.tasks}
+            while pending_planner_ids:
+                ready_batch = self._collect_ready_batch(
+                    task_manager,
+                    root_task.id,
+                    plan,
+                    persistent_ids,
+                    pending_planner_ids,
+                )
+                if not ready_batch:
+                    task_manager.update_task(
+                        root_task.id,
+                        status=TaskStatus.BLOCKED,
+                        assigned_agent=None,
                     )
-                    for planner_task in ready_batch
-                ]
-            )
+                    result.success = False
+                    result.summary = "Task graph stalled before all planned tasks became ready"
+                    return result
 
-            for outcome in outcomes:
-                pending_planner_ids.discard(outcome.planner_task_id)
-                result.executed_task_ids.append(outcome.persistent_task_id)
-                result.task_summaries[outcome.persistent_task_id] = outcome.summary
-
-                if outcome.success:
-                    result.completed_task_ids.append(outcome.persistent_task_id)
-                    continue
-
-                result.failed_task_ids.append(outcome.persistent_task_id)
-                if result.blocked_task_id is None:
-                    result.blocked_task_id = outcome.persistent_task_id
-
-            if result.failed_task_ids:
-                task_manager.update_task(
-                    root_task.id,
-                    status=TaskStatus.BLOCKED,
-                    assigned_agent=None,
+                outcomes = await asyncio.gather(
+                    *[
+                        self._execute_planner_task(
+                            planner_task=planner_task,
+                            persistent_task_id=persistent_ids[planner_task.id],
+                            task_manager=task_manager,
+                            result=result,
+                        )
+                        for planner_task in ready_batch
+                    ]
                 )
-                result.success = False
-                result.summary = self._build_failure_summary(result)
-                return result
 
-        task_manager.update_task(
-            root_task.id,
-            status=TaskStatus.COMPLETED,
-            assigned_agent=None,
-        )
-        result.summary = (
-            f"Completed {len(result.completed_task_ids)} planned task(s) "
-            f"with up to {self.max_workers} worker(s)"
-        )
-        return result
+                for outcome in outcomes:
+                    pending_planner_ids.discard(outcome.planner_task_id)
+                    result.executed_task_ids.append(outcome.persistent_task_id)
+                    result.task_summaries[outcome.persistent_task_id] = outcome.summary
+
+                    if outcome.success:
+                        result.completed_task_ids.append(outcome.persistent_task_id)
+                        continue
+
+                    result.failed_task_ids.append(outcome.persistent_task_id)
+                    if result.blocked_task_id is None:
+                        result.blocked_task_id = outcome.persistent_task_id
+
+                if result.failed_task_ids:
+                    task_manager.update_task(
+                        root_task.id,
+                        status=TaskStatus.BLOCKED,
+                        assigned_agent=None,
+                    )
+                    result.success = False
+                    result.summary = self._build_failure_summary(result)
+                    return result
+
+            task_manager.update_task(
+                root_task.id,
+                status=TaskStatus.COMPLETED,
+                assigned_agent=None,
+            )
+            result.summary = (
+                f"Completed {len(result.completed_task_ids)} planned task(s) "
+                f"with up to {self.max_workers} worker(s)"
+            )
+            return result
+        except Exception:
+            task_manager.update_task(
+                root_task.id,
+                status=TaskStatus.BLOCKED,
+                assigned_agent=None,
+            )
+            raise
 
     async def _execute_planner_task(
         self,

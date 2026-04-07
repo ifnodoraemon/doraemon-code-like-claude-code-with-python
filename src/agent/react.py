@@ -412,11 +412,15 @@ class ReActAgent(BaseAgent):
         try:
             while not self.state.is_finished:
                 if not self.state.increment_turn():
-                    yield {"type": "error", "error": "Max turns exceeded"}
+                    error = "Max turns exceeded"
+                    self.state.mark_error(error)
+                    yield {"type": "error", "error": error}
                     break
 
                 if time.time() - self._start_time > self.timeout:
-                    yield {"type": "error", "error": f"Agent timeout ({self.timeout}s)"}
+                    error = f"Agent timeout ({self.timeout}s)"
+                    self.state.mark_error(error)
+                    yield {"type": "error", "error": error}
                     break
 
                 if self.state.needs_compression():

@@ -468,6 +468,9 @@ class TestReActAgent:
 
         assert any(event["type"] == "error" and "timeout" in event["error"] for event in events)
         assert events[-1]["type"] == "done"
+        assert events[-1]["result"]["success"] is False
+        assert "timeout" in events[-1]["result"]["error"]
+        assert events[-1]["result"]["metadata"]["status"] == "error"
 
     def test_reset(self, agent):
         """Should reset agent state."""
@@ -1368,3 +1371,33 @@ class TestAgentAdapter:
 
         session_manager = SessionManager(tmp_path / ".agent" / "sessions")
         assert session_manager.list_sessions(project="default") == []
+
+    @pytest.mark.asyncio
+    async def test_agent_session_reset_clears_persisted_name_for_next_topic(
+        self, mock_llm, mock_registry, tmp_path
+    ):
+        """Reset sessions should derive a fresh title from the next conversation."""
+        from src.agent.adapter import AgentSession
+        from src.core.session import SessionManager
+
+        session = AgentSession(
+            model_client=mock_llm,
+            registry=mock_registry,
+            mode="build",
+            project_dir=tmp_path,
+            enable_trace=False,
+        )
+
+        await session.initialize()
+        await session.turn("First topic")
+        session_id = session.session_id
+
+        session.reset()
+        await session.initialize()
+        await session.turn("Second topic")
+        await session.aclose()
+
+        session_manager = SessionManager(tmp_path / ".agent" / "sessions")
+        persisted = session_manager.load_session(session_id)
+        assert persisted is not None
+        assert persisted.metadata.name == "Second topic"

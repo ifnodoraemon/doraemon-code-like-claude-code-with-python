@@ -508,6 +508,7 @@ class AgentSession:
             self._session_record.messages = []
             self._session_record.metadata.message_count = 0
             self._session_record.metadata.total_tokens = 0
+            self._session_record.metadata.name = None
             if self._session_manager is not None:
                 self._session_manager.save_session(self._session_record)
         self._agent = None
