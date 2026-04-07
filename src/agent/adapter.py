@@ -37,6 +37,7 @@ from rich.panel import Panel
 from src.agent.doraemon import DoraemonAgent, create_doraemon_agent
 from src.agent.state import AgentState
 from src.core.home import Trace
+from src.runtime import LeadExecutionResult, LeadAgentRuntime
 from src.runtime.bootstrap import RuntimeBootstrap, bootstrap_runtime
 
 logger = logging.getLogger(__name__)
@@ -348,7 +349,7 @@ class AgentSession:
         start_time = time.time()
 
         try:
-            result = await self._agent.run(user_input)
+            result = await self._agent.run(user_input, **kwargs)
 
             return AgentTurnResult(
                 response=result.response or "",
@@ -372,6 +373,19 @@ class AgentSession:
                 error=str(e),
                 files_modified=[],
             )
+
+    async def orchestrate(
+        self,
+        user_input: str,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> LeadExecutionResult:
+        """Execute a goal through the thin lead-runtime orchestration path."""
+        if not self._agent:
+            await self.initialize()
+
+        runtime = LeadAgentRuntime(self)
+        return await runtime.execute(user_input, context=context)
 
     async def turn_stream(
         self,

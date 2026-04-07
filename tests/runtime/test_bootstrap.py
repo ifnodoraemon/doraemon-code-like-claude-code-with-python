@@ -1,10 +1,12 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from src.agent.adapter import AgentSession
 from src.host.tools import ToolRegistry
 from src.runtime.bootstrap import ProjectContext, RuntimeBootstrap, bootstrap_runtime
+from src.core.tasks import TaskManager
 
 
 class DummyRegistry:
@@ -201,3 +203,55 @@ async def test_agent_session_initializes_from_shared_bootstrap(monkeypatch, tmp_
     assert session._mcp_extensions == ["docs"]
     assert session.get_task_manager() is runtime.task_manager
     assert [tool.name for tool in session._agent.tools] == ["read"]
+
+
+@pytest.mark.asyncio
+async def test_agent_session_orchestrate_uses_lead_runtime(monkeypatch, tmp_path):
+    registry = ToolRegistry()
+
+    def read(path: str) -> str:
+        return path
+
+    registry.register(read, name="read")
+
+    runtime = RuntimeBootstrap(
+        context=ProjectContext(
+            project="demo",
+            mode="build",
+            project_dir=tmp_path.resolve(),
+            config_path=None,
+            capability_groups=["read", "edit", "memory", "research", "task"],
+            tool_names=["read"],
+            active_mcp_extensions=[],
+        ),
+        model_client=object(),
+        registry=registry,
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=TaskManager(storage_path=tmp_path / "tasks.json"),
+        owns_model_client=False,
+    )
+
+    async def fake_bootstrap_runtime(**kwargs):
+        return runtime
+
+    async def fake_execute(self, goal: str, *, context=None):
+        return SimpleNamespace(success=True, summary=f"planned: {goal}", goal=goal, context=context)
+
+    monkeypatch.setattr("src.agent.adapter.bootstrap_runtime", fake_bootstrap_runtime)
+    monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.execute", fake_execute)
+
+    session = AgentSession(
+        model_client=None,
+        registry=None,
+        project="demo",
+        mode="build",
+        project_dir=tmp_path,
+        enable_trace=False,
+    )
+
+    result = await session.orchestrate("Implement authentication", context={"files": ["auth.py"]})
+
+    assert result.success is True
+    assert result.summary == "planned: Implement authentication"

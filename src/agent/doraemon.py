@@ -418,10 +418,11 @@ class DoraemonAgent(ReActAgent):
     async def run(
         self,
         input: str,
+        create_runtime_task: bool = True,
         **kwargs,
     ) -> AgentResult:
         """Run the agent with lifecycle hooks and trace recording."""
-        runtime_task_id = self._begin_runtime_task(input)
+        runtime_task_id = self._begin_runtime_task(input) if create_runtime_task else None
 
         task_manager_token = None
         if self.task_manager is not None:
