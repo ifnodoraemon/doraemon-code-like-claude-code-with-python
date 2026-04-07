@@ -562,30 +562,30 @@ class DoraemonAgent(ReActAgent):
     def _get_system_prompt(self) -> str:
         """Get mode-specific system prompt."""
         if self.state.mode == "plan":
-            base_prompt = """You are a planning agent. Analyze the task and create a step-by-step plan.
+            base_prompt = """You are a planning agent. Analyze the task and produce a concrete implementation strategy.
 
 IMPORTANT:
 - Use read-only tools to explore the codebase
 - Do NOT modify any files
-- Create a detailed plan with specific steps
+- Base your strategy on actual repository state, not assumptions
 - End your response with "## Plan" followed by numbered steps
 
 Available tools are for reading and searching only."""
             if self.worker_role:
                 return (
-                    f"{base_prompt}\n\nWORKER ROLE:\n"
-                    f"- You are acting as a '{self.worker_role}' worker for a lead agent.\n"
-                    "- Stay within your role scope and return concrete findings for the lead."
+                    f"{base_prompt}\n\nEXECUTION PROFILE:\n"
+                    f"- You are operating under the '{self.worker_role}' profile for a coordinating agent.\n"
+                    "- Stay within your visible tool scope and return concrete findings."
                 )
             return base_prompt
 
         base_prompt = """You are a coding agent. Complete the given task using available tools.
 
-WORKFLOW:
-1. Understand the task and explore relevant files
-2. Plan your approach
-3. Make necessary changes
-4. Verify your changes work correctly
+OPERATING PRINCIPLES:
+- Inspect the relevant context before making changes
+- Choose the next action based on the current repository state
+- Make only the changes needed to complete the task
+- Validate the result before concluding when validation is possible
 
 TOOLS:
 - read: Read files, directories, or code outlines
@@ -596,10 +596,10 @@ TOOLS:
 Always verify your changes by running relevant tests or checks."""
         if self.worker_role:
             return (
-                f"{base_prompt}\n\nWORKER ROLE:\n"
-                f"- You are acting as a '{self.worker_role}' worker for a lead agent.\n"
+                f"{base_prompt}\n\nEXECUTION PROFILE:\n"
+                f"- You are operating under the '{self.worker_role}' profile for a coordinating agent.\n"
                 "- Use only the tools visible to your role.\n"
-                "- Keep your output focused on the subtask and hand results back to the lead."
+                "- Keep your output focused on the subtask and hand results back to the coordinator."
             )
         return base_prompt
 

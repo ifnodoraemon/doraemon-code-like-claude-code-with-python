@@ -440,6 +440,34 @@ class TestUnifiedWriteTracking:
 
         assert _collect_modified_paths(tool_calls) == ["old.txt", "new.txt"]
 
+
+class TestDoraemonPrompts:
+    """Prompt wording should stay agentic and avoid workflow scripts."""
+
+    def test_build_prompt_avoids_workflow_wording(self):
+        agent = DoraemonAgent(
+            llm_client=AsyncMock(),
+            tool_registry=SimpleNamespace(get_tool_names=lambda: [], _tools={}),
+            state=AgentState(mode="build"),
+        )
+
+        prompt = agent._get_system_prompt()
+
+        assert "WORKFLOW:" not in prompt
+        assert "OPERATING PRINCIPLES:" in prompt
+
+    def test_plan_prompt_avoids_step_by_step_wording(self):
+        agent = DoraemonAgent(
+            llm_client=AsyncMock(),
+            tool_registry=SimpleNamespace(get_tool_names=lambda: [], _tools={}),
+            state=AgentState(mode="plan"),
+        )
+
+        prompt = agent._get_system_prompt()
+
+        assert "step-by-step plan" not in prompt
+        assert "concrete implementation strategy" in prompt
+
     @pytest.mark.asyncio
     async def test_checkpoint_paths_include_move_destination(self):
         checkpoints = SimpleNamespace(snapshot=MagicMock())

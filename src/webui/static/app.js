@@ -62,10 +62,10 @@ function setExecutionMode(mode) {
   els.chatBadge.textContent = mode === "orchestrate" ? `orchestrate x${state.maxWorkers}` : "single turn";
   els.composerMode.textContent =
     mode === "orchestrate" ? `workers: ${state.maxWorkers}` : "single agent turn";
-  els.summaryMode.textContent = mode === "orchestrate" ? "Lead Runtime" : "Direct Turn";
+  els.summaryMode.textContent = mode === "orchestrate" ? "Coordinated Runtime" : "Direct Turn";
   els.prompt.placeholder =
     mode === "orchestrate"
-      ? "Describe the goal you want the lead runtime to decompose..."
+      ? "Describe the goal you want the coordinator to decompose..."
       : "Ask Doraemon Code anything...";
 }
 
@@ -102,7 +102,7 @@ function renderMessages() {
         <div class="empty-mark">RT</div>
         <h4>Choose a direct turn or orchestrate a goal</h4>
         <p>
-          Orchestration will materialize a task graph, assign worker roles, and return a lead summary.
+          Orchestration will materialize a task graph, assign execution profiles, and return a coordinator summary.
           Single turn keeps the direct chat loop.
         </p>
       </div>
@@ -192,7 +192,7 @@ function renderTaskPanels() {
           `,
         )
         .join("")
-    : "Worker assignments will appear after orchestration runs.";
+    : "Execution-profile assignments will appear after orchestration runs.";
 
   els.readyTasks.innerHTML = state.readyTasks.length
     ? state.readyTasks
@@ -217,7 +217,6 @@ function renderTaskPanels() {
               <div class="tool-description">${escapeHtml(tool.description || "")}</div>
               <div class="tool-flags">
                 <span class="pill">${escapeHtml(tool.policy.capability_group || "uncategorized")}</span>
-                <span class="pill">${escapeHtml(tool.policy.sandbox || "workspace_read")}</span>
                 <span class="pill">${tool.policy.requires_approval ? "approval required" : "no approval"}</span>
               </div>
             </div>
@@ -306,7 +305,7 @@ async function submitPrompt(event) {
     id: generateId(),
     role: "assistant",
     content: "",
-    meta: state.executionMode === "orchestrate" ? "lead runtime" : "",
+    meta: state.executionMode === "orchestrate" ? "coordinator runtime" : "",
     timestamp: Date.now(),
     tool_calls: [],
   };

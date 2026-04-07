@@ -177,7 +177,7 @@ function App() {
                 role: 'assistant',
                 content: '',
                 timestamp: Date.now(),
-                meta: executionMode === 'orchestrate' ? 'lead runtime' : undefined,
+                meta: executionMode === 'orchestrate' ? 'coordinator runtime' : undefined,
             }
 
             setMessages((prev) => [...prev, assistantMessage])
@@ -364,7 +364,7 @@ function App() {
                                 <SummaryCard
                                     icon={<Bot size={16} />}
                                     label="Mode"
-                                    value={executionMode === 'orchestrate' ? 'Lead Runtime' : 'Direct Turn'}
+                                    value={executionMode === 'orchestrate' ? 'Coordinated Runtime' : 'Direct Turn'}
                                 />
                                 <SummaryCard
                                     icon={<Boxes size={16} />}
@@ -402,7 +402,7 @@ function App() {
                                         </div>
                                         <h3 className="mt-6 text-2xl font-semibold text-white">Choose a direct turn or orchestrate a goal</h3>
                                         <p className="mt-3 max-w-xl text-sm text-slate-400">
-                                            Orchestration will persist a task graph, assign worker roles, and return a lead summary. Single-turn mode keeps the classic direct chat loop.
+                                            Orchestration will persist a task graph, assign execution profiles, and return a coordinator summary. Single-turn mode keeps the classic direct chat loop.
                                         </p>
                                     </div>
                                 ) : (
@@ -472,7 +472,7 @@ function App() {
                                                 onChange={(event) => setInput(event.target.value)}
                                                 placeholder={
                                                     executionMode === 'orchestrate'
-                                                        ? 'Describe the goal you want the lead runtime to decompose...'
+                                                        ? 'Describe the goal you want the coordinator to decompose...'
                                                         : 'Ask Doraemon Code anything...'
                                                 }
                                                 className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-4 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/40"
@@ -510,7 +510,7 @@ function App() {
                                 subtitle={`${Object.keys(workerAssignments).length} active mappings`}
                             >
                                 {Object.entries(workerAssignments).length === 0 ? (
-                                    <EmptyState text="Worker role assignments will appear after orchestration runs." />
+                                    <EmptyState text="Execution-profile assignments will appear after orchestration runs." />
                                 ) : (
                                     <div className="space-y-3">
                                         {Object.entries(workerAssignments).map(([taskId, assignment]) => (

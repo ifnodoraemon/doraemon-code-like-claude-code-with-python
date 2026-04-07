@@ -204,13 +204,17 @@ async def test_lead_runtime_executes_ready_tasks_in_parallel_batches(tmp_path):
     assert set(session.closed_workers) == {worker_id for worker_id, _, _ in session.turn_calls}
     assert all(task.status == TaskStatus.COMPLETED for task in child_tasks)
     assert {assignment["role"] for assignment in result.worker_assignments.values()} == {
-        "researcher",
-        "implementer",
-        "verifier",
+        "inspect",
+        "change",
+        "validate",
     }
-    assert any(worker["worker_role"] == "researcher" for worker in session.spawned_workers)
+    assert any(worker["worker_role"] == "inspect" for worker in session.spawned_workers)
     assert any("write" in worker["allowed_tool_names"] for worker in session.spawned_workers)
     assert any("run" in worker["allowed_tool_names"] for worker in session.spawned_workers)
+    assert any(
+        assignment["capability_groups"] == ["read", "edit", "memory", "task"]
+        for assignment in result.worker_assignments.values()
+    )
 
 
 @pytest.mark.asyncio

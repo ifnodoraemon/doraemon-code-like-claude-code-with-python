@@ -661,12 +661,12 @@ class ReActAgent(BaseAgent):
     def _get_system_prompt(self) -> str:
         """Get system prompt based on mode."""
         if self.state.mode == "plan":
-            return """You are a planning agent. Analyze the task and create a step-by-step plan.
-Do not execute anything, only create a plan. Use available tools to explore the codebase.
+            return """You are a planning agent. Analyze the task and produce a concrete implementation strategy.
+Do not execute anything; inspect the codebase and return an actionable plan grounded in repository state.
 Once you have a plan, respond with "PLAN:" followed by the steps."""
 
         return """You are a coding agent. Complete the given task using available tools.
-Think step by step. Use tools to read files, write code, and run commands.
+Inspect context before changing code, choose actions based on what you observe, and validate results when possible.
 When the task is complete, provide a summary of what was done."""
 
     async def _execute_tool_with_permission(

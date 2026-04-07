@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from src.core.tool_selector import get_capability_group_for_tool
 from src.core.planner import TaskPlanner
 from src.core.tasks import TaskManager, TaskStatus
 
@@ -57,6 +58,7 @@ class _TaskExecutionOutcome:
 @dataclass(slots=True)
 class WorkerProfile:
     role: str
+    capability_groups: list[str]
     allowed_tool_names: list[str]
     instruction: str
 
@@ -192,6 +194,7 @@ class LeadAgentRuntime:
         result.worker_assignments[persistent_task_id] = {
             "planner_task_id": planner_task.id,
             "role": worker_profile.role,
+            "capability_groups": list(worker_profile.capability_groups),
             "worker_session_id": worker_session_id,
             "allowed_tool_names": list(worker_profile.allowed_tool_names),
         }
@@ -325,12 +328,12 @@ class LeadAgentRuntime:
         )
 
     def _select_worker_profile(self, planner_task: Any) -> WorkerProfile:
-        """Choose a worker role and tool scope for a planner task."""
+        """Choose an execution profile and tool scope for a planner task."""
         text = f"{planner_task.title} {planner_task.description}".lower()
         available = set(getattr(self.session.registry, "get_tool_names", lambda: [])())
 
-        role_tools = {
-            "researcher": [
+        profile_tools = {
+            "inspect": [
                 "read",
                 "search",
                 "web_search",
@@ -343,7 +346,7 @@ class LeadAgentRuntime:
                 "memory_list",
                 "task",
             ],
-            "verifier": [
+            "validate": [
                 "read",
                 "search",
                 "run",
@@ -355,7 +358,7 @@ class LeadAgentRuntime:
                 "memory_list",
                 "task",
             ],
-            "implementer": [
+            "change": [
                 "read",
                 "search",
                 "write",
@@ -375,37 +378,68 @@ class LeadAgentRuntime:
                 "task",
             ],
         }
-        role_instructions = {
-            "researcher": "Investigate the codebase, gather facts, and avoid speculative edits.",
-            "verifier": "Validate behavior, run checks, and report concrete pass/fail evidence.",
-            "implementer": "Make the required code changes and verify the subtask before returning.",
+        profile_capability_groups = {
+            "inspect": ["read", "memory", "research", "task"],
+            "validate": ["read", "edit", "memory", "task"],
+            "change": ["read", "edit", "memory", "research", "task"],
+        }
+        profile_instructions = {
+            "inspect": "Inspect the codebase, gather concrete facts, and avoid speculative edits.",
+            "validate": "Validate behavior, run checks when useful, and return concrete evidence.",
+            "change": "Make the necessary code changes, then verify the subtask before returning.",
         }
 
         if any(keyword in text for keyword in ("verify", "validation", "test", "check", "diagnostic", "integration")):
-            role = "verifier"
+            profile = "validate"
         elif any(keyword in text for keyword in ("analyze", "inspect", "research", "explore", "read", "investigate", "design")):
-            role = "researcher"
+            profile = "inspect"
         else:
-            role = "implementer"
+            profile = "change"
 
-        allowed_tool_names = [name for name in role_tools[role] if name in available]
+        allowed_tool_names = [
+            name
+            for name in profile_tools[profile]
+            if name in available and self._tool_is_visible(name)
+        ]
         if "task" not in allowed_tool_names and "task" in available:
             allowed_tool_names.append("task")
+        if not allowed_tool_names:
+            allowed_tool_names = [
+                name
+                for name in available
+                if self._tool_is_visible(name)
+                and get_capability_group_for_tool(name) in profile_capability_groups[profile]
+            ]
 
         return WorkerProfile(
-            role=role,
+            role=profile,
+            capability_groups=profile_capability_groups[profile],
             allowed_tool_names=allowed_tool_names,
-            instruction=role_instructions[role],
+            instruction=profile_instructions[profile],
         )
 
     def _build_worker_input(self, planner_task: Any, worker_profile: WorkerProfile) -> str:
-        """Wrap a planner task in role-specific worker instructions."""
+        """Wrap a planner task in profile-specific worker instructions."""
         return (
-            f"Worker role: {worker_profile.role}\n"
-            f"Role instruction: {worker_profile.instruction}\n"
+            f"Execution profile: {worker_profile.role}\n"
+            f"Available capability groups: {', '.join(worker_profile.capability_groups)}\n"
+            f"Profile instruction: {worker_profile.instruction}\n"
             f"Subtask: {planner_task.description}\n"
-            "Return a concise subtask result for the lead agent."
+            "Work independently within this profile and return a concise subtask result."
         )
+
+    def _tool_is_visible(self, tool_name: str) -> bool:
+        """Check if a tool is visible in the current runtime context."""
+        get_tool_policy = getattr(self.session.registry, "get_tool_policy", None)
+        if not callable(get_tool_policy):
+            return True
+
+        policy = get_tool_policy(
+            tool_name,
+            mode=self.session.mode,
+            active_mcp_extensions=getattr(self.session, "_mcp_extensions", []),
+        )
+        return not isinstance(policy, dict) or policy.get("visible", True)
 
     def _trim_title(self, goal: str) -> str:
         compact = " ".join(goal.strip().split()) or "Orchestrated task"
