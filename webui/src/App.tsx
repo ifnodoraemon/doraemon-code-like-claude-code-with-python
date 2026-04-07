@@ -227,58 +227,97 @@ function App() {
 
             setMessages((prev) => [...prev, assistantMessage])
 
-            while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
+            const handleSsePayload = (payload: string) => {
+                if (payload === '[DONE]') {
+                    return true
+                }
 
-                const chunk = decoder.decode(value)
-                const lines = chunk.split('\n\n')
-
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue
-                    const payload = line.slice(6)
-                    if (payload === '[DONE]') break
-
-                    try {
-                        const data = JSON.parse(payload)
-                        if (data.session_id) {
-                            setCurrentSessionId(data.session_id)
-                        }
-                        if (data.type === 'orchestration') {
-                            const result = data.result as OrchestrationResult
-                            setMessages((prev) => {
-                                const next = [...prev]
-                                const last = next[next.length - 1]
-                                if (last?.role === 'assistant') {
-                                    last.content = data.content || result.summary
-                                    last.meta = result.success ? 'orchestration completed' : 'orchestration blocked'
-                                }
-                                return next
-                            })
-                            setTaskGraph(data.task_graph || [])
-                            setWorkerAssignments(result.worker_assignments || {})
-                            continue
-                        }
-
+                try {
+                    const data = JSON.parse(payload)
+                    if (data.session_id) {
+                        setCurrentSessionId(data.session_id)
+                    }
+                    if (data.type === 'orchestration') {
+                        const result = data.result as OrchestrationResult
                         setMessages((prev) => {
                             const next = [...prev]
                             const last = next[next.length - 1]
-                            if (last?.role !== 'assistant') return next
-
-                            if (data.content) {
-                                last.content = `${last.content || ''}${data.content}`
-                            }
-                            if (data.tool_calls) {
-                                last.tool_calls = data.tool_calls
-                            }
-                            if (data.error) {
-                                last.meta = data.error
+                            if (last?.role === 'assistant') {
+                                last.content = data.content || result.summary
+                                last.meta = result.success
+                                    ? 'orchestration completed'
+                                    : 'orchestration blocked'
                             }
                             return next
                         })
-                    } catch (err) {
-                        console.error('Failed to parse SSE payload', err)
+                        setTaskGraph(data.task_graph || [])
+                        setWorkerAssignments(result.worker_assignments || {})
+                        return false
                     }
+
+                    setMessages((prev) => {
+                        const next = [...prev]
+                        const last = next[next.length - 1]
+                        if (last?.role !== 'assistant') return next
+
+                        if (data.content) {
+                            last.content = `${last.content || ''}${data.content}`
+                        }
+                        if (data.tool_calls) {
+                            last.tool_calls = data.tool_calls
+                        }
+                        if (data.error) {
+                            last.meta = data.error
+                        }
+                        return next
+                    })
+                } catch (err) {
+                    console.error('Failed to parse SSE payload', err)
+                }
+
+                return false
+            }
+
+            let buffer = ''
+
+            while (true) {
+                const { done, value } = await reader.read()
+                buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+
+                const events = buffer.split('\n\n')
+                buffer = events.pop() || ''
+
+                let shouldStop = false
+                for (const eventChunk of events) {
+                    const payload = eventChunk
+                        .split('\n')
+                        .filter((line) => line.startsWith('data: '))
+                        .map((line) => line.slice(6))
+                        .join('\n')
+
+                    if (!payload) continue
+                    if (handleSsePayload(payload)) {
+                        shouldStop = true
+                        break
+                    }
+                }
+
+                if (shouldStop) {
+                    await reader.cancel()
+                    break
+                }
+
+                if (done) {
+                    const payload = buffer
+                        .split('\n')
+                        .filter((line) => line.startsWith('data: '))
+                        .map((line) => line.slice(6))
+                        .join('\n')
+
+                    if (payload) {
+                        handleSsePayload(payload)
+                    }
+                    break
                 }
             }
 

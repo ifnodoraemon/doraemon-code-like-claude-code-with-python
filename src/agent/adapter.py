@@ -393,10 +393,21 @@ class AgentSession:
         if not self._agent:
             await self.initialize()
 
-        runtime = LeadAgentRuntime(self, max_workers=max_workers or 2)
-        result = await runtime.execute(user_input, context=context)
         if self._state is not None:
             self._state.add_user_message(user_input)
+
+        runtime = LeadAgentRuntime(self, max_workers=max_workers or 2)
+        try:
+            result = await runtime.execute(user_input, context=context)
+        except Exception as exc:
+            if self._state is not None:
+                self._state.add_assistant_message(f"Orchestration failed: {exc}")
+            if self._trace:
+                self._trace.error(str(exc), {"exception_type": type(exc).__name__})
+            self._save_session_state()
+            raise
+
+        if self._state is not None:
             self._state.add_assistant_message(result.summary)
         self._save_session_state()
         return result

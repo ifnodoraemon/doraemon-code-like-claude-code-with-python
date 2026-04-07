@@ -109,6 +109,18 @@ class RaisingStubSession(StubSession):
         raise RuntimeError(f"worker crashed for {user_input}")
 
 
+class MalformedStubSession(StubSession):
+    async def run_worker_turn(
+        self,
+        worker_session_id: str,
+        user_input: str,
+        *,
+        create_runtime_task: bool,
+    ):
+        self.turn_calls.append((worker_session_id, user_input, create_runtime_task))
+        return object()
+
+
 class StubPlanner:
     def __init__(self, plan: ExecutionPlan):
         self.plan = plan
@@ -289,3 +301,26 @@ async def test_lead_runtime_blocks_root_when_planner_raises(tmp_path):
     assert len(tasks) == 1
     assert tasks[0].status == TaskStatus.BLOCKED
     assert tasks[0].assigned_agent is None
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_blocks_child_when_worker_returns_malformed_result(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = MalformedStubSession(
+        task_manager=task_manager,
+        results_by_input={},
+    )
+
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=1)
+    result = await runtime.execute("Implement authentication")
+
+    root = task_manager.get_task(result.root_task_id)
+    child_statuses = {
+        task.title: task.status for task in task_manager.list_tasks() if task.parent_id == result.root_task_id
+    }
+
+    assert result.success is False
+    assert root is not None
+    assert root.status == TaskStatus.BLOCKED
+    assert child_statuses["Inspect auth flow"] == TaskStatus.BLOCKED
+    assert "invalid turn result" in result.summary

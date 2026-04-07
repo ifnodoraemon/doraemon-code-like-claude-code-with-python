@@ -208,55 +208,58 @@ class LeadAgentRuntime:
         task_manager.claim_task(persistent_task_id, worker_session_id)
 
         try:
-            try:
-                turn_result = await worker_session.turn(
-                    self._build_worker_input(planner_task, worker_profile),
-                    create_runtime_task=False,
-                )
-            except Exception as exc:
+            turn_result = await worker_session.turn(
+                self._build_worker_input(planner_task, worker_profile),
+                create_runtime_task=False,
+            )
+
+            success = getattr(turn_result, "success", None)
+            if success is None:
+                raise RuntimeError("Worker returned an invalid turn result without a success flag")
+
+            if success:
                 task_manager.update_task(
                     persistent_task_id,
-                    status=TaskStatus.BLOCKED,
+                    status=TaskStatus.COMPLETED,
                     assigned_agent=None,
                 )
                 return _TaskExecutionOutcome(
                     planner_task_id=planner_task.id,
                     persistent_task_id=persistent_task_id,
                     worker_session_id=worker_session_id,
-                    success=False,
-                    summary=str(exc),
-                    error=str(exc),
+                    success=True,
+                    summary=turn_result.response or "Task completed",
                 )
-        finally:
-            await worker_session.aclose()
 
-        if turn_result.success:
             task_manager.update_task(
                 persistent_task_id,
-                status=TaskStatus.COMPLETED,
+                status=TaskStatus.BLOCKED,
                 assigned_agent=None,
             )
             return _TaskExecutionOutcome(
                 planner_task_id=planner_task.id,
                 persistent_task_id=persistent_task_id,
                 worker_session_id=worker_session_id,
-                success=True,
-                summary=turn_result.response or "Task completed",
+                success=False,
+                summary=turn_result.error or turn_result.response or "Task execution failed",
+                error=turn_result.error,
             )
-
-        task_manager.update_task(
-            persistent_task_id,
-            status=TaskStatus.BLOCKED,
-            assigned_agent=None,
-        )
-        return _TaskExecutionOutcome(
-            planner_task_id=planner_task.id,
-            persistent_task_id=persistent_task_id,
-            worker_session_id=worker_session_id,
-            success=False,
-            summary=turn_result.error or turn_result.response or "Task execution failed",
-            error=turn_result.error,
-        )
+        except Exception as exc:
+            task_manager.update_task(
+                persistent_task_id,
+                status=TaskStatus.BLOCKED,
+                assigned_agent=None,
+            )
+            return _TaskExecutionOutcome(
+                planner_task_id=planner_task.id,
+                persistent_task_id=persistent_task_id,
+                worker_session_id=worker_session_id,
+                success=False,
+                summary=str(exc),
+                error=str(exc),
+            )
+        finally:
+            await worker_session.aclose()
 
     def _materialize_plan(
         self,

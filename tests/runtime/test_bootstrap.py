@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.agent.adapter import AgentSession
+from src.core.session import SessionManager
 from src.host.tools import ToolRegistry
 from src.runtime.bootstrap import ProjectContext, RuntimeBootstrap, bootstrap_runtime
 from src.core.tasks import TaskManager
@@ -261,6 +262,67 @@ async def test_agent_session_orchestrate_uses_lead_runtime(monkeypatch, tmp_path
 
     assert result.success is True
     assert result.summary == "planned: Implement authentication"
+
+
+@pytest.mark.asyncio
+async def test_agent_session_orchestrate_persists_failed_goal(monkeypatch, tmp_path):
+    registry = ToolRegistry()
+
+    def read(path: str) -> str:
+        return path
+
+    registry.register(read, name="read")
+
+    runtime = RuntimeBootstrap(
+        context=ProjectContext(
+            project="demo",
+            mode="build",
+            project_dir=tmp_path.resolve(),
+            config_path=None,
+            capability_groups=["read", "edit", "memory", "research", "task"],
+            tool_names=["read"],
+            active_mcp_extensions=[],
+        ),
+        model_client=object(),
+        registry=registry,
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=TaskManager(storage_path=tmp_path / "tasks.json"),
+        owns_model_client=False,
+        owns_registry=False,
+    )
+
+    async def fake_bootstrap_runtime(**kwargs):
+        return runtime
+
+    async def failing_execute(self, goal: str, *, context=None):
+        raise RuntimeError(f"planner boom for {goal}")
+
+    monkeypatch.setattr("src.agent.adapter.bootstrap_runtime", fake_bootstrap_runtime)
+    monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.execute", failing_execute)
+
+    session = AgentSession(
+        model_client=None,
+        registry=None,
+        project="demo",
+        mode="build",
+        project_dir=tmp_path,
+        enable_trace=False,
+    )
+
+    with pytest.raises(RuntimeError, match="planner boom"):
+        await session.orchestrate("Implement authentication", context={"files": ["auth.py"]})
+
+    await session.aclose()
+
+    session_manager = SessionManager(tmp_path / ".agent" / "sessions")
+    persisted = session_manager.load_session(session.session_id)
+    assert persisted is not None
+    assert [message["content"] for message in persisted.messages] == [
+        "Implement authentication",
+        "Orchestration failed: planner boom for Implement authentication",
+    ]
 
 
 @pytest.mark.asyncio
