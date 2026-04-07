@@ -41,12 +41,14 @@ class StubSession:
     ):
         self._agent = object()
         self._task_manager = task_manager
+        self.registry = SimpleRegistry()
         self.session_id = "session-test"
         self.results_by_input = results_by_input
         self.barrier_inputs = barrier_inputs or set()
         self.turn_calls: list[tuple[str, str, bool]] = []
         self.started_inputs: list[str] = []
         self.closed_workers: list[str] = []
+        self.spawned_workers: list[dict[str, object]] = []
         self._worker_count = 0
         self._barrier_event = asyncio.Event()
 
@@ -56,8 +58,20 @@ class StubSession:
     def get_task_manager(self) -> TaskManager:
         return self._task_manager
 
-    async def spawn_worker_session(self, *, enable_trace: bool | None = None):
+    async def spawn_worker_session(
+        self,
+        *,
+        enable_trace: bool | None = None,
+        worker_role: str | None = None,
+        allowed_tool_names: list[str] | None = None,
+    ):
         self._worker_count += 1
+        self.spawned_workers.append(
+            {
+                "worker_role": worker_role,
+                "allowed_tool_names": list(allowed_tool_names or []),
+            }
+        )
         return StubWorkerSession(self, f"worker-{self._worker_count}")
 
     async def run_worker_turn(
@@ -68,15 +82,19 @@ class StubSession:
         create_runtime_task: bool,
     ) -> StubTurnResult:
         self.turn_calls.append((worker_session_id, user_input, create_runtime_task))
-        self.started_inputs.append(user_input)
+        task_line = next(
+            line for line in user_input.splitlines() if line.startswith("Subtask: ")
+        )
+        subtask = task_line.removeprefix("Subtask: ")
+        self.started_inputs.append(subtask)
 
-        if user_input in self.barrier_inputs:
+        if subtask in self.barrier_inputs:
             started = sum(1 for item in self.started_inputs if item in self.barrier_inputs)
             if started >= len(self.barrier_inputs):
                 self._barrier_event.set()
             await asyncio.wait_for(self._barrier_event.wait(), timeout=1)
 
-        return self.results_by_input[user_input]
+        return self.results_by_input[subtask]
 
 
 class RaisingStubSession(StubSession):
@@ -97,6 +115,29 @@ class StubPlanner:
 
     def generate_plan(self, goal: str, context=None) -> ExecutionPlan:
         return self.plan
+
+
+class SimpleRegistry:
+    def get_tool_names(self) -> list[str]:
+        return [
+            "read",
+            "search",
+            "write",
+            "run",
+            "web_search",
+            "web_fetch",
+            "task",
+            "memory_get",
+            "memory_put",
+            "memory_search",
+            "memory_list",
+            "lsp_diagnostics",
+            "lsp_hover",
+            "lsp_definition",
+            "lsp_references",
+            "lsp_completions",
+            "lsp_rename",
+        ]
 
 
 def build_parallel_plan() -> ExecutionPlan:
@@ -162,6 +203,14 @@ async def test_lead_runtime_executes_ready_tasks_in_parallel_batches(tmp_path):
     assert len({worker_id for worker_id, _, _ in session.turn_calls}) == 3
     assert set(session.closed_workers) == {worker_id for worker_id, _, _ in session.turn_calls}
     assert all(task.status == TaskStatus.COMPLETED for task in child_tasks)
+    assert {assignment["role"] for assignment in result.worker_assignments.values()} == {
+        "researcher",
+        "implementer",
+        "verifier",
+    }
+    assert any(worker["worker_role"] == "researcher" for worker in session.spawned_workers)
+    assert any("write" in worker["allowed_tool_names"] for worker in session.spawned_workers)
+    assert any("run" in worker["allowed_tool_names"] for worker in session.spawned_workers)
 
 
 @pytest.mark.asyncio

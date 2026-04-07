@@ -12,6 +12,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import typer
 from dotenv import load_dotenv
@@ -39,6 +40,43 @@ for stream in [sys.stdin, sys.stdout, sys.stderr]:
 load_dotenv()
 
 app = typer.Typer()
+
+
+def _parse_orchestrate_args(args: list[str]) -> tuple[int, str] | None:
+    """Parse `/orchestrate` arguments into max workers and goal."""
+    if not args:
+        return None
+
+    max_workers = 2
+    goal_parts = args
+    if len(args) >= 2 and args[0] in {"--workers", "-w"}:
+        try:
+            max_workers = max(1, int(args[1]))
+        except ValueError:
+            return None
+        goal_parts = args[2:]
+
+    goal = " ".join(goal_parts).strip()
+    if not goal:
+        return None
+    return max_workers, goal
+
+
+def _format_task_tree(nodes: list[dict[str, Any]], level: int = 0) -> list[str]:
+    """Render the task tree into compact CLI lines."""
+    lines: list[str] = []
+    indent = "  " * level
+    for node in nodes:
+        status = node.get("status", "pending")
+        ready = " ready" if node.get("ready") else ""
+        assigned = f" @{node['assigned_agent']}" if node.get("assigned_agent") else ""
+        lines.append(
+            f"{indent}- [{status}] {node.get('title', node.get('id', 'task'))} "
+            f"({node.get('id', '?')}){ready}{assigned}"
+        )
+        for child in node.get("children", []):
+            lines.extend(_format_task_tree([child], level + 1))
+    return lines
 
 
 async def run_chat_loop(
@@ -138,6 +176,8 @@ async def handle_command(cmd: str, session: AgentSession, mode: str) -> str | No
 [bold]Commands:[/bold]
   /help, /h, /?     Show this help
   /mode <mode>      Switch mode (plan/build)
+  /orchestrate ...  Run lead/worker orchestration
+  /tasks [ready]    Show runtime task graph
   /clear            Clear conversation
   /reset            Reset agent state
   /trace            Show trace info
@@ -146,6 +186,7 @@ async def handle_command(cmd: str, session: AgentSession, mode: str) -> str | No
 
 [bold]Tips:[/bold]
   Start with ! to run bash commands: !ls -la
+  Example: /orchestrate --workers 3 implement auth flow
 """)
 
     elif command == "mode":
@@ -161,6 +202,53 @@ async def handle_command(cmd: str, session: AgentSession, mode: str) -> str | No
     elif command == "clear":
         session._state.messages.clear() if session._state else None
         console.print("[green]Conversation cleared[/green]")
+
+    elif command == "orchestrate":
+        parsed = _parse_orchestrate_args(args)
+        if parsed is None:
+            console.print("Usage: /orchestrate [--workers N] <goal>")
+            return None
+
+        max_workers, goal = parsed
+        console.print(
+            f"[cyan]Running orchestration[/cyan] with {max_workers} worker(s): {goal}"
+        )
+        result = await session.orchestrate(goal, max_workers=max_workers)
+        color = "green" if result.success else "red"
+        console.print(f"[{color}]Summary:[/{color}] {result.summary}")
+        console.print(f"[cyan]Root task:[/cyan] {result.root_task_id}")
+        console.print(f"[cyan]Completed:[/cyan] {len(result.completed_task_ids)}")
+        if result.failed_task_ids:
+            console.print(f"[red]Failed:[/red] {len(result.failed_task_ids)}")
+        if result.worker_assignments:
+            console.print("[cyan]Worker assignments:[/cyan]")
+            for task_id, assignment in result.worker_assignments.items():
+                console.print(
+                    f"  - {task_id}: {assignment['role']} via {assignment['worker_session_id']}"
+                )
+
+    elif command == "tasks":
+        task_manager = session.get_task_manager()
+        if task_manager is None:
+            console.print("[yellow]No task manager available[/yellow]")
+            return None
+
+        if args and args[0] == "ready":
+            ready_tasks = task_manager.list_ready_tasks()
+            if not ready_tasks:
+                console.print("[yellow]No ready tasks[/yellow]")
+                return None
+            for task in ready_tasks:
+                console.print(f"- [{task.status.value}] {task.title} ({task.id})")
+            return None
+
+        lines = _format_task_tree(task_manager.get_task_tree())
+        if not lines:
+            console.print("[yellow]No tasks[/yellow]")
+            return None
+        console.print("[cyan]Task graph:[/cyan]")
+        for line in lines:
+            console.print(line)
 
     elif command == "reset":
         session.reset()

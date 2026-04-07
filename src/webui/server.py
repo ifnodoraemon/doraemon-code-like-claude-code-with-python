@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.core.logger import configure_root_logger
 from src.webui.dashboard.api import router as dashboard_router
-from src.webui.routes import chat, sessions, tools
+from src.webui.routes import chat, sessions, tasks, tools
 
 # Setup logging
 configure_root_logger()
@@ -56,6 +56,7 @@ async def add_security_headers(request: Request, call_next):
 # Include routers
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
+app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(tools.router, prefix="/api/tools", tags=["tools"])
 app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 

@@ -27,6 +27,7 @@ class LeadExecutionResult:
     success: bool = True
     summary: str = ""
     task_summaries: dict[str, str] = field(default_factory=dict)
+    worker_assignments: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +40,7 @@ class LeadExecutionResult:
             "success": self.success,
             "summary": self.summary,
             "task_summaries": dict(self.task_summaries),
+            "worker_assignments": dict(self.worker_assignments),
         }
 
 
@@ -50,6 +52,13 @@ class _TaskExecutionOutcome:
     success: bool
     summary: str
     error: str | None = None
+
+
+@dataclass(slots=True)
+class WorkerProfile:
+    role: str
+    allowed_tool_names: list[str]
+    instruction: str
 
 
 class LeadAgentRuntime:
@@ -124,6 +133,7 @@ class LeadAgentRuntime:
                         planner_task=planner_task,
                         persistent_task_id=persistent_ids[planner_task.id],
                         task_manager=task_manager,
+                        result=result,
                     )
                     for planner_task in ready_batch
                 ]
@@ -169,16 +179,28 @@ class LeadAgentRuntime:
         planner_task: Any,
         persistent_task_id: str,
         task_manager: TaskManager,
+        result: LeadExecutionResult,
     ) -> _TaskExecutionOutcome:
         """Claim and execute a planner task through an isolated worker session."""
-        worker_session = await self.session.spawn_worker_session(enable_trace=False)
+        worker_profile = self._select_worker_profile(planner_task)
+        worker_session = await self.session.spawn_worker_session(
+            enable_trace=False,
+            worker_role=worker_profile.role,
+            allowed_tool_names=worker_profile.allowed_tool_names,
+        )
         worker_session_id = worker_session.session_id
+        result.worker_assignments[persistent_task_id] = {
+            "planner_task_id": planner_task.id,
+            "role": worker_profile.role,
+            "worker_session_id": worker_session_id,
+            "allowed_tool_names": list(worker_profile.allowed_tool_names),
+        }
         task_manager.claim_task(persistent_task_id, worker_session_id)
 
         try:
             try:
                 turn_result = await worker_session.turn(
-                    planner_task.description,
+                    self._build_worker_input(planner_task, worker_profile),
                     create_runtime_task=False,
                 )
             except Exception as exc:
@@ -300,6 +322,89 @@ class LeadAgentRuntime:
         return (
             f"Blocked after {len(result.completed_task_ids)} completed task(s); "
             f"{detail}"
+        )
+
+    def _select_worker_profile(self, planner_task: Any) -> WorkerProfile:
+        """Choose a worker role and tool scope for a planner task."""
+        text = f"{planner_task.title} {planner_task.description}".lower()
+        available = set(getattr(self.session.registry, "get_tool_names", lambda: [])())
+
+        role_tools = {
+            "researcher": [
+                "read",
+                "search",
+                "web_search",
+                "web_fetch",
+                "lsp_hover",
+                "lsp_definition",
+                "lsp_references",
+                "memory_get",
+                "memory_search",
+                "memory_list",
+                "task",
+            ],
+            "verifier": [
+                "read",
+                "search",
+                "run",
+                "lsp_diagnostics",
+                "lsp_hover",
+                "lsp_definition",
+                "memory_get",
+                "memory_search",
+                "memory_list",
+                "task",
+            ],
+            "implementer": [
+                "read",
+                "search",
+                "write",
+                "multi_edit",
+                "notebook_edit",
+                "run",
+                "lsp_diagnostics",
+                "lsp_completions",
+                "lsp_hover",
+                "lsp_definition",
+                "lsp_references",
+                "lsp_rename",
+                "memory_get",
+                "memory_put",
+                "memory_search",
+                "memory_list",
+                "task",
+            ],
+        }
+        role_instructions = {
+            "researcher": "Investigate the codebase, gather facts, and avoid speculative edits.",
+            "verifier": "Validate behavior, run checks, and report concrete pass/fail evidence.",
+            "implementer": "Make the required code changes and verify the subtask before returning.",
+        }
+
+        if any(keyword in text for keyword in ("verify", "validation", "test", "check", "diagnostic", "integration")):
+            role = "verifier"
+        elif any(keyword in text for keyword in ("analyze", "inspect", "research", "explore", "read", "investigate", "design")):
+            role = "researcher"
+        else:
+            role = "implementer"
+
+        allowed_tool_names = [name for name in role_tools[role] if name in available]
+        if "task" not in allowed_tool_names and "task" in available:
+            allowed_tool_names.append("task")
+
+        return WorkerProfile(
+            role=role,
+            allowed_tool_names=allowed_tool_names,
+            instruction=role_instructions[role],
+        )
+
+    def _build_worker_input(self, planner_task: Any, worker_profile: WorkerProfile) -> str:
+        """Wrap a planner task in role-specific worker instructions."""
+        return (
+            f"Worker role: {worker_profile.role}\n"
+            f"Role instruction: {worker_profile.instruction}\n"
+            f"Subtask: {planner_task.description}\n"
+            "Return a concise subtask result for the lead agent."
         )
 
     def _trim_title(self, goal: str) -> str:

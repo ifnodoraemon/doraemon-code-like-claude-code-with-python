@@ -259,6 +259,8 @@ class AgentSession:
         config_path: Path | None = None,
         project_dir: Path | None = None,
         enable_trace: bool = True,
+        worker_role: str | None = None,
+        allowed_tool_names: list[str] | None = None,
     ):
         self.model_client = model_client
         self.registry = registry
@@ -272,6 +274,10 @@ class AgentSession:
         self.config_path = config_path
         self.project_dir = project_dir or Path.cwd()
         self.enable_trace = enable_trace
+        self.worker_role = worker_role
+        self.allowed_tool_names = (
+            allowed_tool_names.copy() if allowed_tool_names is not None else None
+        )
 
         self._agent: DoraemonAgent | None = None
         self._state: AgentState | None = None
@@ -334,6 +340,8 @@ class AgentSession:
             trace=self._trace,
             session_id=self.session_id,
             active_mcp_extensions=self._mcp_extensions,
+            worker_role=self.worker_role,
+            allowed_tool_names=self.allowed_tool_names,
         )
         self._agent.state = self._state
 
@@ -422,6 +430,8 @@ class AgentSession:
         self,
         *,
         enable_trace: bool | None = None,
+        worker_role: str | None = None,
+        allowed_tool_names: list[str] | None = None,
     ) -> "AgentSession":
         """Create an isolated worker session that reuses shared runtime resources."""
         if not self._agent:
@@ -440,6 +450,8 @@ class AgentSession:
             config_path=self.config_path,
             project_dir=self.project_dir,
             enable_trace=self.enable_trace if enable_trace is None else enable_trace,
+            worker_role=worker_role,
+            allowed_tool_names=allowed_tool_names,
         )
         await worker.initialize()
         return worker

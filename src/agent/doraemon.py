@@ -65,6 +65,8 @@ class DoraemonAgent(ReActAgent):
         trace: Trace | None = None,
         session_id: str | None = None,
         active_mcp_extensions: list[str] | None = None,
+        worker_role: str | None = None,
+        allowed_tool_names: list[str] | None = None,
         **kwargs,
     ):
         mode = state.mode if state else "build"
@@ -72,6 +74,7 @@ class DoraemonAgent(ReActAgent):
             tool_registry,
             mode=mode,
             active_mcp_extensions=active_mcp_extensions or [],
+            allowed_tool_names=allowed_tool_names,
         )
         super().__init__(
             llm_client=llm_client,
@@ -91,6 +94,10 @@ class DoraemonAgent(ReActAgent):
         self.enable_trace = enable_trace
         self.session_id = session_id or self._generate_session_id()
         self.active_mcp_extensions = (active_mcp_extensions or []).copy()
+        self.worker_role = worker_role
+        self.allowed_tool_names = (
+            set(allowed_tool_names) if allowed_tool_names is not None else None
+        )
 
         if trace:
             self._trace = trace
@@ -180,13 +187,17 @@ class DoraemonAgent(ReActAgent):
         *,
         mode: str = "build",
         active_mcp_extensions: list[str] | None = None,
+        allowed_tool_names: list[str] | None = None,
     ) -> list[ToolDefinition]:
         """Convert registry tool definitions into agent ToolDefinitions."""
         tools: list[ToolDefinition] = []
         tool_name_set: set[str] = set()
+        allowed_names = set(allowed_tool_names) if allowed_tool_names is not None else None
 
         if hasattr(registry, "_tool_schemas"):
             for name, schema in registry._tool_schemas.items():
+                if allowed_names is not None and name not in allowed_names:
+                    continue
                 if hasattr(registry, "get_tool_policy"):
                     policy = registry.get_tool_policy(
                         name,
@@ -216,6 +227,8 @@ class DoraemonAgent(ReActAgent):
 
         if hasattr(registry, "_tools"):
             for name in registry.get_tool_names():
+                if allowed_names is not None and name not in allowed_names:
+                    continue
                 tool_def = registry._tools.get(name)
                 if not tool_def:
                     continue
@@ -262,6 +275,10 @@ class DoraemonAgent(ReActAgent):
         and hard permission enforcement.
         """
         policy = None
+        if self.allowed_tool_names is not None and name not in self.allowed_tool_names:
+            logger.warning("Worker tool scope denied access to '%s'", name)
+            return "", f"Permission Error: Tool '{name}' is not available for worker role '{self.worker_role or 'default'}'."
+
         check_tool_execution = getattr(self.tool_registry, "check_tool_execution", None)
         if callable(check_tool_execution):
             decision = check_tool_execution(
@@ -440,6 +457,7 @@ class DoraemonAgent(ReActAgent):
                     "active_skills": [],
                     "active_mcp_extensions": self.active_mcp_extensions.copy(),
                     "runtime_task_id": runtime_task_id,
+                    "worker_role": self.worker_role,
                 },
             )
 
@@ -544,7 +562,7 @@ class DoraemonAgent(ReActAgent):
     def _get_system_prompt(self) -> str:
         """Get mode-specific system prompt."""
         if self.state.mode == "plan":
-            return """You are a planning agent. Analyze the task and create a step-by-step plan.
+            base_prompt = """You are a planning agent. Analyze the task and create a step-by-step plan.
 
 IMPORTANT:
 - Use read-only tools to explore the codebase
@@ -553,8 +571,15 @@ IMPORTANT:
 - End your response with "## Plan" followed by numbered steps
 
 Available tools are for reading and searching only."""
+            if self.worker_role:
+                return (
+                    f"{base_prompt}\n\nWORKER ROLE:\n"
+                    f"- You are acting as a '{self.worker_role}' worker for a lead agent.\n"
+                    "- Stay within your role scope and return concrete findings for the lead."
+                )
+            return base_prompt
 
-        return """You are a coding agent. Complete the given task using available tools.
+        base_prompt = """You are a coding agent. Complete the given task using available tools.
 
 WORKFLOW:
 1. Understand the task and explore relevant files
@@ -569,6 +594,14 @@ TOOLS:
 - run: Execute commands (tests, builds, etc.)
 
 Always verify your changes by running relevant tests or checks."""
+        if self.worker_role:
+            return (
+                f"{base_prompt}\n\nWORKER ROLE:\n"
+                f"- You are acting as a '{self.worker_role}' worker for a lead agent.\n"
+                "- Use only the tools visible to your role.\n"
+                "- Keep your output focused on the subtask and hand results back to the lead."
+            )
+        return base_prompt
 
 
 def create_doraemon_agent(
@@ -587,6 +620,8 @@ def create_doraemon_agent(
     trace: Trace | None = None,
     session_id: str | None = None,
     active_mcp_extensions: list[str] | None = None,
+    worker_role: str | None = None,
+    allowed_tool_names: list[str] | None = None,
 ) -> DoraemonAgent:
     """Factory function to create a DoraemonAgent."""
     state = AgentState(mode=mode, max_turns=max_turns)
@@ -607,6 +642,8 @@ def create_doraemon_agent(
         trace=trace,
         session_id=session_id,
         active_mcp_extensions=active_mcp_extensions,
+        worker_role=worker_role,
+        allowed_tool_names=allowed_tool_names,
     )
 
 
