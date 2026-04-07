@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -15,15 +16,17 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class LeadExecutionResult:
-    """Result from a serial lead-runtime execution."""
+    """Result from a lead-runtime execution."""
 
     root_task_id: str
     plan_id: str
     executed_task_ids: list[str] = field(default_factory=list)
     completed_task_ids: list[str] = field(default_factory=list)
+    failed_task_ids: list[str] = field(default_factory=list)
     blocked_task_id: str | None = None
     success: bool = True
     summary: str = ""
+    task_summaries: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -31,22 +34,37 @@ class LeadExecutionResult:
             "plan_id": self.plan_id,
             "executed_task_ids": list(self.executed_task_ids),
             "completed_task_ids": list(self.completed_task_ids),
+            "failed_task_ids": list(self.failed_task_ids),
             "blocked_task_id": self.blocked_task_id,
             "success": self.success,
             "summary": self.summary,
+            "task_summaries": dict(self.task_summaries),
         }
 
 
+@dataclass(slots=True)
+class _TaskExecutionOutcome:
+    planner_task_id: str
+    persistent_task_id: str
+    worker_session_id: str
+    success: bool
+    summary: str
+    error: str | None = None
+
+
 class LeadAgentRuntime:
-    """Serial orchestration scaffold for future lead/worker execution."""
+    """Dependency-aware orchestration scaffold for lead/worker execution."""
 
     def __init__(
         self,
         session: "AgentSession",
         planner: TaskPlanner | None = None,
+        *,
+        max_workers: int = 2,
     ):
         self.session = session
         self.planner = planner or TaskPlanner()
+        self.max_workers = max(1, max_workers)
 
     async def execute(
         self,
@@ -54,7 +72,7 @@ class LeadAgentRuntime:
         *,
         context: dict[str, Any] | None = None,
     ) -> LeadExecutionResult:
-        """Plan a goal into persistent tasks and execute ready tasks serially."""
+        """Plan a goal into persistent tasks and execute ready tasks in parallel batches."""
         if not self.session._agent:
             await self.session.initialize()
 
@@ -81,46 +99,132 @@ class LeadAgentRuntime:
             plan_id=plan.id,
         )
 
-        for planner_task in plan.tasks:
-            persistent_task_id = persistent_ids[planner_task.id]
-            task_manager.claim_task(persistent_task_id, self.session.session_id)
-            turn_result = await self.session.turn(
-                planner_task.description,
-                create_runtime_task=False,
+        pending_planner_ids = {task.id for task in plan.tasks}
+        while pending_planner_ids:
+            ready_batch = self._collect_ready_batch(
+                task_manager,
+                root_task.id,
+                plan,
+                persistent_ids,
+                pending_planner_ids,
             )
-            result.executed_task_ids.append(persistent_task_id)
-
-            if turn_result.success:
+            if not ready_batch:
                 task_manager.update_task(
-                    persistent_task_id,
-                    status=TaskStatus.COMPLETED,
+                    root_task.id,
+                    status=TaskStatus.BLOCKED,
                     assigned_agent=None,
                 )
-                result.completed_task_ids.append(persistent_task_id)
-                continue
+                result.success = False
+                result.summary = "Task graph stalled before all planned tasks became ready"
+                return result
 
-            task_manager.update_task(
-                persistent_task_id,
-                status=TaskStatus.BLOCKED,
-                assigned_agent=None,
+            outcomes = await asyncio.gather(
+                *[
+                    self._execute_planner_task(
+                        planner_task=planner_task,
+                        persistent_task_id=persistent_ids[planner_task.id],
+                        task_manager=task_manager,
+                    )
+                    for planner_task in ready_batch
+                ]
             )
-            task_manager.update_task(
-                root_task.id,
-                status=TaskStatus.BLOCKED,
-                assigned_agent=None,
-            )
-            result.success = False
-            result.blocked_task_id = persistent_task_id
-            result.summary = turn_result.error or turn_result.response or "Task execution failed"
-            return result
+
+            for outcome in outcomes:
+                pending_planner_ids.discard(outcome.planner_task_id)
+                result.executed_task_ids.append(outcome.persistent_task_id)
+                result.task_summaries[outcome.persistent_task_id] = outcome.summary
+
+                if outcome.success:
+                    result.completed_task_ids.append(outcome.persistent_task_id)
+                    continue
+
+                result.failed_task_ids.append(outcome.persistent_task_id)
+                if result.blocked_task_id is None:
+                    result.blocked_task_id = outcome.persistent_task_id
+
+            if result.failed_task_ids:
+                task_manager.update_task(
+                    root_task.id,
+                    status=TaskStatus.BLOCKED,
+                    assigned_agent=None,
+                )
+                result.success = False
+                result.summary = self._build_failure_summary(result)
+                return result
 
         task_manager.update_task(
             root_task.id,
             status=TaskStatus.COMPLETED,
             assigned_agent=None,
         )
-        result.summary = f"Completed {len(result.completed_task_ids)} planned task(s)"
+        result.summary = (
+            f"Completed {len(result.completed_task_ids)} planned task(s) "
+            f"with up to {self.max_workers} worker(s)"
+        )
         return result
+
+    async def _execute_planner_task(
+        self,
+        *,
+        planner_task: Any,
+        persistent_task_id: str,
+        task_manager: TaskManager,
+    ) -> _TaskExecutionOutcome:
+        """Claim and execute a planner task through an isolated worker session."""
+        worker_session = await self.session.spawn_worker_session(enable_trace=False)
+        worker_session_id = worker_session.session_id
+        task_manager.claim_task(persistent_task_id, worker_session_id)
+
+        try:
+            try:
+                turn_result = await worker_session.turn(
+                    planner_task.description,
+                    create_runtime_task=False,
+                )
+            except Exception as exc:
+                task_manager.update_task(
+                    persistent_task_id,
+                    status=TaskStatus.BLOCKED,
+                    assigned_agent=None,
+                )
+                return _TaskExecutionOutcome(
+                    planner_task_id=planner_task.id,
+                    persistent_task_id=persistent_task_id,
+                    worker_session_id=worker_session_id,
+                    success=False,
+                    summary=str(exc),
+                    error=str(exc),
+                )
+        finally:
+            await worker_session.aclose()
+
+        if turn_result.success:
+            task_manager.update_task(
+                persistent_task_id,
+                status=TaskStatus.COMPLETED,
+                assigned_agent=None,
+            )
+            return _TaskExecutionOutcome(
+                planner_task_id=planner_task.id,
+                persistent_task_id=persistent_task_id,
+                worker_session_id=worker_session_id,
+                success=True,
+                summary=turn_result.response or "Task completed",
+            )
+
+        task_manager.update_task(
+            persistent_task_id,
+            status=TaskStatus.BLOCKED,
+            assigned_agent=None,
+        )
+        return _TaskExecutionOutcome(
+            planner_task_id=planner_task.id,
+            persistent_task_id=persistent_task_id,
+            worker_session_id=worker_session_id,
+            success=False,
+            summary=turn_result.error or turn_result.response or "Task execution failed",
+            error=turn_result.error,
+        )
 
     def _materialize_plan(
         self,
@@ -153,6 +257,50 @@ class LeadAgentRuntime:
                 )
 
         return persistent_ids
+
+    def _collect_ready_batch(
+        self,
+        task_manager: TaskManager,
+        root_task_id: str,
+        plan: "ExecutionPlan",
+        persistent_ids: dict[str, str],
+        pending_planner_ids: set[str],
+    ) -> list[Any]:
+        """Collect the next dependency-satisfied batch for parallel execution."""
+        planner_task_by_id = {task.id: task for task in plan.tasks}
+        ready_tasks: list[Any] = []
+
+        for persistent_task in task_manager.list_ready_tasks():
+            if persistent_task.parent_id != root_task_id:
+                continue
+
+            planner_task_id = next(
+                (
+                    planner_id
+                    for planner_id, mapped_task_id in persistent_ids.items()
+                    if mapped_task_id == persistent_task.id
+                ),
+                None,
+            )
+            if planner_task_id is None or planner_task_id not in pending_planner_ids:
+                continue
+
+            ready_tasks.append(planner_task_by_id[planner_task_id])
+            if len(ready_tasks) >= self.max_workers:
+                break
+
+        return ready_tasks
+
+    def _build_failure_summary(self, result: LeadExecutionResult) -> str:
+        """Build a compact failure summary from failed task results."""
+        if result.blocked_task_id:
+            detail = result.task_summaries.get(result.blocked_task_id, "Task execution failed")
+        else:
+            detail = "Task execution failed"
+        return (
+            f"Blocked after {len(result.completed_task_ids)} completed task(s); "
+            f"{detail}"
+        )
 
     def _trim_title(self, goal: str) -> str:
         compact = " ".join(goal.strip().split()) or "Orchestrated task"

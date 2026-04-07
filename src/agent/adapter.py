@@ -379,12 +379,13 @@ class AgentSession:
         user_input: str,
         *,
         context: dict[str, Any] | None = None,
+        max_workers: int | None = None,
     ) -> LeadExecutionResult:
         """Execute a goal through the thin lead-runtime orchestration path."""
         if not self._agent:
             await self.initialize()
 
-        runtime = LeadAgentRuntime(self)
+        runtime = LeadAgentRuntime(self, max_workers=max_workers or 2)
         return await runtime.execute(user_input, context=context)
 
     async def turn_stream(
@@ -416,6 +417,32 @@ class AgentSession:
     def get_task_manager(self):
         """Get the shared runtime task manager."""
         return self.task_manager
+
+    async def spawn_worker_session(
+        self,
+        *,
+        enable_trace: bool | None = None,
+    ) -> "AgentSession":
+        """Create an isolated worker session that reuses shared runtime resources."""
+        if not self._agent:
+            await self.initialize()
+
+        worker = AgentSession(
+            model_client=self.model_client,
+            registry=self.registry,
+            mode=self.mode,
+            project=self.project,
+            hooks=self.hooks,
+            checkpoints=self.checkpoints,
+            skills=self.skills,
+            task_manager=self.task_manager,
+            max_turns=self.max_turns,
+            config_path=self.config_path,
+            project_dir=self.project_dir,
+            enable_trace=self.enable_trace if enable_trace is None else enable_trace,
+        )
+        await worker.initialize()
+        return worker
 
     def save_trace(self) -> Path | None:
         """Save trace to file, returns path if saved."""

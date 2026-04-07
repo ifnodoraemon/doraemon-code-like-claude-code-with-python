@@ -1,8 +1,9 @@
+import asyncio
 from dataclasses import dataclass
-from pathlib import Path
 
 import pytest
 
+from src.core.planner import ExecutionPlan, Task, TaskDependency, TaskPriority
 from src.core.tasks import TaskManager, TaskStatus
 from src.runtime.lead import LeadAgentRuntime
 
@@ -14,13 +15,40 @@ class StubTurnResult:
     error: str | None = None
 
 
+class StubWorkerSession:
+    def __init__(self, parent: "StubSession", session_id: str):
+        self._parent = parent
+        self.session_id = session_id
+
+    async def turn(self, user_input: str, **kwargs):
+        return await self._parent.run_worker_turn(
+            self.session_id,
+            user_input,
+            create_runtime_task=kwargs.get("create_runtime_task", True),
+        )
+
+    async def aclose(self) -> None:
+        self._parent.closed_workers.append(self.session_id)
+
+
 class StubSession:
-    def __init__(self, task_manager: TaskManager, results: list[StubTurnResult]):
+    def __init__(
+        self,
+        task_manager: TaskManager,
+        results_by_input: dict[str, StubTurnResult],
+        *,
+        barrier_inputs: set[str] | None = None,
+    ):
         self._agent = object()
         self._task_manager = task_manager
         self.session_id = "session-test"
-        self.results = results
-        self.turn_calls: list[tuple[str, bool]] = []
+        self.results_by_input = results_by_input
+        self.barrier_inputs = barrier_inputs or set()
+        self.turn_calls: list[tuple[str, str, bool]] = []
+        self.started_inputs: list[str] = []
+        self.closed_workers: list[str] = []
+        self._worker_count = 0
+        self._barrier_event = asyncio.Event()
 
     async def initialize(self) -> None:
         self._agent = object()
@@ -28,57 +56,159 @@ class StubSession:
     def get_task_manager(self) -> TaskManager:
         return self._task_manager
 
-    async def turn(self, user_input: str, **kwargs):
-        self.turn_calls.append((user_input, kwargs.get("create_runtime_task", True)))
-        return self.results.pop(0)
+    async def spawn_worker_session(self, *, enable_trace: bool | None = None):
+        self._worker_count += 1
+        return StubWorkerSession(self, f"worker-{self._worker_count}")
+
+    async def run_worker_turn(
+        self,
+        worker_session_id: str,
+        user_input: str,
+        *,
+        create_runtime_task: bool,
+    ) -> StubTurnResult:
+        self.turn_calls.append((worker_session_id, user_input, create_runtime_task))
+        self.started_inputs.append(user_input)
+
+        if user_input in self.barrier_inputs:
+            started = sum(1 for item in self.started_inputs if item in self.barrier_inputs)
+            if started >= len(self.barrier_inputs):
+                self._barrier_event.set()
+            await asyncio.wait_for(self._barrier_event.wait(), timeout=1)
+
+        return self.results_by_input[user_input]
+
+
+class RaisingStubSession(StubSession):
+    async def run_worker_turn(
+        self,
+        worker_session_id: str,
+        user_input: str,
+        *,
+        create_runtime_task: bool,
+    ) -> StubTurnResult:
+        self.turn_calls.append((worker_session_id, user_input, create_runtime_task))
+        raise RuntimeError(f"worker crashed for {user_input}")
+
+
+class StubPlanner:
+    def __init__(self, plan: ExecutionPlan):
+        self.plan = plan
+
+    def generate_plan(self, goal: str, context=None) -> ExecutionPlan:
+        return self.plan
+
+
+def build_parallel_plan() -> ExecutionPlan:
+    task_a = Task(
+        id="task-a",
+        title="Inspect auth flow",
+        description="Inspect auth flow",
+        priority=TaskPriority.HIGH,
+    )
+    task_b = Task(
+        id="task-b",
+        title="Implement backend changes",
+        description="Implement backend changes",
+        priority=TaskPriority.HIGH,
+    )
+    task_c = Task(
+        id="task-c",
+        title="Run integration verification",
+        description="Run integration verification",
+        priority=TaskPriority.MEDIUM,
+        dependencies=[
+            TaskDependency(task_id="task-a", dependency_type="requires"),
+            TaskDependency(task_id="task-b", dependency_type="requires"),
+        ],
+    )
+    return ExecutionPlan(
+        id="plan-auth",
+        goal="Implement authentication",
+        tasks=[task_a, task_b, task_c],
+        total_estimated_minutes=25,
+        total_complexity=3,
+        high_risk_count=0,
+    )
 
 
 @pytest.mark.asyncio
-async def test_lead_runtime_materializes_plan_and_executes_serially(tmp_path):
+async def test_lead_runtime_executes_ready_tasks_in_parallel_batches(tmp_path):
     task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
     session = StubSession(
         task_manager=task_manager,
-        results=[
-            StubTurnResult(success=True, response="ok-1"),
-            StubTurnResult(success=True, response="ok-2"),
-            StubTurnResult(success=True, response="ok-3"),
-            StubTurnResult(success=True, response="ok-4"),
-        ],
+        results_by_input={
+            "Inspect auth flow": StubTurnResult(success=True, response="inspection done"),
+            "Implement backend changes": StubTurnResult(success=True, response="backend done"),
+            "Run integration verification": StubTurnResult(success=True, response="verification done"),
+        },
+        barrier_inputs={"Inspect auth flow", "Implement backend changes"},
     )
 
-    runtime = LeadAgentRuntime(session)
-    result = await runtime.execute("Implement user authentication")
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=2)
+    result = await runtime.execute("Implement authentication")
 
-    tasks = task_manager.list_tasks()
     root = task_manager.get_task(result.root_task_id)
+    child_tasks = [task for task in task_manager.list_tasks() if task.parent_id == result.root_task_id]
 
     assert result.success is True
     assert root is not None
     assert root.status == TaskStatus.COMPLETED
-    assert len(result.completed_task_ids) == 4
-    assert len(tasks) == 5
-    assert all(create_runtime_task is False for _, create_runtime_task in session.turn_calls)
+    assert len(result.completed_task_ids) == 3
+    assert result.failed_task_ids == []
+    assert set(session.started_inputs[:2]) == {"Inspect auth flow", "Implement backend changes"}
+    assert session.started_inputs[2] == "Run integration verification"
+    assert all(create_runtime_task is False for _, _, create_runtime_task in session.turn_calls)
+    assert len({worker_id for worker_id, _, _ in session.turn_calls}) == 3
+    assert set(session.closed_workers) == {worker_id for worker_id, _, _ in session.turn_calls}
+    assert all(task.status == TaskStatus.COMPLETED for task in child_tasks)
 
 
 @pytest.mark.asyncio
-async def test_lead_runtime_blocks_root_when_subtask_fails(tmp_path):
+async def test_lead_runtime_blocks_root_when_parallel_subtask_fails(tmp_path):
     task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
     session = StubSession(
         task_manager=task_manager,
-        results=[
-            StubTurnResult(success=True, response="ok-1"),
-            StubTurnResult(success=False, error="subtask failed"),
-        ],
+        results_by_input={
+            "Inspect auth flow": StubTurnResult(success=True, response="inspection done"),
+            "Implement backend changes": StubTurnResult(success=False, error="backend failed"),
+            "Run integration verification": StubTurnResult(success=True, response="verification done"),
+        },
+        barrier_inputs={"Inspect auth flow", "Implement backend changes"},
     )
 
-    runtime = LeadAgentRuntime(session)
-    result = await runtime.execute("Fix login bug")
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=2)
+    result = await runtime.execute("Implement authentication")
 
     root = task_manager.get_task(result.root_task_id)
-    child_statuses = {task.id: task.status for task in task_manager.list_tasks() if task.parent_id == root.id}
+    child_statuses = {task.title: task.status for task in task_manager.list_tasks() if task.parent_id == result.root_task_id}
+
+    assert result.success is False
+    assert result.blocked_task_id is not None
+    assert len(result.completed_task_ids) == 1
+    assert len(result.failed_task_ids) == 1
+    assert root is not None
+    assert root.status == TaskStatus.BLOCKED
+    assert child_statuses["Implement backend changes"] == TaskStatus.BLOCKED
+    assert child_statuses["Run integration verification"] == TaskStatus.PENDING
+    assert "backend failed" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_blocks_root_when_worker_raises(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = RaisingStubSession(
+        task_manager=task_manager,
+        results_by_input={},
+    )
+
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=1)
+    result = await runtime.execute("Implement authentication")
+
+    root = task_manager.get_task(result.root_task_id)
 
     assert result.success is False
     assert result.blocked_task_id is not None
     assert root is not None
     assert root.status == TaskStatus.BLOCKED
-    assert TaskStatus.BLOCKED in child_statuses.values()
+    assert "worker crashed" in result.summary

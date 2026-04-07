@@ -35,11 +35,13 @@ class RuntimeBootstrap:
     skills: Any
     task_manager: Any
     owns_model_client: bool = False
+    owns_registry: bool = False
 
     async def aclose(self) -> None:
         """Close owned runtime resources."""
-        for client in getattr(self.registry, "_mcp_clients", []):
-            await client.close()
+        if self.owns_registry:
+            for client in getattr(self.registry, "_mcp_clients", []):
+                await client.close()
 
         if self.owns_model_client and hasattr(self.model_client, "close"):
             await self.model_client.close()
@@ -91,6 +93,7 @@ async def bootstrap_runtime(
 
         task_manager = TaskManager(project_dir=project_dir)
 
+    owns_registry = False
     if registry is None:
         from src.host.mcp_registry import create_tool_registry
 
@@ -99,6 +102,7 @@ async def bootstrap_runtime(
             mode=mode,
             extension_tools=extension_tools,
         )
+        owns_registry = True
 
     context = ProjectContext(
         project=project,
@@ -119,6 +123,7 @@ async def bootstrap_runtime(
         skills=skills,
         task_manager=task_manager,
         owns_model_client=owns_model_client,
+        owns_registry=owns_registry,
     )
 
 

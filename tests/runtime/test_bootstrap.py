@@ -13,6 +13,7 @@ class DummyRegistry:
     def __init__(self):
         self._tools = {}
         self._active_mcp_extensions = ["docs"]
+        self._mcp_clients = []
 
     def get_tool_names(self) -> list[str]:
         return ["read", "write"]
@@ -77,6 +78,7 @@ async def test_bootstrap_runtime_creates_missing_dependencies(monkeypatch, tmp_p
     assert runtime.model_client is created["model_client"]
     assert runtime.registry is registry
     assert runtime.owns_model_client is True
+    assert runtime.owns_registry is True
     assert runtime.context == ProjectContext(
         project="demo",
         mode="plan",
@@ -129,6 +131,7 @@ async def test_bootstrap_runtime_reuses_provided_dependencies(monkeypatch, tmp_p
     assert runtime.skills is skills
     assert runtime.task_manager is task_manager
     assert runtime.owns_model_client is False
+    assert runtime.owns_registry is False
 
 
 @pytest.mark.asyncio
@@ -151,6 +154,7 @@ async def test_bootstrap_runtime_can_skip_model_client_creation(monkeypatch, tmp
     assert runtime.model_client is None
     assert runtime.task_manager is not None
     assert runtime.owns_model_client is False
+    assert runtime.owns_registry is False
 
 
 @pytest.mark.asyncio
@@ -179,6 +183,7 @@ async def test_agent_session_initializes_from_shared_bootstrap(monkeypatch, tmp_
         skills=None,
         task_manager=object(),
         owns_model_client=False,
+        owns_registry=False,
     )
 
     async def fake_bootstrap_runtime(**kwargs):
@@ -231,6 +236,7 @@ async def test_agent_session_orchestrate_uses_lead_runtime(monkeypatch, tmp_path
         skills=None,
         task_manager=TaskManager(storage_path=tmp_path / "tasks.json"),
         owns_model_client=False,
+        owns_registry=False,
     )
 
     async def fake_bootstrap_runtime(**kwargs):
@@ -255,3 +261,52 @@ async def test_agent_session_orchestrate_uses_lead_runtime(monkeypatch, tmp_path
 
     assert result.success is True
     assert result.summary == "planned: Implement authentication"
+
+
+@pytest.mark.asyncio
+async def test_runtime_bootstrap_only_closes_owned_registry_clients():
+    closed = []
+
+    class DummyClient:
+        def __init__(self, name: str):
+            self.name = name
+
+        async def close(self):
+            closed.append(self.name)
+
+    shared_runtime = RuntimeBootstrap(
+        context=ProjectContext(
+            project="demo",
+            mode="build",
+            project_dir=Path.cwd(),
+            config_path=None,
+            capability_groups=["read"],
+            tool_names=["read"],
+            active_mcp_extensions=[],
+        ),
+        model_client=None,
+        registry=SimpleNamespace(_mcp_clients=[DummyClient("shared")]),
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=None,
+        owns_model_client=False,
+        owns_registry=False,
+    )
+
+    owned_runtime = RuntimeBootstrap(
+        context=shared_runtime.context,
+        model_client=None,
+        registry=SimpleNamespace(_mcp_clients=[DummyClient("owned")]),
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=None,
+        owns_model_client=False,
+        owns_registry=True,
+    )
+
+    await shared_runtime.aclose()
+    await owned_runtime.aclose()
+
+    assert closed == ["owned"]
