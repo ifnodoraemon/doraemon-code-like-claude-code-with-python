@@ -159,8 +159,6 @@ class ToolRegistry:
         result = await registry.call_tool("read", {"path": "main.py", "mode": "file"})
     """
 
-    MAX_RESULT_LENGTH = 30000  # Max chars in tool result (matches Claude Code)
-
     def __init__(self):
         self._tools: dict[str, ToolDefinition] = {}
         self._audit_log: list[ToolAuditEntry] = []
@@ -596,13 +594,6 @@ class ToolRegistry:
                 result = func(**arguments)
 
             result_str = str(result) if result is not None else "Success"
-
-            if len(result_str) > self.MAX_RESULT_LENGTH:
-                truncated = result_str[: self.MAX_RESULT_LENGTH]
-                result_str = (
-                    f"{truncated}\n\n... [Output truncated: {len(result_str):,} chars, "
-                    f"showing first {self.MAX_RESULT_LENGTH:,}]"
-                )
 
             if should_cache_tool(name) and not result_str.startswith("Error"):
                 cache.set(name, arguments, result_str)

@@ -30,7 +30,6 @@ from src.core.security.shell_security import (
     check_git_safety,
     is_command_blocked,
     register_background_process,
-    truncate_output,
 )
 
 configure_root_logger()
@@ -160,7 +159,6 @@ def _validate_package_name(name: str) -> tuple[bool, str]:
     return True, ""
 
 
-_truncate_output = truncate_output
 _is_command_blocked = is_command_blocked
 _check_git_safety = check_git_safety
 _register_background_process = register_background_process
@@ -267,8 +265,6 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
         output = "".join(output_lines)
         if return_code != 0:
             output += f"\n\n[Exit code: {return_code}]"
-
-        output = _truncate_output(output)
 
         if not output.strip():
             return f"Command completed successfully (exit code: {return_code})"

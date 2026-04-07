@@ -977,6 +977,46 @@ class TestAgentAdapter:
         assert {tool.name for tool in session._agent.tools} == {"read"}
 
     @pytest.mark.asyncio
+    async def test_agent_session_mode_change_rebuilds_runtime_registry(self, mock_llm, tmp_path):
+        """Bootstrapped sessions should rebuild their mode-specific registry on mode changes."""
+        from src.agent.adapter import AgentSession
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text("{}", encoding="utf-8")
+
+        session = AgentSession(
+            model_client=mock_llm,
+            registry=None,
+            mode="plan",
+            project_dir=tmp_path,
+            config_path=config_path,
+            enable_trace=False,
+        )
+
+        await session.initialize()
+
+        assert "write" not in session.registry.get_tool_names()
+        assert {tool.name for tool in session._agent.tools} == {
+            "ask_user",
+            "memory_get",
+            "memory_list",
+            "memory_put",
+            "memory_search",
+            "read",
+            "search",
+            "task",
+            "web_fetch",
+            "web_search",
+        }
+
+        await session.set_mode("build")
+
+        assert "write" in session.registry.get_tool_names()
+        assert "run" in session.registry.get_tool_names()
+        assert "write" in {tool.name for tool in session._agent.tools}
+        assert "run" in {tool.name for tool in session._agent.tools}
+
+    @pytest.mark.asyncio
     async def test_agent_session_persists_and_restores_messages(self, mock_llm, mock_registry, tmp_path):
         """Should persist session messages and restore them by session ID."""
         from src.agent.adapter import AgentSession

@@ -33,8 +33,6 @@ class ChatRequest(BaseModel):
 
     @property
     def validated_message(self) -> str:
-        if len(self.message) > 200_000:
-            raise ValueError("Message too long")
         return self.message
 
 

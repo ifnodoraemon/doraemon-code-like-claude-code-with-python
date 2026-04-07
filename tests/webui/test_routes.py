@@ -100,5 +100,34 @@ async def test_chat_endpoint_rejects_invalid_session_id():
     assert exc_info.value.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_chat_endpoint_accepts_large_message_without_length_cap(monkeypatch):
+    captured = {}
+
+    class StubSession:
+        def __init__(self, *args, **kwargs):
+            self.session_id = "large-session"
+
+        async def turn_stream(self, message: str):
+            captured["message"] = message
+            yield {"type": "response", "content": "ok"}
+            yield {"type": "done"}
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr("src.webui.routes.chat.AgentSession", StubSession)
+
+    large_message = "x" * 200_001
+    response = await chat_endpoint(ChatRequest(message=large_message))
+
+    payloads = []
+    async for chunk in response.body_iterator:
+        payloads.append(chunk)
+
+    assert payloads[-1] == "data: [DONE]\n\n"
+    assert captured["message"] == large_message
+
+
 async def _noop_async():
     return None

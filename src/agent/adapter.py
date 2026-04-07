@@ -561,6 +561,33 @@ class AgentSession:
         if self._session_record is not None:
             self._session_record.metadata.mode = mode
 
+        if self._runtime is not None and self._runtime.owns_registry:
+            previous_runtime = self._runtime
+            previous_runtime.owns_model_client = False
+            self._runtime = await bootstrap_runtime(
+                mode=self.mode,
+                project=self.project,
+                project_dir=self.project_dir,
+                config_path=self.config_path,
+                model_client=self.model_client,
+                model_name=self.model_name,
+                registry=None,
+                hooks=self.hooks,
+                checkpoints=self.checkpoints,
+                skills=self.skills,
+                task_manager=self.task_manager,
+            )
+            self.model_client = self._runtime.model_client
+            self.registry = self._runtime.registry
+            self._tool_registry = self._runtime.registry
+            self.hooks = self._runtime.hooks
+            self.checkpoints = self._runtime.checkpoints
+            self.skills = self._runtime.skills
+            self.task_manager = self._runtime.task_manager
+            self.project_dir = self._runtime.context.project_dir
+            self._mcp_extensions = self._runtime.context.active_mcp_extensions.copy()
+            await previous_runtime.aclose()
+
         if self._agent is not None and self.registry is not None:
             self._agent = create_doraemon_agent(
                 llm_client=self.model_client,

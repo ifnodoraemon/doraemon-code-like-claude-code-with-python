@@ -13,7 +13,6 @@ Design Philosophy:
 - Parameterized Design: Use parameters instead of multiple tools
 
 Performance:
-- Large file handling with automatic truncation
 - Memory-efficient streaming for big directories
 - Smart caching for repeated reads
 """
@@ -34,10 +33,6 @@ from src.servers._services import code_nav, document, outline, vision
 
 configure_root_logger()
 logger = logging.getLogger(__name__)
-
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-MAX_LINES_DEFAULT = 2000
-
 
 def _human_size(bytes_size: int) -> str:
     """Convert bytes to human-readable size."""
@@ -73,23 +68,13 @@ def _read_path_content(path: str, offset: int = 0, limit: int | None = None, enc
             return vision.process_image(valid_path)
 
         else:
-            if file_size > MAX_FILE_SIZE and limit is None:
-                limit = MAX_LINES_DEFAULT
-
             if offset == 0 and (limit is None or limit == 0):
                 with open(valid_path, encoding=encoding, errors="replace") as f:
                     return f.read()
 
             with open(valid_path, encoding=encoding, errors="replace") as f:
                 if limit is None or limit == 0:
-                    lines = f.readlines()
-                    if len(lines) > MAX_LINES_DEFAULT:
-                        lines = lines[:MAX_LINES_DEFAULT]
-                        return (
-                            "".join(lines)
-                            + f"\n\n[... truncated: file has {len(lines)} lines, showing first {MAX_LINES_DEFAULT}]"
-                        )
-                    return "".join(lines)
+                    return f.read()
 
                 iterator = itertools.islice(f, offset, offset + limit)
                 selected_lines = list(iterator)
@@ -99,9 +84,6 @@ def _read_path_content(path: str, offset: int = 0, limit: int | None = None, enc
 
                 result = f"[Lines {offset + 1}-{offset + len(selected_lines)}]\n\n"
                 result += "".join(selected_lines)
-
-                if len(selected_lines) == limit:
-                    result += f"\n\n[... (more lines exist, showing {limit} lines)]"
 
                 return result
 
@@ -215,7 +197,7 @@ def find_symbol(symbol: str, path: str = ".") -> str:
 # ========================================
 
 
-def glob_files(pattern: str, exclude: list[str] | None = None, max_results: int = 1000) -> str:
+def glob_files(pattern: str, exclude: list[str] | None = None, max_results: int | None = None) -> str:
     """Find files matching a glob pattern."""
     try:
         if ".." in pattern:
@@ -247,7 +229,7 @@ def glob_files(pattern: str, exclude: list[str] | None = None, max_results: int 
                     filtered.append(match)
             matches = filtered
 
-        if len(matches) > max_results:
+        if max_results is not None and len(matches) > max_results:
             total_count = len(matches)
             matches = matches[:max_results]
             truncated = True
@@ -273,7 +255,12 @@ def glob_files(pattern: str, exclude: list[str] | None = None, max_results: int 
         return f"Error in glob search: {str(e)}"
 
 
-def grep_search(pattern: str, include: str = "*", path: str = ".") -> str:
+def grep_search(
+    pattern: str,
+    include: str = "*",
+    path: str = ".",
+    max_results: int | None = None,
+) -> str:
     """Search for a text pattern within files (recursive)."""
     valid_path = validate_path(path)
     results = []
@@ -319,8 +306,7 @@ def grep_search(pattern: str, include: str = "*", path: str = ".") -> str:
                                 rel_path = os.path.relpath(full_path, valid_path)
                                 results.append(f"{rel_path}:{i}:{line.strip()}")
 
-                                if len(results) >= 100:
-                                    results.append("... (limit reached)")
+                                if max_results is not None and len(results) >= max_results:
                                     return "\n".join(results)
                 except Exception:
                     continue
@@ -716,7 +702,7 @@ def search(
     path: str = ".",
     include: str = "*",
     exclude: list[str] | None = None,
-    max_results: int = 1000,
+    max_results: int | None = None,
 ) -> str:
     """
     Unified search tool for finding files and content.
@@ -734,7 +720,7 @@ def search(
         path: Root directory to search (default: ".")
         include: File pattern to include for content mode (default: "*")
         exclude: Patterns to exclude for files mode
-        max_results: Maximum results to return (default: 1000)
+        max_results: Maximum results to return (default: None = all)
 
     Returns:
         Newline-separated list of matches with context
@@ -746,7 +732,7 @@ def search(
     """
     try:
         if mode == "content":
-            return grep_search(query, include=include, path=path)
+            return grep_search(query, include=include, path=path, max_results=max_results)
 
         elif mode == "files":
             return glob_files(query, exclude=exclude, max_results=max_results)
@@ -975,4 +961,3 @@ def multi_edit(
 
     except Exception as e:
         return f"Error in multi_edit: {str(e)}"
-

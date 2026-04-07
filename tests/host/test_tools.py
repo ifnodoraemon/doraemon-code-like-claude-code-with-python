@@ -255,6 +255,20 @@ class TestToolCalling:
         assert "Error:" in result
         assert "Tool failed!" in result
 
+    @pytest.mark.asyncio
+    async def test_call_tool_does_not_truncate_large_result(self):
+        """Large tool results should pass through unchanged."""
+        registry = ToolRegistry()
+        large_result = "x" * 40000
+
+        def large_tool() -> str:
+            return large_result
+
+        registry.register(large_tool)
+        result = await registry.call_tool("large_tool", {})
+
+        assert result == large_result
+
 
 class TestDefaultRegistry:
     """Test the default registry singleton."""

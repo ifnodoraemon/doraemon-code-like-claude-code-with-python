@@ -135,6 +135,17 @@ class TestReadPath:
         content = _read_path_content("test.txt", encoding="utf-8")
         assert "Line 1" in content
 
+    def test_read_path_does_not_truncate_large_file_by_default(self, temp_dir):
+        """Full file reads should not be implicitly truncated."""
+        os.chdir(temp_dir)
+        large_content = "".join(f"Line {i}\n" for i in range(2505))
+        with open("large.txt", "w") as handle:
+            handle.write(large_content)
+
+        content = _read_path_content("large.txt")
+
+        assert content == large_content
+
 
 # ========================================
 # List Path Tests
@@ -241,6 +252,17 @@ class TestGrepSearch:
         os.chdir(temp_dir)
         result = grep_search("nonexistent_pattern_xyz")
         assert "No matches" in result
+
+    def test_grep_search_does_not_limit_results_by_default(self, temp_dir):
+        """Content search should return all matches unless a limit is requested."""
+        os.chdir(temp_dir)
+        with open("many.txt", "w") as handle:
+            handle.write("".join(f"match {i}\n" for i in range(120)))
+
+        result = grep_search("match", include="*.txt")
+
+        assert "... (limit reached)" not in result
+        assert result.count("many.txt:") == 120
 
 
 # ========================================
