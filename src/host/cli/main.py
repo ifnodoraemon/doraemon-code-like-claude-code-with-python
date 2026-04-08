@@ -216,7 +216,11 @@ async def handle_command(cmd: str, session: AgentSession) -> str | None:
         console.print(
             f"[cyan]Running orchestration[/cyan] with {max_workers} worker(s): {goal}"
         )
-        result = await session.orchestrate(goal, max_workers=max_workers)
+        try:
+            result = await session.orchestrate(goal, max_workers=max_workers)
+        except Exception as exc:
+            console.print(f"[red]Orchestration failed:[/red] {exc}")
+            return None
         color = "green" if result.success else "red"
         console.print(f"[{color}]Summary:[/{color}] {result.summary}")
         console.print(f"[cyan]Root task:[/cyan] {result.root_task_id}")

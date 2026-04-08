@@ -75,3 +75,20 @@ async def test_handle_command_clear_uses_state_clear_history(monkeypatch):
 
     assert cleared["count"] == 1
     assert any("Conversation cleared" in message for message in printed)
+
+
+@pytest.mark.asyncio
+async def test_handle_command_orchestrate_reports_failure_without_raising(monkeypatch):
+    printed: list[str] = []
+
+    async def orchestrate(goal: str, *, max_workers: int | None = None):
+        raise RuntimeError(f"planner boom for {goal}")
+
+    session = SimpleNamespace(orchestrate=orchestrate)
+    monkeypatch.setattr("src.host.cli.main.console.print", lambda message: printed.append(message))
+
+    result = await handle_command("/orchestrate broken goal", session)
+
+    assert result is None
+    assert any("Running orchestration" in message for message in printed)
+    assert any("Orchestration failed:" in message for message in printed)

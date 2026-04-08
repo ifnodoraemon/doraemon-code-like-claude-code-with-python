@@ -102,7 +102,8 @@ function App() {
         if (!currentSessionId || isStreaming) {
             return
         }
-        void fetchSessionDetail(currentSessionId)
+        setWorkerAssignments({})
+        void Promise.all([fetchSessionDetail(currentSessionId), fetchTasks()])
     }, [currentSessionId, isStreaming])
 
     const fetchSessions = async () => {
@@ -177,6 +178,8 @@ function App() {
     const resetConversation = () => {
         setMessages([])
         setCurrentSessionId(null)
+        setTaskGraph([])
+        setReadyTasks([])
         setWorkerAssignments({})
     }
 
@@ -267,6 +270,9 @@ function App() {
                             last.tool_calls = data.tool_calls
                         }
                         if (data.error) {
+                            if (!last.content) {
+                                last.content = `Error: ${data.error}`
+                            }
                             last.meta = data.error
                         }
                         return next

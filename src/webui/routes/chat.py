@@ -112,8 +112,25 @@ async def chat_endpoint(request: ChatRequest):
 
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
-                err_data = {"error": str(e), "session_id": session.session_id}
+                if request.execution_mode == "orchestrate":
+                    task_manager = session.get_task_manager()
+                    task_tree = task_manager.get_task_tree() if task_manager is not None else []
+                    error_summary = f"Orchestration failed: {e}"
+                    err_data = {
+                        "type": "orchestration",
+                        "session_id": session.session_id,
+                        "content": error_summary,
+                        "result": {
+                            "success": False,
+                            "summary": error_summary,
+                            "worker_assignments": {},
+                        },
+                        "task_graph": task_tree,
+                    }
+                else:
+                    err_data = {"error": str(e), "session_id": session.session_id}
                 yield f"data: {json.dumps(err_data)}\n\n"
+                yield "data: [DONE]\n\n"
             finally:
                 await session.aclose()
 

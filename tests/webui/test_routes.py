@@ -129,5 +129,43 @@ async def test_chat_endpoint_accepts_large_message_without_length_cap(monkeypatc
     assert captured["message"] == large_message
 
 
+@pytest.mark.asyncio
+async def test_chat_endpoint_streams_orchestration_failure_payload(monkeypatch):
+    class StubSession:
+        def __init__(self, *args, **kwargs):
+            self._task_manager = StubTaskManager()
+            self.session_id = "failed-session"
+
+        async def orchestrate(self, message: str, *, context=None, max_workers=None):
+            raise RuntimeError(f"planner boom for {message}")
+
+        def get_task_manager(self):
+            return self._task_manager
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr("src.webui.routes.chat.AgentSession", StubSession)
+
+    response = await chat_endpoint(
+        ChatRequest(
+            message="Broken auth flow",
+            execution_mode="orchestrate",
+        )
+    )
+
+    payloads = []
+    async for chunk in response.body_iterator:
+        payloads.append(chunk)
+
+    assert payloads[-1] == "data: [DONE]\n\n"
+    first_payload = json.loads(payloads[0].removeprefix("data: ").strip())
+    assert first_payload["type"] == "orchestration"
+    assert first_payload["session_id"] == "failed-session"
+    assert first_payload["result"]["success"] is False
+    assert "planner boom" in first_payload["content"]
+    assert first_payload["task_graph"][0]["id"] == "root"
+
+
 async def _noop_async():
     return None
