@@ -14,6 +14,7 @@ import logging
 import re
 import time
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -86,6 +87,9 @@ class SessionData:
     messages: list[dict[str, Any]] = field(default_factory=list)
     summaries: list[dict[str, Any]] = field(default_factory=list)
     checkpoints: list[str] = field(default_factory=list)  # Checkpoint IDs
+    orchestration_state: dict[str, Any] = field(default_factory=dict)
+    orchestration_runs: list[dict[str, Any]] = field(default_factory=list)
+    active_orchestration_run_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,15 +98,30 @@ class SessionData:
             "messages": self.messages,
             "summaries": self.summaries,
             "checkpoints": self.checkpoints,
+            "orchestration_state": self.orchestration_state,
+            "orchestration_runs": self.orchestration_runs,
+            "active_orchestration_run_id": self.active_orchestration_run_id,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SessionData":
+        orchestration_state = data.get("orchestration_state", {})
+        orchestration_runs = data.get("orchestration_runs")
+        if orchestration_runs is None:
+            orchestration_runs = [orchestration_state] if orchestration_state else []
+
+        active_run_id = data.get("active_orchestration_run_id")
+        if active_run_id is None and orchestration_state:
+            active_run_id = orchestration_state.get("run_id")
+
         return cls(
             metadata=SessionMetadata.from_dict(data.get("metadata", data)),
             messages=data.get("messages", []),
             summaries=data.get("summaries", []),
             checkpoints=data.get("checkpoints", []),
+            orchestration_state=orchestration_state,
+            orchestration_runs=orchestration_runs,
+            active_orchestration_run_id=active_run_id,
         )
 
 
@@ -307,6 +326,16 @@ class SessionManager:
         messages = source.messages
         if at_message is not None:
             messages = messages[:at_message]
+        message_count = len(messages)
+
+        orchestration_runs = deepcopy(source.orchestration_runs)
+        if at_message is not None:
+            orchestration_runs = [
+                run
+                for run in orchestration_runs
+                if int(run.get("message_end_index", -1)) < message_count
+            ]
+        latest_run = deepcopy(orchestration_runs[-1]) if orchestration_runs else {}
 
         metadata = SessionMetadata(
             id=new_id,
@@ -314,7 +343,7 @@ class SessionManager:
             project=source.metadata.project,
             mode=source.metadata.mode,
             parent_id=session_id,
-            message_count=len(messages),
+            message_count=message_count,
             tags=source.metadata.tags.copy(),
             description=f"Forked from {source.metadata.get_display_name()}",
         )
@@ -323,6 +352,10 @@ class SessionManager:
             metadata=metadata,
             messages=messages.copy(),
             summaries=source.summaries.copy(),
+            checkpoints=source.checkpoints.copy(),
+            orchestration_state=latest_run,
+            orchestration_runs=orchestration_runs,
+            active_orchestration_run_id=latest_run.get("run_id"),
         )
 
         # Save forked session

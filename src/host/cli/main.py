@@ -79,6 +79,50 @@ def _format_task_tree(nodes: list[dict[str, Any]], level: int = 0) -> list[str]:
     return lines
 
 
+def _find_orchestration_run(session: Any, run_id: str) -> dict[str, Any] | None:
+    get_runs = getattr(session, "get_orchestration_runs", None)
+    if not callable(get_runs):
+        return None
+    for run in reversed(get_runs() or []):
+        if run.get("run_id") == run_id:
+            return run
+    return None
+
+
+def _resolve_task_root(session: Any, run_id: str | None = None) -> tuple[str | None, str | None]:
+    if run_id:
+        run = _find_orchestration_run(session, run_id)
+        if run is None:
+            return None, f"Unknown run: {run_id}"
+        return run.get("root_task_id"), None
+
+    orchestration_state = getattr(session, "get_orchestration_state", lambda: {})()
+    if isinstance(orchestration_state, dict):
+        return orchestration_state.get("root_task_id"), None
+    return None, None
+
+
+def _parse_resume_args(args: list[str]) -> tuple[str, int] | None:
+    if not args:
+        return None
+
+    run_id = args[0].strip()
+    if not run_id:
+        return None
+
+    max_workers = 2
+    remaining = args[1:]
+    if len(remaining) >= 2 and remaining[0] in {"--workers", "-w"}:
+        try:
+            max_workers = max(1, int(remaining[1]))
+        except ValueError:
+            return None
+    elif remaining:
+        return None
+
+    return run_id, max_workers
+
+
 async def run_chat_loop(
     project: str,
     mode: str,
@@ -180,7 +224,9 @@ async def handle_command(cmd: str, session: AgentSession) -> str | None:
   /help, /h, /?     Show this help
   /mode <mode>      Switch mode (plan/build)
   /orchestrate ...  Run lead/worker orchestration
-  /tasks [ready]    Show runtime task graph
+  /runs             List orchestration runs in this session
+  /resume <run_id>  Resume a blocked orchestration run
+  /tasks ...        Show runtime task graph
   /clear            Clear conversation
   /reset            Reset agent state
   /trace            Show trace info
@@ -234,14 +280,63 @@ async def handle_command(cmd: str, session: AgentSession) -> str | None:
                     f"  - {task_id}: {assignment['role']} via {assignment['worker_session_id']}"
                 )
 
+    elif command == "runs":
+        get_runs = getattr(session, "get_orchestration_runs", None)
+        if not callable(get_runs):
+            console.print("[yellow]No orchestration history available[/yellow]")
+            return None
+        runs = get_runs() or []
+        if not runs:
+            console.print("[yellow]No orchestration runs[/yellow]")
+            return None
+        active_run_id = getattr(session, "get_active_orchestration_run_id", lambda: None)()
+        console.print("[cyan]Runs:[/cyan]")
+        for run in reversed(runs):
+            marker = "*" if run.get("run_id") == active_run_id else "-"
+            status = "completed" if run.get("success") else "blocked"
+            console.print(
+                f"{marker} [{status}] {run.get('run_id') or '?'} "
+                f"{run.get('goal') or run.get('summary') or ''}".rstrip()
+            )
+
+    elif command == "resume":
+        parsed = _parse_resume_args(args)
+        if parsed is None:
+            console.print("Usage: /resume <run_id> [--workers N]")
+            return None
+        run_id, max_workers = parsed
+        console.print(f"[cyan]Resuming run[/cyan] {run_id} with {max_workers} worker(s)")
+        try:
+            result = await session.orchestrate(
+                "",
+                max_workers=max_workers,
+                resume_run_id=run_id,
+            )
+        except Exception as exc:
+            console.print(f"[red]Resume failed:[/red] {exc}")
+            return None
+        color = "green" if result.success else "red"
+        console.print(f"[{color}]Summary:[/{color}] {result.summary}")
+        console.print(f"[cyan]Root task:[/cyan] {result.root_task_id}")
+
     elif command == "tasks":
         task_manager = session.get_task_manager()
         if task_manager is None:
             console.print("[yellow]No task manager available[/yellow]")
             return None
+        ready_only = bool(args and args[0] == "ready")
+        run_arg = args[1] if ready_only and len(args) > 1 else args[0] if args and not ready_only else None
+        active_root_task_id, error = _resolve_task_root(session, run_arg)
+        if error:
+            console.print(f"[red]{error}[/red]")
+            return None
 
-        if args and args[0] == "ready":
-            ready_tasks = task_manager.list_ready_tasks()
+        if ready_only:
+            ready_tasks = [
+                task
+                for task in task_manager.list_ready_tasks()
+                if active_root_task_id is None or task.parent_id == active_root_task_id
+            ]
             if not ready_tasks:
                 console.print("[yellow]No ready tasks[/yellow]")
                 return None
@@ -249,7 +344,7 @@ async def handle_command(cmd: str, session: AgentSession) -> str | None:
                 console.print(f"- [{task.status.value}] {task.title} ({task.id})")
             return None
 
-        lines = _format_task_tree(task_manager.get_task_tree())
+        lines = _format_task_tree(task_manager.get_task_tree(active_root_task_id))
         if not lines:
             console.print("[yellow]No tasks[/yellow]")
             return None

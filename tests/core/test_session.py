@@ -133,6 +133,7 @@ class TestSessionData:
         assert session.messages == []
         assert session.summaries == []
         assert session.checkpoints == []
+        assert session.orchestration_state == {}
 
     def test_creation_with_data(self):
         """Test creating session data with messages and summaries."""
@@ -160,6 +161,7 @@ class TestSessionData:
         assert len(data["messages"]) == 1
         assert "summaries" in data
         assert "checkpoints" in data
+        assert "orchestration_state" in data
 
     def test_from_dict_basic(self):
         """Test creating session data from dictionary."""
@@ -206,6 +208,7 @@ class TestSessionData:
         assert session.messages == []
         assert session.summaries == []
         assert session.checkpoints == []
+        assert session.orchestration_state == {}
 
     def test_roundtrip_to_dict_from_dict(self):
         """Test that to_dict and from_dict are inverses."""
@@ -761,6 +764,33 @@ class TestSessionManager:
         assert len(loaded.checkpoints) == 3
         assert "cp_2" in loaded.checkpoints
 
+    def test_session_with_orchestration_state(self, session_manager):
+        """Test session with persisted orchestration state."""
+        session = session_manager.create_session(name="Orchestration Test")
+        session.orchestration_state = {
+            "run_id": "run-1",
+            "success": True,
+            "summary": "planned: auth flow",
+            "task_graph": [{"id": "root", "title": "Root", "status": "completed", "ready": True}],
+            "worker_assignments": {
+                "task-1": {
+                    "role": "inspect",
+                    "worker_session_id": "worker-1",
+                    "allowed_tool_names": ["read", "search"],
+                }
+            },
+        }
+        session.orchestration_runs = [dict(session.orchestration_state)]
+        session.active_orchestration_run_id = "run-1"
+        session_manager.save_session(session)
+
+        loaded = session_manager.load_session(session.metadata.id)
+        assert loaded.active_orchestration_run_id == "run-1"
+        assert loaded.orchestration_runs[0]["run_id"] == "run-1"
+        assert loaded.orchestration_state["summary"] == "planned: auth flow"
+        assert loaded.orchestration_state["task_graph"][0]["id"] == "root"
+        assert loaded.orchestration_state["worker_assignments"]["task-1"]["role"] == "inspect"
+
     def test_export_json_preserves_all_data(self, session_manager):
         """Test that JSON export preserves all session data."""
         session = session_manager.create_session(
@@ -784,6 +814,9 @@ class TestSessionManager:
         assert len(data["messages"]) == 1
         assert len(data["summaries"]) == 1
         assert len(data["checkpoints"]) == 1
+        assert data["orchestration_state"] == {}
+        assert data["orchestration_runs"] == []
+        assert data["active_orchestration_run_id"] is None
 
     # Additional comprehensive tests for improved coverage
 
@@ -945,6 +978,49 @@ class TestSessionManager:
 
         forked = session_manager.fork_session(original.metadata.id, at_message=100)
         assert len(forked.messages) == 1
+
+    def test_fork_session_filters_future_orchestration_runs(self, session_manager):
+        """Forking at an earlier message should drop later run snapshots."""
+        original = session_manager.create_session(name="Original")
+        original.messages = [
+            {"role": "user", "content": "Goal 1"},
+            {"role": "assistant", "content": "Run 1 done"},
+            {"role": "user", "content": "Goal 2"},
+            {"role": "assistant", "content": "Run 2 done"},
+        ]
+        original.orchestration_runs = [
+            {
+                "run_id": "run-1",
+                "goal": "Goal 1",
+                "message_start_index": 0,
+                "message_end_index": 1,
+                "root_task_id": "root-1",
+                "success": True,
+                "summary": "Run 1 done",
+                "task_graph": [],
+                "worker_assignments": {},
+            },
+            {
+                "run_id": "run-2",
+                "goal": "Goal 2",
+                "message_start_index": 2,
+                "message_end_index": 3,
+                "root_task_id": "root-2",
+                "success": True,
+                "summary": "Run 2 done",
+                "task_graph": [],
+                "worker_assignments": {},
+            },
+        ]
+        original.orchestration_state = dict(original.orchestration_runs[-1])
+        original.active_orchestration_run_id = "run-2"
+        session_manager.save_session(original)
+
+        forked = session_manager.fork_session(original.metadata.id, at_message=2)
+
+        assert [run["run_id"] for run in forked.orchestration_runs] == ["run-1"]
+        assert forked.active_orchestration_run_id == "run-1"
+        assert forked.orchestration_state["run_id"] == "run-1"
 
     def test_list_sessions_sorted_descending(self, session_manager):
         """Test that list_sessions returns sessions in descending order by updated_at."""

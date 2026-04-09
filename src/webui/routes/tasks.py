@@ -18,6 +18,7 @@ async def list_tasks(
     project: str = "default",
     mode: str = "build",
     ready_only: bool = False,
+    root_task_id: str | None = None,
 ):
     """List runtime tasks and the current task tree."""
     runtime = await bootstrap_runtime(
@@ -29,13 +30,23 @@ async def list_tasks(
     try:
         task_manager = runtime.task_manager
         if ready_only:
-            ready_tasks = [task.to_dict() for task in task_manager.list_ready_tasks()]
+            ready_tasks = [
+                task.to_dict()
+                for task in task_manager.list_ready_tasks()
+                if root_task_id is None or task.parent_id == root_task_id
+            ]
             return {"tasks": ready_tasks}
 
-        tasks = [task.to_dict() for task in task_manager.list_tasks()]
+        tasks = [
+            task.to_dict()
+            for task in task_manager.list_tasks()
+            if root_task_id is None
+            or task.id == root_task_id
+            or task.parent_id == root_task_id
+        ]
         return {
             "tasks": tasks,
-            "tree": task_manager.get_task_tree(),
+            "tree": task_manager.get_task_tree(root_task_id),
         }
     finally:
         await runtime.aclose()

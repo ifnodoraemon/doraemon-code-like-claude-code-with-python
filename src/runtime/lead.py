@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from src.core.tool_selector import get_capability_group_for_tool
 from src.core.planner import TaskPlanner
 from src.core.tasks import TaskManager, TaskStatus
+from src.core.tool_selector import get_capability_group_for_tool
 
 if TYPE_CHECKING:
-    from src.agent.adapter import AgentSession, AgentTurnResult
+    from src.agent.adapter import AgentSession
     from src.core.planner import ExecutionPlan
 
 
@@ -19,8 +20,8 @@ if TYPE_CHECKING:
 class LeadExecutionResult:
     """Result from a lead-runtime execution."""
 
-    root_task_id: str
-    plan_id: str
+    root_task_id: str | None
+    plan_id: str | None = None
     executed_task_ids: list[str] = field(default_factory=list)
     completed_task_ids: list[str] = field(default_factory=list)
     failed_task_ids: list[str] = field(default_factory=list)
@@ -68,7 +69,7 @@ class LeadAgentRuntime:
 
     def __init__(
         self,
-        session: "AgentSession",
+        session: AgentSession,
         planner: TaskPlanner | None = None,
         *,
         max_workers: int = 2,
@@ -77,11 +78,34 @@ class LeadAgentRuntime:
         self.planner = planner or TaskPlanner()
         self.max_workers = max(1, max_workers)
 
+    def _trace_event(
+        self,
+        name: str,
+        *,
+        run_id: str | None,
+        root_task_id: str | None,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        get_trace = getattr(self.session, "get_trace", None)
+        trace = get_trace() if callable(get_trace) else getattr(self.session, "_trace", None)
+        if trace is None or not getattr(self.session, "enable_trace", False):
+            return
+        trace.event(
+            "orchestration",
+            name,
+            {
+                "run_id": run_id,
+                "root_task_id": root_task_id,
+                **(data or {}),
+            },
+        )
+
     async def execute(
         self,
         goal: str,
         *,
         context: dict[str, Any] | None = None,
+        trace_run_id: str | None = None,
     ) -> LeadExecutionResult:
         """Plan a goal into persistent tasks and execute ready tasks in parallel batches."""
         if not self.session._agent:
@@ -96,19 +120,38 @@ class LeadAgentRuntime:
             description=goal,
             priority=100,
         )
+        result = LeadExecutionResult(root_task_id=root_task.id)
         task_manager.update_task(
             root_task.id,
             status=TaskStatus.IN_PROGRESS,
             assigned_agent=self.session.session_id,
         )
+        self._trace_event(
+            "execution_started",
+            run_id=trace_run_id,
+            root_task_id=root_task.id,
+            data={"goal": goal, "max_workers": self.max_workers},
+        )
         try:
-            plan = self.planner.generate_plan(goal, context=context or {})
-            persistent_ids = self._materialize_plan(task_manager, root_task.id, plan)
-
-            result = LeadExecutionResult(
+            self._trace_event(
+                "planning_started",
+                run_id=trace_run_id,
                 root_task_id=root_task.id,
-                plan_id=plan.id,
+                data={"goal": goal},
             )
+            plan = self.planner.generate_plan(goal, context=context or {})
+            result.plan_id = plan.id
+            self._trace_event(
+                "plan_generated",
+                run_id=trace_run_id,
+                root_task_id=root_task.id,
+                data={
+                    "goal": goal,
+                    "plan_id": plan.id,
+                    "task_count": len(plan.tasks),
+                },
+            )
+            persistent_ids = self._materialize_plan(task_manager, root_task.id, plan)
 
             pending_planner_ids = {task.id for task in plan.tasks}
             while pending_planner_ids:
@@ -120,15 +163,34 @@ class LeadAgentRuntime:
                     pending_planner_ids,
                 )
                 if not ready_batch:
+                    self._trace_event(
+                        "stalled",
+                        run_id=trace_run_id,
+                        root_task_id=root_task.id,
+                        data={"pending_planner_ids": sorted(pending_planner_ids)},
+                    )
                     task_manager.update_task(
                         root_task.id,
                         status=TaskStatus.BLOCKED,
                         assigned_agent=None,
                     )
                     result.success = False
+                    result.blocked_task_id = result.blocked_task_id or root_task.id
                     result.summary = "Task graph stalled before all planned tasks became ready"
                     return result
 
+                self._trace_event(
+                    "ready_batch_started",
+                    run_id=trace_run_id,
+                    root_task_id=root_task.id,
+                    data={
+                        "planner_task_ids": [planner_task.id for planner_task in ready_batch],
+                        "persistent_task_ids": [
+                            persistent_ids[planner_task.id] for planner_task in ready_batch
+                        ],
+                        "batch_size": len(ready_batch),
+                    },
+                )
                 outcomes = await asyncio.gather(
                     *[
                         self._execute_planner_task(
@@ -136,6 +198,7 @@ class LeadAgentRuntime:
                             persistent_task_id=persistent_ids[planner_task.id],
                             task_manager=task_manager,
                             result=result,
+                            trace_run_id=trace_run_id,
                         )
                         for planner_task in ready_batch
                     ]
@@ -155,6 +218,15 @@ class LeadAgentRuntime:
                         result.blocked_task_id = outcome.persistent_task_id
 
                 if result.failed_task_ids:
+                    self._trace_event(
+                        "blocked",
+                        run_id=trace_run_id,
+                        root_task_id=root_task.id,
+                        data={
+                            "failed_task_ids": list(result.failed_task_ids),
+                            "blocked_task_id": result.blocked_task_id,
+                        },
+                    )
                     task_manager.update_task(
                         root_task.id,
                         status=TaskStatus.BLOCKED,
@@ -169,18 +241,209 @@ class LeadAgentRuntime:
                 status=TaskStatus.COMPLETED,
                 assigned_agent=None,
             )
+            self._trace_event(
+                "completed",
+                run_id=trace_run_id,
+                root_task_id=root_task.id,
+                data={"completed_task_ids": list(result.completed_task_ids)},
+            )
             result.summary = (
                 f"Completed {len(result.completed_task_ids)} planned task(s) "
                 f"with up to {self.max_workers} worker(s)"
             )
             return result
-        except Exception:
+        except Exception as exc:
+            self._trace_event(
+                "failed",
+                run_id=trace_run_id,
+                root_task_id=root_task.id,
+                data={"error": str(exc)},
+            )
             task_manager.update_task(
                 root_task.id,
                 status=TaskStatus.BLOCKED,
                 assigned_agent=None,
             )
-            raise
+            result.success = False
+            result.blocked_task_id = result.blocked_task_id or root_task.id
+            result.summary = f"Orchestration failed: {exc}"
+            return result
+
+    async def resume(
+        self,
+        root_task_id: str,
+        *,
+        prior_state: dict[str, Any] | None = None,
+        trace_run_id: str | None = None,
+    ) -> LeadExecutionResult:
+        """Resume a previously blocked orchestration from its persisted task graph."""
+        if not self.session._agent:
+            await self.session.initialize()
+
+        task_manager = self.session.get_task_manager()
+        if task_manager is None:
+            raise RuntimeError("Task manager is not available for orchestration")
+
+        root_task = task_manager.get_task(root_task_id)
+        if root_task is None or root_task.parent_id is not None:
+            raise ValueError(f"unknown orchestration root: {root_task_id}")
+        if root_task.status != TaskStatus.BLOCKED:
+            raise ValueError(
+                f"orchestration root {root_task_id} is not resumable from status {root_task.status.value}"
+            )
+
+        child_tasks = list(task_manager.list_tasks(parent_id=root_task_id))
+        if not child_tasks:
+            raise ValueError(f"orchestration root {root_task_id} has no resumable subtasks")
+        resumable_tasks = [
+            task for task in child_tasks if task.status in {TaskStatus.PENDING, TaskStatus.BLOCKED}
+        ]
+        if not resumable_tasks:
+            raise ValueError(f"orchestration root {root_task_id} has no blocked or pending subtasks")
+        self._trace_event(
+            "resume_started",
+            run_id=trace_run_id,
+            root_task_id=root_task.id,
+            data={
+                "plan_id": (prior_state or {}).get("plan_id"),
+                "resumable_task_ids": [task.id for task in resumable_tasks],
+            },
+        )
+
+        result = LeadExecutionResult(
+            root_task_id=root_task.id,
+            plan_id=(prior_state or {}).get("plan_id"),
+            executed_task_ids=list((prior_state or {}).get("executed_task_ids", [])),
+            completed_task_ids=[
+                task.id for task in child_tasks if task.status == TaskStatus.COMPLETED
+            ],
+            task_summaries=dict((prior_state or {}).get("task_summaries", {})),
+        )
+
+        task_manager.update_task(
+            root_task.id,
+            status=TaskStatus.IN_PROGRESS,
+            assigned_agent=self.session.session_id,
+        )
+
+        for task in child_tasks:
+            if task.status == TaskStatus.BLOCKED:
+                task_manager.update_task(
+                    task.id,
+                    status=TaskStatus.PENDING,
+                    assigned_agent=None,
+                )
+
+        pending_task_ids = {
+            task.id
+            for task in task_manager.list_tasks(parent_id=root_task_id)
+            if task.status != TaskStatus.COMPLETED
+        }
+        while pending_task_ids:
+            ready_batch = [
+                self._task_to_planner_task(task)
+                for task in task_manager.list_ready_tasks()
+                if task.parent_id == root_task_id
+            ][: self.max_workers]
+            if not ready_batch:
+                self._trace_event(
+                    "stalled",
+                    run_id=trace_run_id,
+                    root_task_id=root_task.id,
+                    data={"pending_task_ids": sorted(pending_task_ids), "resume": True},
+                )
+                task_manager.update_task(
+                    root_task.id,
+                    status=TaskStatus.BLOCKED,
+                    assigned_agent=None,
+                )
+                result.success = False
+                result.blocked_task_id = result.blocked_task_id or next(iter(pending_task_ids), root_task.id)
+                result.summary = "Task graph stalled before all resumed tasks became ready"
+                return result
+
+            self._trace_event(
+                "ready_batch_started",
+                run_id=trace_run_id,
+                root_task_id=root_task.id,
+                data={
+                    "planner_task_ids": [planner_task.id for planner_task in ready_batch],
+                    "persistent_task_ids": [planner_task.id for planner_task in ready_batch],
+                    "batch_size": len(ready_batch),
+                    "resume": True,
+                },
+            )
+            outcomes = await asyncio.gather(
+                *[
+                    self._execute_planner_task(
+                        planner_task=planner_task,
+                        persistent_task_id=planner_task.id,
+                        task_manager=task_manager,
+                        result=result,
+                        trace_run_id=trace_run_id,
+                    )
+                    for planner_task in ready_batch
+                ]
+            )
+
+            for outcome in outcomes:
+                if outcome.persistent_task_id not in result.executed_task_ids:
+                    result.executed_task_ids.append(outcome.persistent_task_id)
+                result.task_summaries[outcome.persistent_task_id] = outcome.summary
+
+                if outcome.success:
+                    if outcome.persistent_task_id not in result.completed_task_ids:
+                        result.completed_task_ids.append(outcome.persistent_task_id)
+                    continue
+
+                if outcome.persistent_task_id not in result.failed_task_ids:
+                    result.failed_task_ids.append(outcome.persistent_task_id)
+                if result.blocked_task_id is None:
+                    result.blocked_task_id = outcome.persistent_task_id
+
+            if result.failed_task_ids:
+                self._trace_event(
+                    "blocked",
+                    run_id=trace_run_id,
+                    root_task_id=root_task.id,
+                    data={
+                        "failed_task_ids": list(result.failed_task_ids),
+                        "blocked_task_id": result.blocked_task_id,
+                        "resume": True,
+                    },
+                )
+                task_manager.update_task(
+                    root_task.id,
+                    status=TaskStatus.BLOCKED,
+                    assigned_agent=None,
+                )
+                result.success = False
+                result.summary = self._build_failure_summary(result)
+                return result
+
+            pending_task_ids = {
+                task.id
+                for task in task_manager.list_tasks(parent_id=root_task_id)
+                if task.status != TaskStatus.COMPLETED
+            }
+
+        task_manager.update_task(
+            root_task.id,
+            status=TaskStatus.COMPLETED,
+            assigned_agent=None,
+        )
+        self._trace_event(
+            "completed",
+            run_id=trace_run_id,
+            root_task_id=root_task.id,
+            data={
+                "completed_task_ids": list(result.completed_task_ids),
+                "resume": True,
+            },
+        )
+        resumed_count = len(result.completed_task_ids) - len((prior_state or {}).get("completed_task_ids", []))
+        result.summary = f"Resumed orchestration and completed {max(0, resumed_count)} remaining task(s)"
+        return result
 
     async def _execute_planner_task(
         self,
@@ -189,28 +452,32 @@ class LeadAgentRuntime:
         persistent_task_id: str,
         task_manager: TaskManager,
         result: LeadExecutionResult,
+        trace_run_id: str | None = None,
     ) -> _TaskExecutionOutcome:
         """Claim and execute a planner task through an isolated worker session."""
         worker_profile = self._select_worker_profile(planner_task)
-        worker_session = await self.session.spawn_worker_session(
-            enable_trace=False,
-            worker_role=worker_profile.role,
-            allowed_tool_names=worker_profile.allowed_tool_names,
-        )
-        worker_session_id = worker_session.session_id
-        result.worker_assignments[persistent_task_id] = {
-            "planner_task_id": planner_task.id,
-            "role": worker_profile.role,
-            "capability_groups": list(worker_profile.capability_groups),
-            "worker_session_id": worker_session_id,
-            "allowed_tool_names": list(worker_profile.allowed_tool_names),
-        }
-        task_manager.claim_task(persistent_task_id, worker_session_id)
+        worker_session = None
+        worker_session_id = ""
 
         try:
+            worker_session = await self.session.spawn_worker_session(
+                enable_trace=getattr(self.session, "enable_trace", False),
+                worker_role=worker_profile.role,
+                allowed_tool_names=worker_profile.allowed_tool_names,
+            )
+            worker_session_id = worker_session.session_id
+            task_manager.claim_task(persistent_task_id, worker_session_id)
+            result.worker_assignments[persistent_task_id] = {
+                "planner_task_id": planner_task.id,
+                "role": worker_profile.role,
+                "capability_groups": list(worker_profile.capability_groups),
+                "worker_session_id": worker_session_id,
+                "allowed_tool_names": list(worker_profile.allowed_tool_names),
+            }
             turn_result = await worker_session.turn(
                 self._build_worker_input(planner_task, worker_profile),
                 create_runtime_task=False,
+                trace_run_id=trace_run_id,
             )
 
             success = getattr(turn_result, "success", None)
@@ -259,13 +526,14 @@ class LeadAgentRuntime:
                 error=str(exc),
             )
         finally:
-            await worker_session.aclose()
+            if worker_session is not None:
+                await worker_session.aclose()
 
     def _materialize_plan(
         self,
         task_manager: TaskManager,
         root_task_id: str,
-        plan: "ExecutionPlan",
+        plan: ExecutionPlan,
     ) -> dict[str, str]:
         """Persist planner tasks into the shared task graph."""
         persistent_ids: dict[str, str] = {}
@@ -297,7 +565,7 @@ class LeadAgentRuntime:
         self,
         task_manager: TaskManager,
         root_task_id: str,
-        plan: "ExecutionPlan",
+        plan: ExecutionPlan,
         persistent_ids: dict[str, str],
         pending_planner_ids: set[str],
     ) -> list[Any]:
@@ -335,6 +603,14 @@ class LeadAgentRuntime:
         return (
             f"Blocked after {len(result.completed_task_ids)} completed task(s); "
             f"{detail}"
+        )
+
+    def _task_to_planner_task(self, task: Any) -> Any:
+        """Adapt a persisted task record into the planner-task shape used by workers."""
+        return SimpleNamespace(
+            id=task.id,
+            title=task.title,
+            description=task.description or task.title,
         )
 
     def _select_worker_profile(self, planner_task: Any) -> WorkerProfile:

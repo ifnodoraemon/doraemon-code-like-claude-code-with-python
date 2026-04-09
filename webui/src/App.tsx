@@ -12,17 +12,32 @@ import {
     Wrench,
 } from 'lucide-react'
 
+import {
+    filterMessagesForRange,
+    getNextSessionIndex,
+    isMessageRangeLoaded,
+} from './lib/sessionWindow'
+
 const generateId = () => Math.random().toString(36).slice(2, 11)
 
 type ExecutionMode = 'turn' | 'orchestrate'
+type RunViewMode = 'session' | 'run'
+const DEFAULT_MESSAGE_WINDOW = 200
+type ToolCallSummary = { name?: string; arguments?: Record<string, unknown> }
+type WorkerAssignment = {
+    role: string
+    worker_session_id: string
+    allowed_tool_names: string[]
+}
 
 interface Message {
     id: string
     role: 'user' | 'assistant' | 'system'
     content?: string
-    tool_calls?: Array<{ name?: string; arguments?: Record<string, unknown> }>
+    tool_calls?: ToolCallSummary[]
     timestamp: number
     meta?: string
+    session_index?: number
 }
 
 interface Session {
@@ -38,8 +53,27 @@ interface SessionDetail {
     messages: Array<{
         role: 'user' | 'assistant' | 'system' | 'tool'
         content?: string
-        tool_calls?: Array<{ name?: string; arguments?: Record<string, unknown> }>
+        tool_calls?: ToolCallSummary[]
     }>
+    message_count?: number
+    message_offset?: number
+    has_more_messages?: boolean
+    orchestration_state?: OrchestrationRun
+    orchestration_runs?: OrchestrationRun[]
+    active_orchestration_run_id?: string | null
+}
+
+interface SessionWindowSnapshot {
+    offset: number
+    count: number
+    hasMore: boolean
+    messages: Message[]
+    runs: OrchestrationRun[]
+    preferredRunId: string | null
+}
+
+interface RunDetailResponse {
+    run: OrchestrationRun
 }
 
 interface TaskNode {
@@ -64,14 +98,75 @@ interface ToolCatalogItem {
 interface OrchestrationResult {
     success: boolean
     summary: string
-    worker_assignments?: Record<
-        string,
-        {
-            role: string
-            worker_session_id: string
-            allowed_tool_names: string[]
-        }
-    >
+}
+
+interface OrchestrationRun extends OrchestrationResult {
+    run_id?: string
+    goal?: string
+    resumed_from_run_id?: string | null
+    message_start_index?: number | null
+    message_end_index?: number | null
+    root_task_id?: string | null
+    plan_id?: string | null
+    executed_task_ids?: string[]
+    completed_task_ids?: string[]
+    failed_task_ids?: string[]
+    blocked_task_id?: string | null
+    task_summaries?: Record<string, string>
+    task_graph?: TaskNode[]
+    worker_assignments?: Record<string, WorkerAssignment>
+}
+
+function appendToolCalls(
+    existing: ToolCallSummary[] | undefined,
+    incoming: ToolCallSummary[] | undefined,
+): ToolCallSummary[] | undefined {
+    if (!incoming || incoming.length === 0) {
+        return existing
+    }
+    return [...(existing || []), ...incoming]
+}
+
+function collectReadyTasks(nodes: TaskNode[]): TaskNode[] {
+    return nodes.flatMap((node) => {
+        const readyNodes =
+            node.ready && node.status === 'pending'
+                ? [{ id: node.id, title: node.title, status: node.status, ready: node.ready }]
+                : []
+        return [...readyNodes, ...collectReadyTasks(node.children || [])]
+    })
+}
+
+function normalizeOrchestrationRuns(
+    runs: OrchestrationRun[] | undefined,
+    latest: OrchestrationRun | undefined,
+): OrchestrationRun[] {
+    if (runs && runs.length > 0) {
+        return runs
+    }
+    if (latest && (latest.run_id || latest.root_task_id || latest.summary || (latest.task_graph || []).length > 0)) {
+        return [latest]
+    }
+    return []
+}
+
+function getExplicitlySelectedRun(
+    runs: OrchestrationRun[],
+    selectedRunId: string | null,
+): OrchestrationRun | null {
+    if (!selectedRunId) {
+        return null
+    }
+    return runs.find((run) => run.run_id === selectedRunId) || null
+}
+
+function upsertRun(existing: OrchestrationRun[], incoming: OrchestrationRun): OrchestrationRun[] {
+    if (!incoming.run_id) {
+        return [...existing, incoming]
+    }
+    const next = existing.filter((run) => run.run_id !== incoming.run_id)
+    next.push(incoming)
+    return next
 }
 
 function App() {
@@ -82,29 +177,75 @@ function App() {
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
     const [executionMode, setExecutionMode] = useState<ExecutionMode>('turn')
     const [maxWorkers, setMaxWorkers] = useState(2)
+    const [orchestrationRuns, setOrchestrationRuns] = useState<OrchestrationRun[]>([])
+    const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+    const [runViewMode, setRunViewMode] = useState<RunViewMode>('session')
+    const [needsSessionHydration, setNeedsSessionHydration] = useState(false)
+    const [messageOffset, setMessageOffset] = useState(0)
+    const [messageCount, setMessageCount] = useState(0)
+    const [hasMoreMessages, setHasMoreMessages] = useState(false)
+    const [uiError, setUiError] = useState<string | null>(null)
     const [taskGraph, setTaskGraph] = useState<TaskNode[]>([])
     const [readyTasks, setReadyTasks] = useState<TaskNode[]>([])
-    const [workerAssignments, setWorkerAssignments] = useState<
-        Record<string, { role: string; worker_session_id: string; allowed_tool_names: string[] }>
-    >({})
+    const [workerAssignments, setWorkerAssignments] = useState<Record<string, WorkerAssignment>>({})
     const [tools, setTools] = useState<ToolCatalogItem[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const currentSessionIdRef = useRef<string | null>(null)
+    const selectedRunIdRef = useRef<string | null>(null)
+    const runViewModeRef = useRef<RunViewMode>('session')
+    const sessionDetailRequestRef = useRef(0)
+    const runDetailRequestRef = useRef(0)
+    const messageOffsetRef = useRef(0)
+    const activeStreamRequestRef = useRef(0)
+    const activeStreamControllerRef = useRef<AbortController | null>(null)
+
+    const selectedRun =
+        orchestrationRuns.find((run) => run.run_id === selectedRunId) ||
+        orchestrationRuns[orchestrationRuns.length - 1] ||
+        null
+    const selectedMessageRun =
+        runViewMode === 'run' ? getExplicitlySelectedRun(orchestrationRuns, selectedRunId) : null
+    const visibleMessages = filterMessagesForRange(messages, selectedMessageRun)
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages])
+    }, [visibleMessages])
 
     useEffect(() => {
-        void Promise.all([fetchSessions(), fetchTasks(), fetchTools()])
+        currentSessionIdRef.current = currentSessionId
+    }, [currentSessionId])
+
+    useEffect(() => {
+        selectedRunIdRef.current = selectedRunId
+    }, [selectedRunId])
+
+    useEffect(() => {
+        runViewModeRef.current = runViewMode
+    }, [runViewMode])
+
+    useEffect(() => {
+        messageOffsetRef.current = messageOffset
+    }, [messageOffset])
+
+    useEffect(() => {
+        void Promise.all([fetchSessions(), fetchTools()])
     }, [])
 
     useEffect(() => {
-        if (!currentSessionId || isStreaming) {
+        if (runViewMode !== 'run') {
+            setTaskGraph([])
+            setReadyTasks([])
+            setWorkerAssignments({})
             return
         }
-        setWorkerAssignments({})
-        void Promise.all([fetchSessionDetail(currentSessionId), fetchTasks()])
-    }, [currentSessionId, isStreaming])
+        const selectedRun =
+            orchestrationRuns.find((run) => run.run_id === selectedRunId) ||
+            orchestrationRuns[orchestrationRuns.length - 1]
+        const selectedTaskGraph = selectedRun?.task_graph || []
+        setTaskGraph(selectedTaskGraph)
+        setReadyTasks(collectReadyTasks(selectedTaskGraph))
+        setWorkerAssignments(selectedRun?.worker_assignments || {})
+    }, [orchestrationRuns, selectedRunId, runViewMode])
 
     const fetchSessions = async () => {
         try {
@@ -114,25 +255,6 @@ function App() {
             setSessions(data)
         } catch (err) {
             console.error('Failed to fetch sessions', err)
-        }
-    }
-
-    const fetchTasks = async () => {
-        try {
-            const [treeRes, readyRes] = await Promise.all([
-                fetch('/api/tasks?project=default&mode=build'),
-                fetch('/api/tasks?project=default&mode=build&ready_only=true'),
-            ])
-            if (treeRes.ok) {
-                const data = await treeRes.json()
-                setTaskGraph(data.tree || [])
-            }
-            if (readyRes.ok) {
-                const data = await readyRes.json()
-                setReadyTasks(data.tasks || [])
-            }
-        } catch (err) {
-            console.error('Failed to fetch tasks', err)
         }
     }
 
@@ -147,9 +269,59 @@ function App() {
         }
     }
 
+    const invalidateSessionDetailRequests = (sessionId: string | null = currentSessionIdRef.current) => {
+        sessionDetailRequestRef.current += 1
+        currentSessionIdRef.current = sessionId
+    }
+
+    const invalidateRunDetailRequests = () => {
+        runDetailRequestRef.current += 1
+    }
+
+    const cancelActiveStream = () => {
+        activeStreamRequestRef.current += 1
+        activeStreamControllerRef.current?.abort()
+        activeStreamControllerRef.current = null
+        setIsStreaming(false)
+    }
+
+    const setSessionView = () => {
+        runViewModeRef.current = 'session'
+        selectedRunIdRef.current = null
+        setRunViewMode('session')
+        setSelectedRunId(null)
+    }
+
+    const setRunView = (runId: string | null) => {
+        runViewModeRef.current = 'run'
+        selectedRunIdRef.current = runId
+        setRunViewMode('run')
+        setSelectedRunId(runId)
+    }
+
+    const applySessionWindowSnapshot = (
+        snapshot: SessionWindowSnapshot,
+        mode: 'replace' | 'prepend' = 'replace',
+    ) => {
+        messageOffsetRef.current = snapshot.offset
+        if (mode === 'prepend') {
+            setMessages((prev) => [...snapshot.messages, ...prev])
+        } else {
+            setMessages(snapshot.messages)
+        }
+        setMessageOffset(snapshot.offset)
+        setMessageCount(snapshot.count)
+        setHasMoreMessages(snapshot.hasMore)
+        setOrchestrationRuns(snapshot.runs)
+        setSelectedRunId(snapshot.preferredRunId)
+        setNeedsSessionHydration(false)
+        setUiError(null)
+    }
+
     const mapSessionMessage = (
         message: SessionDetail['messages'][number],
         index: number,
+        offset: number,
     ): Message => ({
         id: `${index}-${message.role}-${generateId()}`,
         role:
@@ -162,55 +334,167 @@ function App() {
         tool_calls: message.tool_calls,
         timestamp: Date.now() + index,
         meta: message.role === 'tool' ? 'tool result' : undefined,
+        session_index: offset + index,
     })
 
-    const fetchSessionDetail = async (sessionId: string) => {
+    const fetchSessionDetail = async (
+        sessionId: string,
+        options?: {
+            messageLimit?: number
+            messageOffset?: number
+            mode?: 'replace' | 'prepend'
+            preserveRunSelection?: boolean
+        },
+    ): Promise<SessionWindowSnapshot | null> => {
         try {
-            const res = await fetch(`/api/sessions/${sessionId}`)
-            if (!res.ok) return
+            const requestId = sessionDetailRequestRef.current + 1
+            sessionDetailRequestRef.current = requestId
+            const params = new URLSearchParams()
+            if (typeof options?.messageLimit === 'number') {
+                params.set('message_limit', String(options.messageLimit))
+            }
+            if (typeof options?.messageOffset === 'number') {
+                params.set('message_offset', String(options.messageOffset))
+            }
+            const query = params.toString()
+            const res = await fetch(`/api/sessions/${sessionId}${query ? `?${query}` : ''}`)
+            if (!res.ok) return null
             const data: SessionDetail = await res.json()
-            setMessages((data.messages || []).map(mapSessionMessage))
+            if (
+                requestId !== sessionDetailRequestRef.current ||
+                currentSessionIdRef.current !== sessionId
+            ) {
+                return null
+            }
+            const offset = data.message_offset || 0
+            const mappedMessages = (data.messages || []).map((message, index) =>
+                mapSessionMessage(message, index, offset),
+            )
+            const runs = normalizeOrchestrationRuns(data.orchestration_runs, data.orchestration_state)
+            const preferredRunId =
+                (options?.preserveRunSelection ?? runViewModeRef.current === 'run')
+                    ? getExplicitlySelectedRun(runs, selectedRunIdRef.current)?.run_id ||
+                      data.active_orchestration_run_id ||
+                      runs[runs.length - 1]?.run_id ||
+                      null
+                    : null
+            const snapshot: SessionWindowSnapshot = {
+                offset,
+                count: data.message_count || mappedMessages.length,
+                hasMore: Boolean(data.has_more_messages),
+                messages: mappedMessages,
+                runs,
+                preferredRunId,
+            }
+            applySessionWindowSnapshot(snapshot, options?.mode)
+            return snapshot
         } catch (err) {
             console.error('Failed to fetch session detail', err)
+            return null
+        }
+    }
+
+    const fetchRunDetail = async (sessionId: string, runId: string): Promise<OrchestrationRun | null> => {
+        try {
+            const requestId = runDetailRequestRef.current + 1
+            runDetailRequestRef.current = requestId
+            const res = await fetch(`/api/sessions/${sessionId}/runs/${runId}`)
+            if (!res.ok) return null
+            const data: RunDetailResponse = await res.json()
+            if (
+                requestId !== runDetailRequestRef.current ||
+                currentSessionIdRef.current !== sessionId
+            ) {
+                return null
+            }
+            setOrchestrationRuns((prev) => upsertRun(prev, data.run))
+            return data.run
+        } catch (err) {
+            console.error('Failed to fetch run detail', err)
+            return null
+        }
+    }
+
+    const clearConversationWindow = (options?: { clearRuns?: boolean }) => {
+        messageOffsetRef.current = 0
+        setMessages([])
+        setMessageOffset(0)
+        setMessageCount(0)
+        setHasMoreMessages(false)
+        setTaskGraph([])
+        setReadyTasks([])
+        setWorkerAssignments({})
+        if (options?.clearRuns) {
+            setOrchestrationRuns([])
+            setSelectedRunId(null)
         }
     }
 
     const resetConversation = () => {
+        cancelActiveStream()
+        invalidateSessionDetailRequests(null)
+        invalidateRunDetailRequests()
+        runViewModeRef.current = 'session'
+        selectedRunIdRef.current = null
+        messageOffsetRef.current = 0
+        setUiError(null)
         setMessages([])
         setCurrentSessionId(null)
+        setOrchestrationRuns([])
+        setSelectedRunId(null)
+        setRunViewMode('session')
+        setNeedsSessionHydration(false)
+        setMessageOffset(0)
+        setMessageCount(0)
+        setHasMoreMessages(false)
         setTaskGraph([])
         setReadyTasks([])
         setWorkerAssignments({})
     }
 
-    const handleSubmit = async (event: FormEvent) => {
-        event.preventDefault()
-        if (!input.trim() || isStreaming) return
-
-        const prompt = input
-        const userMessage: Message = {
-            id: generateId(),
-            role: 'user',
-            content: prompt,
-            timestamp: Date.now(),
-            meta: executionMode === 'orchestrate' ? `orchestrate x${maxWorkers}` : 'turn',
+    const startStreamingRequest = async (
+        body: Record<string, unknown>,
+        userMessage: Message,
+        assistantMeta?: string,
+    ) => {
+        setUiError(null)
+        const sessionIdForRequest = currentSessionIdRef.current
+        if (currentSessionId && (runViewMode === 'run' || needsSessionHydration)) {
+            const preparedWindow = await fetchSessionDetail(currentSessionId, {
+                messageLimit: DEFAULT_MESSAGE_WINDOW,
+                mode: 'replace',
+                preserveRunSelection: false,
+            })
+            if (!preparedWindow) {
+                if (currentSessionIdRef.current === sessionIdForRequest) {
+                    setUiError('Failed to synchronize the latest session transcript before sending.')
+                }
+                return
+            }
         }
-
-        setMessages((prev) => [...prev, userMessage])
-        setInput('')
+        invalidateSessionDetailRequests(currentSessionIdRef.current)
+        invalidateRunDetailRequests()
+        const streamRequestId = activeStreamRequestRef.current + 1
+        activeStreamRequestRef.current = streamRequestId
+        const abortController = new AbortController()
+        activeStreamControllerRef.current = abortController
+        setNeedsSessionHydration(false)
+        setSessionView()
+        setMessages((prev) => [
+            ...prev,
+            {
+                ...userMessage,
+                session_index: getNextSessionIndex(prev, messageOffsetRef.current),
+            },
+        ])
         setIsStreaming(true)
 
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: prompt,
-                    session_id: currentSessionId,
-                    project: 'default',
-                    execution_mode: executionMode,
-                    max_workers: executionMode === 'orchestrate' ? maxWorkers : 1,
-                }),
+                body: JSON.stringify(body),
+                signal: abortController.signal,
             })
 
             if (!response.ok) throw new Error('Network response was not ok')
@@ -225,12 +509,21 @@ function App() {
                 role: 'assistant',
                 content: '',
                 timestamp: Date.now(),
-                meta: executionMode === 'orchestrate' ? 'coordinator runtime' : undefined,
+                meta: assistantMeta,
             }
 
-            setMessages((prev) => [...prev, assistantMessage])
+            setMessages((prev) => [
+                ...prev,
+                {
+                    ...assistantMessage,
+                    session_index: getNextSessionIndex(prev, messageOffsetRef.current),
+                },
+            ])
 
             const handleSsePayload = (payload: string) => {
+                if (activeStreamRequestRef.current !== streamRequestId) {
+                    return true
+                }
                 if (payload === '[DONE]') {
                     return true
                 }
@@ -238,10 +531,12 @@ function App() {
                 try {
                     const data = JSON.parse(payload)
                     if (data.session_id) {
+                        currentSessionIdRef.current = data.session_id
                         setCurrentSessionId(data.session_id)
                     }
                     if (data.type === 'orchestration') {
-                        const result = data.result as OrchestrationResult
+                        const result = data.result as OrchestrationRun
+                        const run = { ...result, task_graph: data.task_graph || [] }
                         setMessages((prev) => {
                             const next = [...prev]
                             const last = next[next.length - 1]
@@ -253,8 +548,10 @@ function App() {
                             }
                             return next
                         })
-                        setTaskGraph(data.task_graph || [])
-                        setWorkerAssignments(result.worker_assignments || {})
+                        setOrchestrationRuns((prev) => upsertRun(prev, run))
+                        if (run.run_id) {
+                            setRunView(run.run_id)
+                        }
                         return false
                     }
 
@@ -267,7 +564,7 @@ function App() {
                             last.content = `${last.content || ''}${data.content}`
                         }
                         if (data.tool_calls) {
-                            last.tool_calls = data.tool_calls
+                            last.tool_calls = appendToolCalls(last.tool_calls, data.tool_calls)
                         }
                         if (data.error) {
                             if (!last.content) {
@@ -327,9 +624,16 @@ function App() {
                 }
             }
 
-            await Promise.all([fetchTasks(), fetchSessions()])
+            await fetchSessions()
         } catch (error) {
+            if (
+                abortController.signal.aborted ||
+                activeStreamRequestRef.current !== streamRequestId
+            ) {
+                return
+            }
             console.error('Chat error', error)
+            setUiError(`Chat error: ${error}`)
             setMessages((prev) => [
                 ...prev,
                 {
@@ -337,11 +641,143 @@ function App() {
                     role: 'system',
                     content: `Error: ${error}`,
                     timestamp: Date.now(),
+                    session_index: getNextSessionIndex(prev, messageOffsetRef.current),
                 },
             ])
         } finally {
-            setIsStreaming(false)
+            if (activeStreamRequestRef.current === streamRequestId) {
+                activeStreamControllerRef.current = null
+                setIsStreaming(false)
+            }
         }
+    }
+
+    useEffect(() => {
+        if (!currentSessionId || !needsSessionHydration || isStreaming) {
+            return
+        }
+
+        clearConversationWindow({ clearRuns: true })
+        void (async () => {
+            const snapshot = await fetchSessionDetail(currentSessionId, {
+                messageLimit: DEFAULT_MESSAGE_WINDOW,
+                mode: 'replace',
+                preserveRunSelection: false,
+            })
+            if (!snapshot && currentSessionIdRef.current === currentSessionId) {
+                setUiError('Failed to load session transcript.')
+                setNeedsSessionHydration(false)
+            }
+        })()
+    }, [currentSessionId, needsSessionHydration, isStreaming])
+
+    useEffect(() => {
+        if (
+            runViewMode !== 'run' ||
+            !selectedMessageRun ||
+            !currentSessionId ||
+            isStreaming ||
+            isMessageRangeLoaded(
+                selectedMessageRun.message_start_index,
+                selectedMessageRun.message_end_index,
+                messageOffset,
+                messages,
+            )
+        ) {
+            return
+        }
+        const startIndex = selectedMessageRun.message_start_index || 0
+        const endIndex = selectedMessageRun.message_end_index || startIndex
+        const runId = selectedMessageRun.run_id || null
+        void (async () => {
+            const snapshot = await fetchSessionDetail(currentSessionId, {
+                messageOffset: startIndex,
+                messageLimit: Math.max(1, endIndex - startIndex + 1),
+                mode: 'replace',
+                preserveRunSelection: true,
+            })
+            if (
+                !snapshot &&
+                currentSessionIdRef.current === currentSessionId &&
+                runViewModeRef.current === 'run' &&
+                selectedRunIdRef.current === runId
+            ) {
+                setUiError('Failed to load run transcript.')
+            }
+        })()
+    }, [runViewMode, selectedMessageRun, currentSessionId, isStreaming, messageOffset, messages.length])
+
+    useEffect(() => {
+        if (
+            runViewMode !== 'run' ||
+            !currentSessionId ||
+            !selectedRunId ||
+            isStreaming
+        ) {
+            return
+        }
+
+        const run = orchestrationRuns.find((item) => item.run_id === selectedRunId)
+        if (!run || run.task_graph) {
+            return
+        }
+
+        void (async () => {
+            const detailedRun = await fetchRunDetail(currentSessionId, selectedRunId)
+            if (!detailedRun && currentSessionIdRef.current === currentSessionId) {
+                setUiError('Failed to load orchestration run details.')
+            }
+        })()
+    }, [runViewMode, currentSessionId, selectedRunId, orchestrationRuns, isStreaming])
+
+    const handleSubmit = async (event: FormEvent) => {
+        event.preventDefault()
+        if (!input.trim() || isStreaming) return
+
+        const prompt = input
+        const userMessage: Message = {
+            id: generateId(),
+            role: 'user',
+            content: prompt,
+            timestamp: Date.now(),
+            meta: executionMode === 'orchestrate' ? `orchestrate x${maxWorkers}` : 'turn',
+        }
+
+        setInput('')
+        await startStreamingRequest(
+            {
+                message: prompt,
+                session_id: currentSessionId,
+                project: 'default',
+                execution_mode: executionMode,
+                max_workers: executionMode === 'orchestrate' ? maxWorkers : 1,
+            },
+            userMessage,
+            executionMode === 'orchestrate' ? 'coordinator runtime' : undefined,
+        )
+    }
+
+    const handleResumeRun = async (run: OrchestrationRun) => {
+        if (!currentSessionId || !run.run_id || isStreaming) return
+        setExecutionMode('orchestrate')
+        await startStreamingRequest(
+            {
+                message: '',
+                session_id: currentSessionId,
+                resume_run_id: run.run_id,
+                project: 'default',
+                execution_mode: 'orchestrate',
+                max_workers: maxWorkers,
+            },
+            {
+                id: generateId(),
+                role: 'user',
+                content: `Resume orchestration: ${run.goal || run.root_task_id || run.run_id}`,
+                timestamp: Date.now(),
+                meta: 'resume run',
+            },
+            'coordinator runtime',
+        )
     }
 
     return (
@@ -371,7 +807,16 @@ function App() {
                             {sessions.map((session) => (
                                 <button
                                     key={session.id}
-                                    onClick={() => setCurrentSessionId(session.id)}
+                                    onClick={() => {
+                                        cancelActiveStream()
+                                        invalidateSessionDetailRequests(session.id)
+                                        invalidateRunDetailRequests()
+                                        setUiError(null)
+                                        setSessionView()
+                                        clearConversationWindow({ clearRuns: true })
+                                        setNeedsSessionHydration(true)
+                                        setCurrentSessionId(session.id)
+                                    }}
                                     className={`w-full rounded-2xl border px-3 py-3 text-left text-sm transition ${
                                         currentSessionId === session.id
                                             ? 'border-cyan-400/40 bg-cyan-500/10 text-white'
@@ -481,14 +926,68 @@ function App() {
                                         <div className="text-xs uppercase tracking-[0.22em] text-slate-500">Conversation</div>
                                         <div className="mt-1 text-lg font-medium text-white">Prompt and Runtime Output</div>
                                     </div>
-                                    <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-400">
-                                        {executionMode === 'orchestrate' ? `orchestrate x${maxWorkers}` : 'single turn'}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {runViewMode === 'run' && selectedMessageRun && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    clearConversationWindow()
+                                                    invalidateSessionDetailRequests(currentSessionId)
+                                                    invalidateRunDetailRequests()
+                                                    setUiError(null)
+                                                    setSessionView()
+                                                    if (currentSessionId) {
+                                                        void (async () => {
+                                                            const snapshot = await fetchSessionDetail(currentSessionId, {
+                                                                messageLimit: DEFAULT_MESSAGE_WINDOW,
+                                                                mode: 'replace',
+                                                                preserveRunSelection: false,
+                                                            })
+                                                            if (!snapshot && currentSessionIdRef.current === currentSessionId) {
+                                                                setUiError('Failed to load session transcript.')
+                                                            }
+                                                        })()
+                                                    }
+                                                }}
+                                                className="rounded-full border border-cyan-400/30 px-3 py-1 text-xs text-cyan-200 transition hover:bg-cyan-500/10"
+                                                disabled={isStreaming}
+                                            >
+                                                Show Session Transcript
+                                            </button>
+                                        )}
+                                        {runViewMode === 'session' && selectedRun?.run_id && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    invalidateSessionDetailRequests(currentSessionId)
+                                                    invalidateRunDetailRequests()
+                                                    setUiError(null)
+                                                    setRunView(selectedRun.run_id || null)
+                                                }}
+                                                className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
+                                                disabled={isStreaming}
+                                            >
+                                                View Selected Run
+                                            </button>
+                                        )}
+                                        <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-400">
+                                            {runViewMode === 'run' && selectedMessageRun
+                                                ? `run ${selectedMessageRun.run_id || selectedMessageRun.root_task_id || ''}`
+                                                : executionMode === 'orchestrate'
+                                                  ? `orchestrate x${maxWorkers}`
+                                                  : 'single turn'}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="flex-1 overflow-y-auto px-4 py-5">
-                                {messages.length === 0 ? (
+                                {uiError && (
+                                    <div className="mx-auto mb-4 max-w-4xl rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                                        {uiError}
+                                    </div>
+                                )}
+                                {visibleMessages.length === 0 ? (
                                     <div className="flex h-full flex-col items-center justify-center text-center">
                                         <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-cyan-500/10 text-cyan-300">
                                             <Terminal size={34} />
@@ -500,7 +999,38 @@ function App() {
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        {messages.map((message) => (
+                                        {runViewMode === 'session' && hasMoreMessages && currentSessionId && (
+                                            <div className="mx-auto max-w-4xl">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setUiError(null)
+                                                        void (async () => {
+                                                            const snapshot = await fetchSessionDetail(currentSessionId, {
+                                                                messageOffset: Math.max(
+                                                                    0,
+                                                                    messageOffset - DEFAULT_MESSAGE_WINDOW,
+                                                                ),
+                                                                messageLimit: Math.min(
+                                                                    DEFAULT_MESSAGE_WINDOW,
+                                                                    messageOffset,
+                                                                ),
+                                                                mode: 'prepend',
+                                                                preserveRunSelection: false,
+                                                            })
+                                                            if (!snapshot && currentSessionIdRef.current === currentSessionId) {
+                                                                setUiError('Failed to load older messages.')
+                                                            }
+                                                        })()
+                                                    }}
+                                                    className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
+                                                    disabled={isStreaming}
+                                                >
+                                                    Load Older Messages ({messageOffset}/{messageCount})
+                                                </button>
+                                            </div>
+                                        )}
+                                        {visibleMessages.map((message) => (
                                             <article
                                                 key={message.id}
                                                 className={`mx-auto flex max-w-4xl gap-4 ${
@@ -585,6 +1115,67 @@ function App() {
                         </section>
 
                         <aside className="grid min-h-[640px] gap-4 lg:grid-cols-2 xl:grid-cols-1">
+                            <Panel
+                                icon={<Terminal size={16} className="text-cyan-300" />}
+                                title="Runs"
+                                subtitle={`${orchestrationRuns.length} orchestration attempts in session`}
+                            >
+                                {orchestrationRuns.length === 0 ? (
+                                    <EmptyState text="Run orchestration to build session-level execution history." />
+                                ) : (
+                                    <div className="space-y-3">
+                                        {[...orchestrationRuns].reverse().map((run) => {
+                                            const isSelected = run.run_id === (selectedRun?.run_id || null)
+                                            return (
+                                                <div
+                                                    key={run.run_id || `${run.root_task_id}-${run.summary}`}
+                                                    className={`rounded-2xl border p-3 ${
+                                                        isSelected
+                                                            ? 'border-cyan-400/40 bg-cyan-500/10'
+                                                            : 'border-white/10 bg-black/20'
+                                                    }`}
+                                                >
+                                                    <button
+                                                        onClick={() => {
+                                                            invalidateSessionDetailRequests(currentSessionId)
+                                                            invalidateRunDetailRequests()
+                                                            setUiError(null)
+                                                            setRunView(run.run_id || null)
+                                                        }}
+                                                        className="w-full text-left disabled:opacity-60"
+                                                        disabled={isStreaming}
+                                                    >
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div>
+                                                                <div className="text-sm font-medium text-white">
+                                                                    {run.goal || run.summary || run.root_task_id || 'Run'}
+                                                                </div>
+                                                                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                                                                    {run.success ? 'completed' : 'blocked'}
+                                                                    {run.resumed_from_run_id ? ' · resumed' : ''}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-500">
+                                                                {run.run_id || run.root_task_id}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                    {!run.success && run.run_id && currentSessionId && (
+                                                        <button
+                                                            onClick={() => void handleResumeRun(run)}
+                                                            disabled={isStreaming}
+                                                            className="mt-3 rounded-full border border-orange-400/30 px-3 py-1 text-xs text-orange-200 transition hover:bg-orange-500/10 disabled:opacity-50"
+                                                        >
+                                                            Resume
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </Panel>
+
                             <Panel
                                 icon={<Network size={16} className="text-orange-300" />}
                                 title="Task Graph"

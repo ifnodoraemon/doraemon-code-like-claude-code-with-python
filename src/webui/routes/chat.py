@@ -25,6 +25,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
+    resume_run_id: str | None = None
     project: str = "default"
     model: str | None = None
     execution_mode: Literal["turn", "orchestrate"] = "turn"
@@ -45,6 +46,8 @@ async def chat_endpoint(request: ChatRequest):
         message = request.validated_message
         if request.session_id and not re.match(r"^[a-zA-Z0-9_-]+$", request.session_id):
             raise HTTPException(status_code=400, detail="Invalid session ID format")
+        if request.resume_run_id and not re.match(r"^[a-zA-Z0-9_-]+$", request.resume_run_id):
+            raise HTTPException(status_code=400, detail="Invalid run ID format")
         session = AgentSession(
             model_client=None,
             registry=None,
@@ -57,16 +60,54 @@ async def chat_endpoint(request: ChatRequest):
         )
 
         async def event_generator() -> AsyncGenerator[str, None]:
+            def _current_orchestration_payload() -> dict[str, Any]:
+                state = session.get_orchestration_state()
+                if state:
+                    return {
+                        "result": {key: value for key, value in state.items() if key != "task_graph"},
+                        "task_graph": state.get("task_graph", []),
+                    }
+
+                return {
+                    "result": {
+                        "root_task_id": None,
+                        "plan_id": None,
+                        "executed_task_ids": [],
+                        "completed_task_ids": [],
+                        "failed_task_ids": [],
+                        "blocked_task_id": None,
+                        "success": False,
+                        "summary": "",
+                        "task_summaries": {},
+                        "worker_assignments": {},
+                    },
+                    "task_graph": [],
+                }
+
             try:
                 if request.execution_mode == "orchestrate":
                     result = await session.orchestrate(
                         message,
                         context=request.context,
                         max_workers=max(1, request.max_workers),
+                        resume_run_id=request.resume_run_id,
                     )
-                    task_manager = session.get_task_manager()
-                    task_tree = task_manager.get_task_tree() if task_manager is not None else []
-                    yield f"data: {json.dumps({'type': 'orchestration', 'session_id': session.session_id, 'content': result.summary, 'result': result.to_dict(), 'task_graph': task_tree})}\n\n"
+                    payload = _current_orchestration_payload()
+                    if not payload["result"].get("summary"):
+                        payload["result"] = result.to_dict()
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {
+                                "type": "orchestration",
+                                "session_id": session.session_id,
+                                "content": payload["result"].get("summary", result.summary),
+                                "result": payload["result"],
+                                "task_graph": payload["task_graph"],
+                            }
+                        )
+                        + "\n\n"
+                    )
                 else:
                     async for event in session.turn_stream(message):
                         event_type = event.get("type", "event")
@@ -113,19 +154,26 @@ async def chat_endpoint(request: ChatRequest):
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
                 if request.execution_mode == "orchestrate":
-                    task_manager = session.get_task_manager()
-                    task_tree = task_manager.get_task_tree() if task_manager is not None else []
                     error_summary = f"Orchestration failed: {e}"
                     err_data = {
                         "type": "orchestration",
                         "session_id": session.session_id,
                         "content": error_summary,
                         "result": {
+                            "run_id": None,
+                            "goal": request.message,
+                            "root_task_id": None,
+                            "plan_id": None,
+                            "executed_task_ids": [],
+                            "completed_task_ids": [],
+                            "failed_task_ids": [],
+                            "blocked_task_id": None,
                             "success": False,
                             "summary": error_summary,
+                            "task_summaries": {},
                             "worker_assignments": {},
                         },
-                        "task_graph": task_tree,
+                        "task_graph": [],
                     }
                 else:
                     err_data = {"error": str(e), "session_id": session.session_id}

@@ -5,9 +5,9 @@ import pytest
 
 from src.agent.adapter import AgentSession
 from src.core.session import SessionManager
+from src.core.tasks import TaskManager, TaskStatus
 from src.host.tools import ToolRegistry
 from src.runtime.bootstrap import ProjectContext, RuntimeBootstrap, bootstrap_runtime
-from src.core.tasks import TaskManager
 
 
 class DummyRegistry:
@@ -239,12 +239,49 @@ async def test_agent_session_orchestrate_uses_lead_runtime(monkeypatch, tmp_path
         owns_model_client=False,
         owns_registry=False,
     )
+    captured: dict[str, str | None] = {"trace_run_id": None}
 
     async def fake_bootstrap_runtime(**kwargs):
         return runtime
 
-    async def fake_execute(self, goal: str, *, context=None):
-        return SimpleNamespace(success=True, summary=f"planned: {goal}", goal=goal, context=context)
+    async def fake_execute(self, goal: str, *, context=None, trace_run_id=None):
+        captured["trace_run_id"] = trace_run_id
+        return SimpleNamespace(
+            root_task_id="root-task-1",
+            plan_id="plan-1",
+            executed_task_ids=["task-1"],
+            completed_task_ids=["task-1"],
+            failed_task_ids=[],
+            blocked_task_id=None,
+            success=True,
+            summary=f"planned: {goal}",
+            task_summaries={"task-1": "inspection done"},
+            worker_assignments={
+                "task-1": {
+                    "role": "inspect",
+                    "worker_session_id": "worker-1",
+                    "allowed_tool_names": ["read"],
+                }
+            },
+            to_dict=lambda: {
+                "root_task_id": "root-task-1",
+                "plan_id": "plan-1",
+                "executed_task_ids": ["task-1"],
+                "completed_task_ids": ["task-1"],
+                "failed_task_ids": [],
+                "blocked_task_id": None,
+                "success": True,
+                "summary": f"planned: {goal}",
+                "task_summaries": {"task-1": "inspection done"},
+                "worker_assignments": {
+                    "task-1": {
+                        "role": "inspect",
+                        "worker_session_id": "worker-1",
+                        "allowed_tool_names": ["read"],
+                    }
+                },
+            },
+        )
 
     monkeypatch.setattr("src.agent.adapter.bootstrap_runtime", fake_bootstrap_runtime)
     monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.execute", fake_execute)
@@ -262,6 +299,277 @@ async def test_agent_session_orchestrate_uses_lead_runtime(monkeypatch, tmp_path
 
     assert result.success is True
     assert result.summary == "planned: Implement authentication"
+
+    await session.aclose()
+
+    session_manager = SessionManager(tmp_path / ".agent" / "sessions")
+    persisted = session_manager.load_session(session.session_id)
+    assert persisted is not None
+    assert persisted.orchestration_state["root_task_id"] == "root-task-1"
+    assert persisted.orchestration_state["plan_id"] == "plan-1"
+    assert persisted.orchestration_state["executed_task_ids"] == ["task-1"]
+    assert persisted.orchestration_state["success"] is True
+    assert persisted.orchestration_state["summary"] == "planned: Implement authentication"
+    assert persisted.orchestration_state["task_graph"] == []
+    assert persisted.orchestration_state["task_summaries"]["task-1"] == "inspection done"
+    assert persisted.orchestration_state["worker_assignments"]["task-1"]["role"] == "inspect"
+    assert persisted.orchestration_runs[0]["goal"] == "Implement authentication"
+    assert captured["trace_run_id"] == persisted.orchestration_runs[0]["run_id"]
+    assert persisted.active_orchestration_run_id == persisted.orchestration_runs[0]["run_id"]
+
+
+@pytest.mark.asyncio
+async def test_agent_session_orchestrate_records_coordinator_trace_turn(monkeypatch, tmp_path):
+    registry = ToolRegistry()
+
+    def read(path: str) -> str:
+        return path
+
+    registry.register(read, name="read")
+
+    runtime = RuntimeBootstrap(
+        context=ProjectContext(
+            project="demo",
+            mode="build",
+            project_dir=tmp_path.resolve(),
+            config_path=None,
+            capability_groups=["read", "edit", "memory", "research", "task"],
+            tool_names=["read"],
+            active_mcp_extensions=[],
+        ),
+        model_client=object(),
+        registry=registry,
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=TaskManager(storage_path=tmp_path / "tasks.json"),
+        owns_model_client=False,
+        owns_registry=False,
+    )
+
+    async def fake_bootstrap_runtime(**kwargs):
+        return runtime
+
+    async def fake_execute(self, goal: str, *, context=None, trace_run_id=None):
+        return SimpleNamespace(
+            root_task_id="root-task-1",
+            plan_id="plan-1",
+            executed_task_ids=[],
+            completed_task_ids=[],
+            failed_task_ids=[],
+            blocked_task_id=None,
+            success=True,
+            summary=f"planned: {goal}",
+            task_summaries={},
+            worker_assignments={},
+            to_dict=lambda: {
+                "root_task_id": "root-task-1",
+                "plan_id": "plan-1",
+                "executed_task_ids": [],
+                "completed_task_ids": [],
+                "failed_task_ids": [],
+                "blocked_task_id": None,
+                "success": True,
+                "summary": f"planned: {goal}",
+                "task_summaries": {},
+                "worker_assignments": {},
+            },
+        )
+
+    monkeypatch.setattr("src.agent.adapter.bootstrap_runtime", fake_bootstrap_runtime)
+    monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.execute", fake_execute)
+
+    session = AgentSession(
+        model_client=None,
+        registry=None,
+        project="demo",
+        mode="build",
+        project_dir=tmp_path,
+        enable_trace=True,
+    )
+
+    await session.orchestrate("Implement authentication")
+
+    trace = session.get_trace()
+    persisted_run = session.get_orchestration_runs()[-1]
+
+    assert trace is not None
+    assert trace.events[0].type == "turn_start"
+    assert trace.events[0].data["execution_mode"] == "orchestrate"
+    assert trace.events[0].data["run_id"] == persisted_run["run_id"]
+    assert trace.events[-1].type == "turn_end"
+
+
+@pytest.mark.asyncio
+async def test_agent_session_orchestrate_rolls_back_failed_resume(monkeypatch, tmp_path):
+    registry = ToolRegistry()
+
+    def read(path: str) -> str:
+        return path
+
+    registry.register(read, name="read")
+
+    runtime = RuntimeBootstrap(
+        context=ProjectContext(
+            project="demo",
+            mode="build",
+            project_dir=tmp_path.resolve(),
+            config_path=None,
+            capability_groups=["read", "edit", "memory", "research", "task"],
+            tool_names=["read"],
+            active_mcp_extensions=[],
+        ),
+        model_client=object(),
+        registry=registry,
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=TaskManager(storage_path=tmp_path / "tasks.json"),
+        owns_model_client=False,
+        owns_registry=False,
+    )
+
+    async def fake_bootstrap_runtime(**kwargs):
+        return runtime
+
+    async def fake_execute(self, goal: str, *, context=None, trace_run_id=None):
+        return SimpleNamespace(
+            root_task_id="root-task-1",
+            plan_id="plan-1",
+            executed_task_ids=[],
+            completed_task_ids=[],
+            failed_task_ids=[],
+            blocked_task_id=None,
+            success=True,
+            summary=f"planned: {goal}",
+            task_summaries={},
+            worker_assignments={},
+            to_dict=lambda: {
+                "root_task_id": "root-task-1",
+                "plan_id": "plan-1",
+                "executed_task_ids": [],
+                "completed_task_ids": [],
+                "failed_task_ids": [],
+                "blocked_task_id": None,
+                "success": True,
+                "summary": f"planned: {goal}",
+                "task_summaries": {},
+                "worker_assignments": {},
+            },
+        )
+
+    async def failing_resume(self, root_task_id: str, *, prior_state=None, trace_run_id=None):
+        raise ValueError(f"cannot resume {root_task_id}")
+
+    monkeypatch.setattr("src.agent.adapter.bootstrap_runtime", fake_bootstrap_runtime)
+    monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.execute", fake_execute)
+    monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.resume", failing_resume)
+
+    session = AgentSession(
+        model_client=None,
+        registry=None,
+        project="demo",
+        mode="build",
+        project_dir=tmp_path,
+        enable_trace=False,
+    )
+
+    await session.orchestrate("Implement authentication")
+    before_messages = [message.content for message in session.get_state().messages]
+    before_run_ids = [run["run_id"] for run in session.get_orchestration_runs()]
+
+    with pytest.raises(ValueError, match="cannot resume root-task-1"):
+        await session.orchestrate("", resume_run_id=before_run_ids[0])
+
+    assert [message.content for message in session.get_state().messages] == before_messages
+    assert [run["run_id"] for run in session.get_orchestration_runs()] == before_run_ids
+
+
+@pytest.mark.asyncio
+async def test_agent_session_orchestrate_appends_run_history(monkeypatch, tmp_path):
+    registry = ToolRegistry()
+
+    def read(path: str) -> str:
+        return path
+
+    registry.register(read, name="read")
+
+    runtime = RuntimeBootstrap(
+        context=ProjectContext(
+            project="demo",
+            mode="build",
+            project_dir=tmp_path.resolve(),
+            config_path=None,
+            capability_groups=["read", "edit", "memory", "research", "task"],
+            tool_names=["read"],
+            active_mcp_extensions=[],
+        ),
+        model_client=object(),
+        registry=registry,
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=TaskManager(storage_path=tmp_path / "tasks.json"),
+        owns_model_client=False,
+        owns_registry=False,
+    )
+
+    results = [
+        ("root-task-1", "plan-1", "planned: First goal"),
+        ("root-task-2", "plan-2", "planned: Second goal"),
+    ]
+
+    async def fake_bootstrap_runtime(**kwargs):
+        return runtime
+
+    async def fake_execute(self, goal: str, *, context=None, trace_run_id=None):
+        root_task_id, plan_id, summary = results.pop(0)
+        return SimpleNamespace(
+            root_task_id=root_task_id,
+            plan_id=plan_id,
+            executed_task_ids=[],
+            completed_task_ids=[],
+            failed_task_ids=[],
+            blocked_task_id=None,
+            success=True,
+            summary=summary,
+            task_summaries={},
+            worker_assignments={},
+            to_dict=lambda: {
+                "root_task_id": root_task_id,
+                "plan_id": plan_id,
+                "executed_task_ids": [],
+                "completed_task_ids": [],
+                "failed_task_ids": [],
+                "blocked_task_id": None,
+                "success": True,
+                "summary": summary,
+                "task_summaries": {},
+                "worker_assignments": {},
+            },
+        )
+
+    monkeypatch.setattr("src.agent.adapter.bootstrap_runtime", fake_bootstrap_runtime)
+    monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.execute", fake_execute)
+
+    session = AgentSession(
+        model_client=None,
+        registry=None,
+        project="demo",
+        mode="build",
+        project_dir=tmp_path,
+        enable_trace=False,
+    )
+
+    await session.orchestrate("First goal")
+    await session.orchestrate("Second goal")
+    await session.aclose()
+
+    persisted = SessionManager(tmp_path / ".agent" / "sessions").load_session(session.session_id)
+    assert persisted is not None
+    assert [run["goal"] for run in persisted.orchestration_runs] == ["First goal", "Second goal"]
+    assert persisted.orchestration_state["goal"] == "Second goal"
+    assert persisted.active_orchestration_run_id == persisted.orchestration_runs[-1]["run_id"]
 
 
 @pytest.mark.asyncio
@@ -296,8 +604,37 @@ async def test_agent_session_orchestrate_persists_failed_goal(monkeypatch, tmp_p
     async def fake_bootstrap_runtime(**kwargs):
         return runtime
 
-    async def failing_execute(self, goal: str, *, context=None):
-        raise RuntimeError(f"planner boom for {goal}")
+    async def failing_execute(self, goal: str, *, context=None, trace_run_id=None):
+        root_task = runtime.task_manager.create_task(title=goal, description=goal, priority=100)
+        runtime.task_manager.update_task(
+            root_task.id,
+            status=TaskStatus.BLOCKED,
+            assigned_agent=None,
+        )
+        return SimpleNamespace(
+            root_task_id=root_task.id,
+            plan_id=None,
+            executed_task_ids=[],
+            completed_task_ids=[],
+            failed_task_ids=[],
+            blocked_task_id=root_task.id,
+            success=False,
+            summary=f"Orchestration failed: planner boom for {goal}",
+            task_summaries={},
+            worker_assignments={},
+            to_dict=lambda: {
+                "root_task_id": root_task.id,
+                "plan_id": None,
+                "executed_task_ids": [],
+                "completed_task_ids": [],
+                "failed_task_ids": [],
+                "blocked_task_id": root_task.id,
+                "success": False,
+                "summary": f"Orchestration failed: planner boom for {goal}",
+                "task_summaries": {},
+                "worker_assignments": {},
+            },
+        )
 
     monkeypatch.setattr("src.agent.adapter.bootstrap_runtime", fake_bootstrap_runtime)
     monkeypatch.setattr("src.runtime.lead.LeadAgentRuntime.execute", failing_execute)
@@ -311,18 +648,29 @@ async def test_agent_session_orchestrate_persists_failed_goal(monkeypatch, tmp_p
         enable_trace=False,
     )
 
-    with pytest.raises(RuntimeError, match="planner boom"):
-        await session.orchestrate("Implement authentication", context={"files": ["auth.py"]})
+    result = await session.orchestrate("Implement authentication", context={"files": ["auth.py"]})
 
     await session.aclose()
 
     session_manager = SessionManager(tmp_path / ".agent" / "sessions")
     persisted = session_manager.load_session(session.session_id)
     assert persisted is not None
+    assert result.success is False
     assert [message["content"] for message in persisted.messages] == [
         "Implement authentication",
         "Orchestration failed: planner boom for Implement authentication",
     ]
+    assert persisted.orchestration_state["root_task_id"] == result.root_task_id
+    assert persisted.orchestration_state["plan_id"] is None
+    assert persisted.orchestration_state["blocked_task_id"] == result.root_task_id
+    assert persisted.orchestration_state["success"] is False
+    assert persisted.orchestration_state["summary"] == (
+        "Orchestration failed: planner boom for Implement authentication"
+    )
+    assert persisted.orchestration_state["worker_assignments"] == {}
+    assert persisted.orchestration_state["task_summaries"] == {}
+    assert persisted.orchestration_state["task_graph"][0]["id"] == result.root_task_id
+    assert persisted.orchestration_state["task_graph"][0]["status"] == TaskStatus.BLOCKED.value
 
 
 @pytest.mark.asyncio

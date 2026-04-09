@@ -25,7 +25,9 @@ Usage:
 import asyncio
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator, Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,7 +41,7 @@ from src.agent.state import AgentState
 from src.agent.types import Message
 from src.core.home import Trace
 from src.core.session import SessionData, SessionManager
-from src.runtime import LeadExecutionResult, LeadAgentRuntime
+from src.runtime import LeadAgentRuntime, LeadExecutionResult
 from src.runtime.bootstrap import RuntimeBootstrap, bootstrap_runtime
 
 logger = logging.getLogger(__name__)
@@ -388,27 +390,77 @@ class AgentSession:
         *,
         context: dict[str, Any] | None = None,
         max_workers: int | None = None,
+        resume_run_id: str | None = None,
     ) -> LeadExecutionResult:
         """Execute a goal through the thin lead-runtime orchestration path."""
         if not self._agent:
             await self.initialize()
 
+        prior_run = self._get_orchestration_run(resume_run_id) if resume_run_id else None
+        if resume_run_id and prior_run is None:
+            raise ValueError(f"unknown orchestration run: {resume_run_id}")
+        run_id = uuid.uuid4().hex[:12]
+        goal = user_input
+        if prior_run is not None:
+            goal = prior_run.get("goal") or prior_run.get("summary") or "Resume orchestration"
+            user_input = f"Resume orchestration: {goal}"
+
+        message_start_index = len(self._state.messages) if self._state is not None else 0
         if self._state is not None:
             self._state.add_user_message(user_input)
 
+        if self._trace and self.enable_trace:
+            self._trace.start_turn(
+                user_input,
+                metadata={
+                    "mode": self.mode,
+                    "execution_mode": "orchestrate",
+                    "run_id": run_id,
+                    "goal": goal,
+                    "resume_run_id": resume_run_id,
+                    "max_workers": max_workers or 2,
+                },
+            )
+
         runtime = LeadAgentRuntime(self, max_workers=max_workers or 2)
         try:
-            result = await runtime.execute(user_input, context=context)
-        except Exception as exc:
-            if self._state is not None:
-                self._state.add_assistant_message(f"Orchestration failed: {exc}")
-            if self._trace:
-                self._trace.error(str(exc), {"exception_type": type(exc).__name__})
-            self._save_session_state()
+            if prior_run is None:
+                result = await runtime.execute(goal, context=context, trace_run_id=run_id)
+            else:
+                result = await runtime.resume(
+                    prior_run["root_task_id"],
+                    prior_state=prior_run,
+                    trace_run_id=run_id,
+                )
+        except Exception as e:
+            self._rollback_orchestration_messages(message_start_index)
+            if self._trace and self.enable_trace:
+                self._trace.error(str(e), {"exception_type": type(e).__name__, "run_id": run_id})
+                self._trace.end_turn(success=False, error=str(e))
             raise
 
         if self._state is not None:
             self._state.add_assistant_message(result.summary)
+        message_end_index = (
+            len(self._state.messages) - 1
+            if self._state is not None and self._state.messages
+            else message_start_index
+        )
+        self._record_orchestration_run(
+            self._build_orchestration_state(
+                result=result,
+                run_id=run_id,
+                goal=goal,
+                message_start_index=message_start_index,
+                message_end_index=message_end_index,
+                resumed_from_run_id=resume_run_id,
+            )
+        )
+        if self._trace and self.enable_trace:
+            self._trace.end_turn(
+                success=result.success,
+                error=None if result.success else result.summary,
+            )
         self._save_session_state()
         return result
 
@@ -439,6 +491,24 @@ class AgentSession:
     def get_trace(self) -> Trace | None:
         """Get current trace object."""
         return self._trace
+
+    def get_orchestration_state(self) -> dict[str, Any]:
+        """Return the persisted orchestration snapshot for the current session."""
+        if self._session_record is None:
+            return {}
+        return deepcopy(self._session_record.orchestration_state)
+
+    def get_orchestration_runs(self) -> list[dict[str, Any]]:
+        """Return persisted orchestration runs for the current session."""
+        if self._session_record is None:
+            return []
+        return deepcopy(self._session_record.orchestration_runs)
+
+    def get_active_orchestration_run_id(self) -> str | None:
+        """Return the currently active orchestration run identifier."""
+        if self._session_record is None:
+            return None
+        return self._session_record.active_orchestration_run_id
 
     def get_task_manager(self):
         """Get the shared runtime task manager."""
@@ -517,6 +587,9 @@ class AgentSession:
             self._agent.reset()
         if self._session_record is not None:
             self._session_record.messages = []
+            self._session_record.orchestration_state = {}
+            self._session_record.orchestration_runs = []
+            self._session_record.active_orchestration_run_id = None
             self._session_record.metadata.message_count = 0
             self._session_record.metadata.total_tokens = 0
             self._session_record.metadata.name = None
@@ -691,6 +764,90 @@ class AgentSession:
             _message_to_session_data(message) for message in self._state.messages
         ]
         self._session_manager.save_session(self._session_record)
+
+    def _get_task_graph_snapshot(self, root_task_id: str | None = None) -> list[dict[str, Any]]:
+        if self.task_manager is None:
+            return []
+        get_task_tree = getattr(self.task_manager, "get_task_tree", None)
+        if not callable(get_task_tree):
+            return []
+        return get_task_tree(root_task_id)
+
+    def _build_orchestration_state(
+        self,
+        *,
+        result: LeadExecutionResult | None = None,
+        run_id: str | None = None,
+        goal: str | None = None,
+        message_start_index: int | None = None,
+        message_end_index: int | None = None,
+        resumed_from_run_id: str | None = None,
+        success: bool | None = None,
+        summary: str | None = None,
+    ) -> dict[str, Any]:
+        if result is None:
+            return {
+                "run_id": run_id,
+                "goal": goal or "",
+                "resumed_from_run_id": resumed_from_run_id,
+                "message_start_index": message_start_index,
+                "message_end_index": message_end_index,
+                "root_task_id": None,
+                "plan_id": None,
+                "executed_task_ids": [],
+                "completed_task_ids": [],
+                "failed_task_ids": [],
+                "blocked_task_id": None,
+                "success": bool(success),
+                "summary": summary or "",
+                "task_summaries": {},
+                "worker_assignments": {},
+                "task_graph": [],
+            }
+
+        state = result.to_dict()
+        state["run_id"] = run_id
+        state["goal"] = goal or ""
+        state["resumed_from_run_id"] = resumed_from_run_id
+        state["message_start_index"] = message_start_index
+        state["message_end_index"] = message_end_index
+        state["task_graph"] = self._get_task_graph_snapshot(result.root_task_id)
+        return state
+
+    def _record_orchestration_run(self, payload: dict[str, Any]) -> None:
+        if self._session_record is None:
+            return
+        self._session_record.orchestration_runs.append(payload)
+        self._session_record.orchestration_state = payload
+        self._session_record.active_orchestration_run_id = payload.get("run_id")
+
+    def _rollback_orchestration_messages(self, message_start_index: int) -> None:
+        if self._state is None:
+            return
+        self._state.messages = self._state.messages[:message_start_index]
+        self._state._update_token_estimate()
+        self._state.user_input = next(
+            (message.content for message in reversed(self._state.messages) if message.role == "user"),
+            None,
+        )
+        self._state.last_response = next(
+            (
+                message.content
+                for message in reversed(self._state.messages)
+                if message.role == "assistant"
+            ),
+            None,
+        )
+
+    def _get_orchestration_run(self, run_id: str | None) -> dict[str, Any] | None:
+        if self._session_record is None or not run_id:
+            return None
+        for run in reversed(self._session_record.orchestration_runs):
+            if run.get("run_id") == run_id:
+                return deepcopy(run)
+        if self._session_record.orchestration_state.get("run_id") == run_id:
+            return deepcopy(self._session_record.orchestration_state)
+        return None
 
     def _derive_session_name(self) -> str | None:
         if self._state is None:

@@ -73,6 +73,20 @@ class TestTaskManager:
         assert tree[0]["children"][0]["id"] == child.id
         assert tree[0]["children"][0]["children"][0]["id"] == grandchild.id
 
+    def test_get_task_tree_can_scope_to_single_root(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        root_one = manager.create_task("Root One")
+        child_one = manager.create_task("Child One", parent_id=root_one.id)
+        root_two = manager.create_task("Root Two")
+
+        tree = manager.get_task_tree(root_one.id)
+
+        assert len(tree) == 1
+        assert tree[0]["id"] == root_one.id
+        assert tree[0]["children"][0]["id"] == child_one.id
+        assert tree[0]["title"] == "Root One"
+        assert tree[0]["id"] != root_two.id
+
     def test_delete_orphans_children_by_default(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
         parent = manager.create_task("Parent")

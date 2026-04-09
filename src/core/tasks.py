@@ -291,19 +291,22 @@ class TaskManager:
         self._save()
         return task
 
-    def get_task_tree(self) -> list[dict[str, Any]]:
-        def build(parent_id: str | None) -> list[dict[str, Any]]:
-            nodes = []
-            for task in self.list_tasks(parent_id=parent_id):
-                node = task.to_dict()
-                node["ready"] = self.are_dependencies_satisfied(task.id)
-                children = build(task.id)
-                if children:
-                    node["children"] = children
-                nodes.append(node)
-            return nodes
+    def get_task_tree(self, root_task_id: str | None = None) -> list[dict[str, Any]]:
+        def build_node(task: Task) -> dict[str, Any]:
+            node = task.to_dict()
+            node["ready"] = self.are_dependencies_satisfied(task.id)
+            children = [build_node(child) for child in self.list_tasks(parent_id=task.id)]
+            if children:
+                node["children"] = children
+            return node
 
-        return build(None)
+        if root_task_id is not None:
+            root_task = self.get_task(root_task_id)
+            if root_task is None:
+                return []
+            return [build_node(root_task)]
+
+        return [build_node(task) for task in self.list_tasks(parent_id=None)]
 
     def delete_task(self, task_id: str, delete_subtasks: bool = False) -> bool:
         task = self._tasks.get(task_id)

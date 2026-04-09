@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from src.core.home import Trace
 from src.core.planner import ExecutionPlan, Task, TaskDependency, TaskPriority
 from src.core.tasks import TaskManager, TaskStatus
 from src.runtime.lead import LeadAgentRuntime
@@ -38,11 +39,15 @@ class StubSession:
         results_by_input: dict[str, StubTurnResult],
         *,
         barrier_inputs: set[str] | None = None,
+        enable_trace: bool = False,
+        trace: Trace | None = None,
     ):
         self._agent = object()
         self._task_manager = task_manager
         self.registry = SimpleRegistry()
         self.session_id = "session-test"
+        self.enable_trace = enable_trace
+        self._trace = trace
         self.results_by_input = results_by_input
         self.barrier_inputs = barrier_inputs or set()
         self.turn_calls: list[tuple[str, str, bool]] = []
@@ -57,6 +62,9 @@ class StubSession:
 
     def get_task_manager(self) -> TaskManager:
         return self._task_manager
+
+    def get_trace(self) -> Trace | None:
+        return self._trace
 
     async def spawn_worker_session(
         self,
@@ -119,6 +127,16 @@ class MalformedStubSession(StubSession):
     ):
         self.turn_calls.append((worker_session_id, user_input, create_runtime_task))
         return object()
+
+
+class ClaimFailingTaskManager(TaskManager):
+    def __init__(self, storage_path):
+        super().__init__(storage_path=storage_path)
+        self.claim_attempts: list[tuple[str, str]] = []
+
+    def claim_task(self, task_id: str, agent_id: str):
+        self.claim_attempts.append((task_id, agent_id))
+        raise RuntimeError(f"claim failed for {task_id}")
 
 
 class StubPlanner:
@@ -235,6 +253,35 @@ async def test_lead_runtime_executes_ready_tasks_in_parallel_batches(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_lead_runtime_records_orchestration_trace_events(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    trace = Trace("session_test")
+    session = StubSession(
+        task_manager=task_manager,
+        results_by_input={
+            "Inspect auth flow": StubTurnResult(success=True, response="inspection done"),
+            "Implement backend changes": StubTurnResult(success=True, response="backend done"),
+            "Run integration verification": StubTurnResult(success=True, response="verification done"),
+        },
+        barrier_inputs={"Inspect auth flow", "Implement backend changes"},
+        enable_trace=True,
+        trace=trace,
+    )
+
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=2)
+    result = await runtime.execute("Implement authentication", trace_run_id="run-1")
+
+    orchestration_events = [event for event in trace.events if event.type == "orchestration"]
+    event_names = [event.name for event in orchestration_events]
+
+    assert result.success is True
+    assert event_names[:3] == ["execution_started", "planning_started", "plan_generated"]
+    assert "ready_batch_started" in event_names
+    assert event_names[-1] == "completed"
+    assert all(event.data["run_id"] == "run-1" for event in orchestration_events)
+
+
+@pytest.mark.asyncio
 async def test_lead_runtime_blocks_root_when_parallel_subtask_fails(tmp_path):
     task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
     session = StubSession(
@@ -262,6 +309,66 @@ async def test_lead_runtime_blocks_root_when_parallel_subtask_fails(tmp_path):
     assert child_statuses["Implement backend changes"] == TaskStatus.BLOCKED
     assert child_statuses["Run integration verification"] == TaskStatus.PENDING
     assert "backend failed" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_can_resume_blocked_run(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(
+        task_manager=task_manager,
+        results_by_input={
+            "Inspect auth flow": StubTurnResult(success=True, response="inspection done"),
+            "Implement backend changes": StubTurnResult(success=False, error="backend failed"),
+            "Run integration verification": StubTurnResult(success=True, response="verification done"),
+        },
+        barrier_inputs={"Inspect auth flow", "Implement backend changes"},
+    )
+
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=2)
+    first = await runtime.execute("Implement authentication")
+
+    session.results_by_input["Implement backend changes"] = StubTurnResult(
+        success=True, response="backend fixed"
+    )
+    resumed = await runtime.resume(
+        first.root_task_id,
+        prior_state={
+            "plan_id": first.plan_id,
+            "executed_task_ids": first.executed_task_ids,
+            "completed_task_ids": first.completed_task_ids,
+            "task_summaries": first.task_summaries,
+        },
+    )
+
+    child_statuses = {
+        task.title: task.status for task in task_manager.list_tasks() if task.parent_id == first.root_task_id
+    }
+    assert first.success is False
+    assert resumed.success is True
+    assert child_statuses["Inspect auth flow"] == TaskStatus.COMPLETED
+    assert child_statuses["Implement backend changes"] == TaskStatus.COMPLETED
+    assert child_statuses["Run integration verification"] == TaskStatus.COMPLETED
+    assert "Resumed orchestration" in resumed.summary
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_rejects_resume_for_completed_root(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(
+        task_manager=task_manager,
+        results_by_input={
+            "Inspect auth flow": StubTurnResult(success=True, response="inspection done"),
+            "Implement backend changes": StubTurnResult(success=True, response="backend done"),
+            "Run integration verification": StubTurnResult(success=True, response="verification done"),
+        },
+        barrier_inputs={"Inspect auth flow", "Implement backend changes"},
+    )
+
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=2)
+    first = await runtime.execute("Implement authentication")
+
+    with pytest.raises(ValueError, match="not resumable"):
+        await runtime.resume(first.root_task_id, prior_state={"plan_id": first.plan_id})
 
 
 @pytest.mark.asyncio
@@ -293,11 +400,13 @@ async def test_lead_runtime_blocks_root_when_planner_raises(tmp_path):
     )
 
     runtime = LeadAgentRuntime(session, planner=RaisingPlanner(), max_workers=1)
-
-    with pytest.raises(RuntimeError, match="planner boom"):
-        await runtime.execute("Implement authentication")
+    result = await runtime.execute("Implement authentication")
 
     tasks = task_manager.list_tasks()
+    assert result.success is False
+    assert result.root_task_id == tasks[0].id
+    assert result.blocked_task_id == tasks[0].id
+    assert "planner boom" in result.summary
     assert len(tasks) == 1
     assert tasks[0].status == TaskStatus.BLOCKED
     assert tasks[0].assigned_agent is None
@@ -324,3 +433,29 @@ async def test_lead_runtime_blocks_child_when_worker_returns_malformed_result(tm
     assert root.status == TaskStatus.BLOCKED
     assert child_statuses["Inspect auth flow"] == TaskStatus.BLOCKED
     assert "invalid turn result" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_closes_worker_when_claim_fails(tmp_path):
+    task_manager = ClaimFailingTaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(
+        task_manager=task_manager,
+        results_by_input={},
+    )
+
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=1)
+    result = await runtime.execute("Implement authentication")
+
+    root = task_manager.get_task(result.root_task_id)
+    child_statuses = {
+        task.title: task.status for task in task_manager.list_tasks() if task.parent_id == result.root_task_id
+    }
+
+    assert result.success is False
+    assert root is not None
+    assert root.status == TaskStatus.BLOCKED
+    assert result.worker_assignments == {}
+    assert len(session.closed_workers) == 1
+    assert len(task_manager.claim_attempts) == 1
+    assert child_statuses["Inspect auth flow"] == TaskStatus.BLOCKED
+    assert "claim failed" in result.summary

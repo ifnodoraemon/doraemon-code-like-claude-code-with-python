@@ -23,6 +23,7 @@ from src.agent import (
     create_doraemon_agent,
 )
 from src.agent.adapter import _collect_modified_paths
+from src.core.home import Trace
 from src.core.tasks import TaskManager, TaskStatus
 from src.host.tools import LazyToolFunction
 
@@ -798,6 +799,24 @@ class TestDoraemonAgent:
         assert result.response == "Done!"
 
     @pytest.mark.asyncio
+    async def test_doraemon_agent_run_records_trace_run_id(self, mock_llm, mock_registry):
+        """Agent turns should carry orchestration run identity into trace metadata."""
+        trace = Trace("session_test")
+        agent = create_doraemon_agent(
+            llm_client=mock_llm,
+            tool_registry=mock_registry,
+            mode="build",
+            enable_trace=True,
+            trace=trace,
+        )
+
+        result = await agent.run("Hello", trace_run_id="run-42")
+
+        assert result.success is True
+        assert trace.events[0].type == "turn_start"
+        assert trace.events[0].data["run_id"] == "run-42"
+
+    @pytest.mark.asyncio
     async def test_doraemon_agent_with_hooks(self, mock_llm, mock_registry, mock_hooks):
         """Should trigger hooks during execution."""
         agent = create_doraemon_agent(
@@ -837,6 +856,35 @@ class TestDoraemonAgent:
         assert result.success is True
         assert len(result.tool_calls) == 1
         mock_registry.call_tool.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_doraemon_agent_tool_trace_includes_run_id(self, mock_llm, mock_registry):
+        """Tool-call trace events should include the active orchestration run ID."""
+        mock_llm.chat.side_effect = [
+            MagicMock(
+                content=None,
+                tool_calls=[
+                    MagicMock(
+                        id="1", function=MagicMock(name="read", arguments='{"path": "/test"}')
+                    )
+                ],
+            ),
+            MagicMock(content="Done", tool_calls=None),
+        ]
+        trace = Trace("session_test")
+        agent = create_doraemon_agent(
+            llm_client=mock_llm,
+            tool_registry=mock_registry,
+            mode="build",
+            enable_trace=True,
+            trace=trace,
+        )
+
+        result = await agent.run("Read /test", trace_run_id="run-99")
+
+        tool_event = next(event for event in trace.events if event.type == "tool_call")
+        assert result.success is True
+        assert tool_event.data["run_id"] == "run-99"
 
     @pytest.mark.asyncio
     async def test_doraemon_agent_policy_blocks_write_in_plan_mode(self, mock_llm):
@@ -888,8 +936,10 @@ class TestDoraemonAgent:
         registry.call_tool.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_doraemon_agent_creates_runtime_task(self, mock_llm, tmp_path):
-        """Agent turns should materialize a top-level runtime task."""
+    async def test_doraemon_agent_does_not_persist_runtime_task_for_direct_turns(
+        self, mock_llm, tmp_path
+    ):
+        """Direct turns should not pollute the persistent orchestration task graph."""
         task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
         registry = MagicMock()
         registry.get_tool_names = MagicMock(return_value=["read"])
@@ -913,6 +963,36 @@ class TestDoraemonAgent:
         )
 
         result = await agent.run("Inspect README and summarize")
+
+        assert result.success is True
+        assert task_manager.list_tasks() == []
+
+    @pytest.mark.asyncio
+    async def test_doraemon_agent_can_opt_in_to_runtime_task_persistence(self, mock_llm, tmp_path):
+        """Explicit runtime-task persistence remains available for callers that need it."""
+        task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        registry = MagicMock()
+        registry.get_tool_names = MagicMock(return_value=["read"])
+        registry._tools = {
+            "read": SimpleNamespace(
+                name="read",
+                description="Read file",
+                parameters={},
+                sensitive=False,
+                source="built_in",
+                metadata={"capability_group": "read"},
+            )
+        }
+        registry.call_tool = AsyncMock(return_value="content")
+
+        agent = create_doraemon_agent(
+            llm_client=mock_llm,
+            tool_registry=registry,
+            mode="build",
+            task_manager=task_manager,
+        )
+
+        result = await agent.run("Inspect README and summarize", create_runtime_task=True)
 
         assert result.success is True
         tasks = task_manager.list_tasks()

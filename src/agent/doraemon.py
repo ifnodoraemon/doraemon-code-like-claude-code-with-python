@@ -98,6 +98,7 @@ class DoraemonAgent(ReActAgent):
         self.allowed_tool_names = (
             set(allowed_tool_names) if allowed_tool_names is not None else None
         )
+        self._active_trace_run_id: str | None = None
 
         if trace:
             self._trace = trace
@@ -332,7 +333,10 @@ class DoraemonAgent(ReActAgent):
             source = (
                 getattr(tool_definition, "source", "built_in") if tool_definition else "built_in"
             )
-            metadata = getattr(tool_definition, "metadata", {}) if tool_definition else {}
+            raw_metadata = getattr(tool_definition, "metadata", None) if tool_definition else None
+            metadata = dict(raw_metadata or {})
+            if self._active_trace_run_id:
+                metadata["run_id"] = self._active_trace_run_id
             self._trace.tool_call(
                 name,
                 arguments,
@@ -435,11 +439,14 @@ class DoraemonAgent(ReActAgent):
     async def run(
         self,
         input: str,
-        create_runtime_task: bool = True,
+        create_runtime_task: bool = False,
         **kwargs,
     ) -> AgentResult:
         """Run the agent with lifecycle hooks and trace recording."""
+        trace_run_id = kwargs.pop("trace_run_id", None)
         runtime_task_id = self._begin_runtime_task(input) if create_runtime_task else None
+        previous_trace_run_id = self._active_trace_run_id
+        self._active_trace_run_id = trace_run_id
 
         task_manager_token = None
         if self.task_manager is not None:
@@ -456,6 +463,7 @@ class DoraemonAgent(ReActAgent):
                     "active_tools": [tool.name for tool in self.tools],
                     "active_skills": [],
                     "active_mcp_extensions": self.active_mcp_extensions.copy(),
+                    "run_id": trace_run_id,
                     "runtime_task_id": runtime_task_id,
                     "worker_role": self.worker_role,
                 },
@@ -497,6 +505,7 @@ class DoraemonAgent(ReActAgent):
             self._finish_runtime_task(runtime_task_id, success=False, error=str(e))
             raise
         finally:
+            self._active_trace_run_id = previous_trace_run_id
             if task_manager_token is not None:
                 from src.servers.task import reset_task_manager
 
