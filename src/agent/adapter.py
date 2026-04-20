@@ -574,11 +574,18 @@ class AgentSession:
     def close(self) -> Path | None:
         """Close session resources from synchronous callers."""
         try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(self.aclose())
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                import concurrent.futures
 
-        raise RuntimeError("close() cannot run inside an active event loop; use await aclose().")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(asyncio.run, self.aclose())
+                    future.result(timeout=30)
+                return
+        except RuntimeError:
+            pass
+
+        asyncio.run(self.aclose())
 
     def reset(self) -> None:
         """Reset the session (preserves trace)."""

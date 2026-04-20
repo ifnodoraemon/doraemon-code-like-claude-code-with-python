@@ -5,8 +5,10 @@ import {
     ChevronDown,
     ChevronLeft,
     ChevronRight,
+    Menu,
     Network,
     Plus,
+    Search,
     Send,
     Sparkles,
     Square,
@@ -16,6 +18,9 @@ import {
 
 import MessageBubble from './components/MessageBubble'
 import AgentTimeline, { type TimelineEntry } from './components/AgentTimeline'
+import DiffViewer from './components/DiffViewer'
+import CostIndicator from './components/CostIndicator'
+import MobileSessionDrawer from './components/MobileSessionDrawer'
 
 import {
     filterMessagesForRange,
@@ -201,6 +206,8 @@ function App() {
     const [workerAssignments, setWorkerAssignments] = useState<Record<string, WorkerAssignment>>({})
     const [tools, setTools] = useState<ToolCatalogItem[]>([])
     const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false)
+    const [sessionSearch, setSessionSearch] = useState('')
+    const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
     const [timeline, setTimeline] = useState<TimelineEntry[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -897,13 +904,27 @@ function App() {
                         onClick={resetConversation}
                         className="mt-3 flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/5 px-3 py-2.5 text-sm text-slate-200 transition hover:bg-white/10"
                     >
-                        <Plus size={15} /> New Chat
+                        <Plus size={15} /> 新建会话
                     </button>
 
                     <div className="mt-4 flex-1 overflow-y-auto">
-                        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-500">Sessions</div>
+                        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-500">会话</div>
+                        <div className="mb-2">
+                            <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-black/20 px-2 py-1.5">
+                                <Search size={12} className="text-slate-500" />
+                                <input
+                                    type="text"
+                                    value={sessionSearch}
+                                    onChange={e => setSessionSearch(e.target.value)}
+                                    placeholder="搜索..."
+                                    className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-500"
+                                />
+                            </div>
+                        </div>
                         <div className="space-y-1">
-                            {sessions.map((session) => (
+                            {sessions
+                                .filter(s => !sessionSearch || (s.name || 'Untitled Session').toLowerCase().includes(sessionSearch.toLowerCase()))
+                                .map((session) => (
                                 <button
                                     key={session.id}
                                     onClick={() => {
@@ -922,9 +943,9 @@ function App() {
                                             : 'border-transparent bg-transparent text-slate-400 hover:bg-white/5'
                                     }`}
                                 >
-                                    <div className="truncate font-medium">{session.name || 'Untitled Session'}</div>
+                                    <div className="truncate font-medium">{session.name || '未命名会话'}</div>
                                     <div className="mt-0.5 text-xs text-slate-500">
-                                        {session.message_count} messages
+                                        {session.message_count} 条消息
                                     </div>
                                 </button>
                             ))}
@@ -981,10 +1002,18 @@ function App() {
 
                 <main className="flex min-w-0 flex-1 flex-col gap-3">
                     <section className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-slate-950/70 px-4 py-2.5 backdrop-blur">
+                        <button
+                            type="button"
+                            onClick={() => setMobileDrawerOpen(true)}
+                            className="xl:hidden text-slate-400 hover:text-white"
+                        >
+                            <Menu size={18} />
+                        </button>
                         <div className="flex items-center gap-2 text-sm text-slate-300">
                             <span className="font-mono text-xs text-slate-500">{currentProjectDir || '...'}</span>
                         </div>
                         <div className="ml-auto flex items-center gap-2">
+                            <CostIndicator sessionId={currentSessionId} />
                             <SummaryCard
                                 icon={<Bot size={13} />}
                                 label="Mode"
@@ -1346,11 +1375,43 @@ function App() {
                                     </div>
                                 )}
                             </CollapsiblePanel>
-                                </>
-                            )}
-                        </aside>
-                    </div>
-                </main>
+
+                            <DiffViewer
+                                sessionId={currentSessionId}
+                                isStreaming={isStreaming}
+                                onUndo={() => {
+                                    if (currentSessionId) {
+                                        void fetchSessionDetail(currentSessionId, {
+                                            messageLimit: DEFAULT_MESSAGE_WINDOW,
+                                            mode: 'replace',
+                                            preserveRunSelection: false,
+                                        })
+                                    }
+                                }}
+                            />
+                                 </>
+                             )}
+                         </aside>
+                     </div>
+                 </main>
+
+                <MobileSessionDrawer
+                    sessions={sessions}
+                    currentSessionId={currentSessionId}
+                    onSelect={(id) => {
+                        cancelActiveStream()
+                        invalidateSessionDetailRequests(id)
+                        invalidateRunDetailRequests()
+                        setUiError(null)
+                        setSessionView()
+                        clearConversationWindow({ clearRuns: true })
+                        setNeedsSessionHydration(true)
+                        setCurrentSessionId(id)
+                    }}
+                    onNewChat={resetConversation}
+                    onClose={() => setMobileDrawerOpen(false)}
+                    open={mobileDrawerOpen}
+                />
             </div>
         </div>
     )

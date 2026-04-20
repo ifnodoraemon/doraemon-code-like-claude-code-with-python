@@ -109,9 +109,11 @@ class ReActAgent(BaseAgent):
         Observe the current environment state.
 
         Enhanced: Dynamic context retrieval based on the current goal.
+        Uses set-based dedup to avoid O(N) membership checks.
         """
         tool_results = []
         errors = []
+        seen_ids: set[int] = set()
 
         recent_limit = 3
         history_len = len(self.state.tool_history)
@@ -120,21 +122,24 @@ class ReActAgent(BaseAgent):
         for tc in self.state.tool_history[recent_start:]:
             if tc.result or tc.error:
                 tool_results.append(tc)
+                seen_ids.add(id(tc))
             if tc.error:
                 errors.append(tc.error)
 
         goal = (self.state.goal or "").lower()
         if goal:
+            goal_words = [w for w in goal.split() if len(w) > 3]
             for tc in reversed(self.state.tool_history[:recent_start]):
-                result_text = (tc.result or "").lower()
-                if any(word in result_text for word in goal.split() if len(word) > 3):
-                    if tc not in tool_results:
-                        tool_results.insert(0, tc)
-
-                if tc.name in {"write", "run"}:
-                    if tc not in tool_results:
-                        tool_results.insert(0, tc)
-
+                tc_id = id(tc)
+                if tc_id in seen_ids:
+                    continue
+                is_relevant = tc.name in {"write", "run"}
+                if not is_relevant and goal_words:
+                    result_text = (tc.result or "").lower()
+                    is_relevant = any(word in result_text for word in goal_words)
+                if is_relevant:
+                    tool_results.insert(0, tc)
+                    seen_ids.add(tc_id)
                 if len(tool_results) > 15:
                     break
 

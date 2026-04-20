@@ -260,7 +260,14 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
                 pass
 
             return_code = process.poll()
-            if return_code is not None and not t.is_alive() and output_queue.empty():
+            if return_code is not None:
+                t.join(timeout=2.0)
+                while True:
+                    try:
+                        line = output_queue.get_nowait()
+                        output_lines.append(line)
+                    except queue.Empty:
+                        break
                 break
 
             if time.time() - last_activity_time > timeout:

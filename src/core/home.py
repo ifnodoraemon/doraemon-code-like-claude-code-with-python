@@ -427,6 +427,8 @@ class Trace:
         else:
             traces_dir = get_traces_dir()
 
+        self._cleanup_old_traces(traces_dir, max_files=200, max_age_days=30)
+
         trace_file = traces_dir / f"{self.session_id}.json"
 
         data = {
@@ -445,6 +447,36 @@ class Trace:
 
         trace_file.write_text(json.dumps(data, indent=2))
         return trace_file
+
+    @staticmethod
+    def _cleanup_old_traces(traces_dir: Path, max_files: int = 200, max_age_days: int = 30) -> None:
+        """Remove oldest trace files when count exceeds max_files or age exceeds max_age_days."""
+        try:
+            trace_files = sorted(
+                traces_dir.glob("*.json"),
+                key=lambda p: p.stat().st_mtime,
+            )
+            now = time.time()
+            cutoff = now - (max_age_days * 86400)
+            removed = 0
+            for f in trace_files:
+                should_remove = False
+                try:
+                    if f.stat().st_mtime < cutoff:
+                        should_remove = True
+                except OSError:
+                    should_remove = True
+                if should_remove:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+            if len(trace_files) - removed > max_files:
+                for f in trace_files[removed : len(trace_files) - max_files + removed]:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+            if removed:
+                logger.info("Cleaned up %d old trace files from %s", removed, traces_dir)
+        except OSError:
+            pass
 
     @classmethod
     def load(cls, session_id: str, project_dir: Path | None = None) -> "Trace | None":

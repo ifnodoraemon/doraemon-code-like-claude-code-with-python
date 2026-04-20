@@ -51,6 +51,9 @@ class GatewayClient:
             base_url=self.config.base_url,
             headers=headers,
             timeout=httpx.Timeout(self.config.timeout),
+            limits=httpx.Limits(
+                max_connections=20, max_keepalive_connections=5, keepalive_expiry=60
+            ),
         )
 
     async def close(self) -> None:
