@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.agent.adapter import AgentSession
+from src.webui.routes.sessions import mark_stream_active, mark_stream_finished
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +62,17 @@ async def chat_endpoint(request: ChatRequest):
         )
 
         async def event_generator() -> AsyncGenerator[str, None]:
+            mark_stream_active(session.session_id)
+
             def _current_orchestration_payload() -> dict[str, Any]:
                 state = session.get_orchestration_state()
                 if state:
                     return {
-                        "result": {key: value for key, value in state.items() if key != "task_graph"},
+                        "result": {
+                            key: value for key, value in state.items() if key != "task_graph"
+                        },
                         "task_graph": state.get("task_graph", []),
                     }
-
                 return {
                     "result": {
                         "root_task_id": None,
@@ -181,6 +185,7 @@ async def chat_endpoint(request: ChatRequest):
                 yield f"data: {json.dumps(err_data)}\n\n"
                 yield "data: [DONE]\n\n"
             finally:
+                mark_stream_finished(session.session_id)
                 await session.aclose()
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")

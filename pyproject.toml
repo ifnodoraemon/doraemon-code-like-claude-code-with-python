@@ -36,6 +36,9 @@ dependencies = [
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
     
+    # Security
+    "keyring>=25.0.0",
+    
     # HTTP
     "httpx>=0.24.0",
 ]

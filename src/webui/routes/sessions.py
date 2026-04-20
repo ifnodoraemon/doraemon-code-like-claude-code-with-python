@@ -1,11 +1,13 @@
 """
 Sessions API Routes
 
-Manages chat sessions.
+Manages chat sessions, diffs, and undo.
 """
 
 import re
+import time
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -13,6 +15,17 @@ from pydantic import BaseModel
 from src.core.session import SessionManager
 
 router = APIRouter()
+
+_ACTIVE_STREAMS: dict[str, float] = {}
+
+
+def mark_stream_active(session_id: str) -> None:
+    _ACTIVE_STREAMS[session_id] = time.time()
+
+
+def mark_stream_finished(session_id: str) -> None:
+    _ACTIVE_STREAMS.pop(session_id, None)
+
 
 _RUN_SUMMARY_OMIT_FIELDS = {
     "task_graph",
@@ -94,7 +107,11 @@ async def get_session(
         messages = []
     elif message_offset is not None:
         message_offset = min(max(0, message_offset), total_messages)
-        end = total_messages if message_limit is None else min(total_messages, message_offset + message_limit)
+        end = (
+            total_messages
+            if message_limit is None
+            else min(total_messages, message_offset + message_limit)
+        )
         messages = list(session.messages[message_offset:end])
     elif message_limit is not None:
         message_offset = max(0, total_messages - message_limit)
@@ -139,3 +156,145 @@ async def get_session_run(session_id: str, run_id: str):
         return {"run": _serialize_run(session.orchestration_state, include_details=True)}
 
     raise HTTPException(status_code=404, detail="Run not found")
+
+
+@router.get("/{session_id}/diff")
+async def get_session_diff(
+    session_id: str,
+    checkpoint_id: str | None = None,
+    include_content: bool = True,
+):
+    """Return file changes made in a session, derived from checkpoints."""
+    if not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    from src.core.checkpoint import CheckpointManager
+
+    mgr = SessionManager(base_dir=Path.cwd() / ".agent" / "sessions")
+    session = mgr.resume_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    cp_mgr = CheckpointManager(project=session.metadata.project or "default")
+    session_cp_ids = getattr(session.metadata, "checkpoints", None) or []
+
+    checkpoints_data: list[dict[str, Any]] = []
+
+    target_ids = [checkpoint_id] if checkpoint_id else session_cp_ids
+    if not target_ids:
+        created_at = getattr(session.metadata, "created_at", 0) or 0
+        target_ids = [
+            cp.id for cp in cp_mgr.checkpoints if getattr(cp, "created_at", 0) or 0 >= created_at
+        ]
+
+    for cp_id in target_ids:
+        cp = cp_mgr.get_checkpoint(cp_id) if hasattr(cp_mgr, "get_checkpoint") else None
+        if cp is None:
+            continue
+        files: list[dict[str, Any]] = []
+        for snap in cp.files:
+            file_entry: dict[str, Any] = {"path": snap.path}
+            before: dict[str, Any] = {"exists": snap.exists}
+            if include_content:
+                before["content"] = snap.content
+            before["size"] = snap.size
+            before["mtime"] = snap.mtime
+
+            after: dict[str, Any] = {"exists": False, "content": None, "size": None, "mtime": None}
+            try:
+                current = Path(snap.path)
+                if current.exists():
+                    after["exists"] = True
+                    after["mtime"] = current.stat().st_mtime
+                    after["size"] = current.stat().st_size
+                    if include_content:
+                        after["content"] = current.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                pass
+
+            file_entry["before"] = before
+            file_entry["after"] = after
+            files.append(file_entry)
+
+        checkpoints_data.append(
+            {
+                "id": cp.id,
+                "created_at": getattr(cp, "created_at", None),
+                "prompt": getattr(cp, "prompt", None),
+                "description": getattr(cp, "description", ""),
+                "files": files,
+            }
+        )
+
+    return {
+        "session_id": session_id,
+        "checkpoint_count": len(checkpoints_data),
+        "checkpoints": checkpoints_data,
+    }
+
+
+class UndoRequest(BaseModel):
+    checkpoint_id: str | None = None
+    mode: str = "code"
+    dry_run: bool = False
+
+
+@router.post("/{session_id}/undo")
+async def undo_session(session_id: str, request: UndoRequest):
+    """Revert the most recent write operation by rewinding to a checkpoint."""
+    if not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    if session_id in _ACTIVE_STREAMS:
+        raise HTTPException(
+            status_code=409, detail="Cannot undo while session has an active agent stream"
+        )
+
+    from src.core.checkpoint import CheckpointManager
+
+    mgr = SessionManager(base_dir=Path.cwd() / ".agent" / "sessions")
+    session = mgr.resume_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    cp_mgr = CheckpointManager(project=session.metadata.project or "default")
+    session_cp_ids = getattr(session.metadata, "checkpoints", None) or []
+
+    target_id = request.checkpoint_id or (session_cp_ids[-1] if session_cp_ids else None)
+    if not target_id:
+        try:
+            target_id = cp_mgr.checkpoints[-1].id
+        except (IndexError, AttributeError):
+            raise HTTPException(
+                status_code=404, detail="No checkpoints available for undo"
+            ) from None
+
+    if request.dry_run:
+        cp = cp_mgr.get_checkpoint(target_id) if hasattr(cp_mgr, "get_checkpoint") else None
+        restored = [f.path for f in (cp.files if cp else [])] if cp else []
+        return {
+            "checkpoint_id": target_id,
+            "mode": request.mode,
+            "restored_files": restored,
+            "deleted_files": [],
+            "failed_files": [],
+            "dry_run": True,
+        }
+
+    try:
+        result = cp_mgr.rewind(target_id, mode=request.mode)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Undo failed: {e}") from e
+
+    restored = getattr(result, "restored_files", [])
+    deleted = getattr(result, "deleted_files", [])
+    failed = getattr(result, "failed_files", [])
+
+    return {
+        "checkpoint_id": target_id,
+        "mode": request.mode,
+        "restored_files": restored,
+        "deleted_files": deleted,
+        "failed_files": failed,
+        "dry_run": False,
+    }

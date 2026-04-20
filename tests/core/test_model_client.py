@@ -280,7 +280,7 @@ class TestDirectModelClient:
 
     def test_build_openai_responses_params_uses_structured_input_items(self):
         """Responses API input should use official structured content blocks."""
-        params = DirectModelClient._build_openai_responses_params(
+        params = OpenAIAdapter.build_responses_params(
             model="gpt-5.4",
             msg_list=[
                 {"role": "user", "content": "Reply with exactly pong."},
@@ -309,7 +309,7 @@ class TestDirectModelClient:
 
     def test_build_openai_responses_params_encodes_tool_history_for_responses(self):
         """Assistant tool calls and tool outputs should be encoded in Responses format."""
-        params = DirectModelClient._build_openai_responses_params(
+        params = OpenAIAdapter.build_responses_params(
             model="gpt-5.4",
             msg_list=[
                 {
@@ -359,7 +359,7 @@ class TestDirectModelClient:
 
     def test_build_openai_responses_params_prefers_provider_items_for_replay(self):
         """Stored provider items should be replayed verbatim for Responses tool loops."""
-        params = DirectModelClient._build_openai_responses_params(
+        params = OpenAIAdapter.build_responses_params(
             model="gpt-5.4",
             msg_list=[
                 {
@@ -370,7 +370,7 @@ class TestDirectModelClient:
                             "type": "function_call",
                             "call_id": "call_1",
                             "name": "echo",
-                            "arguments": "{\"text\":\"hi\"}",
+                            "arguments": '{"text":"hi"}',
                         },
                     ],
                 }
@@ -386,13 +386,13 @@ class TestDirectModelClient:
                 "type": "function_call",
                 "call_id": "call_1",
                 "name": "echo",
-                "arguments": "{\"text\":\"hi\"}",
+                "arguments": '{"text":"hi"}',
             },
         ]
 
     def test_build_openai_responses_tools_sets_non_strict_mode(self):
         """Responses tool definitions should explicitly disable strict mode for compatibility."""
-        tools = DirectModelClient._build_openai_responses_tools(
+        tools = OpenAIAdapter.build_responses_tools(
             [
                 ToolDefinition(
                     name="echo",

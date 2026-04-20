@@ -253,6 +253,7 @@ class ClientConfig:
     def from_env(cls) -> "ClientConfig":
         """Load runtime configuration from the project config file."""
         from src.core.config import load_config
+        from src.core.config.secrets import get_secret
 
         config_data = load_config()
         model = config_data.get("model")
@@ -267,14 +268,14 @@ class ClientConfig:
             model=model,
             temperature=config_data.get("temperature", 0.7),
             gateway_url=gateway_url,
-            gateway_key=config_data.get("gateway_key"),
-            google_api_key=config_data.get("google_api_key"),
-            openai_api_key=config_data.get("openai_api_key"),
+            gateway_key=get_secret("gateway_key", config_data.get("gateway_key")),
+            google_api_key=get_secret("google_api_key", config_data.get("google_api_key")),
+            openai_api_key=get_secret("openai_api_key", config_data.get("openai_api_key")),
             openai_api_base=config_data.get("openai_api_base"),
             openai_protocol=config_data.get("openai_protocol", "auto"),
             openai_capabilities=ProviderCapabilities(**config_data.get("openai_capabilities", {})),
             openai_responses_include=config_data.get("openai_responses_include", []),
-            anthropic_api_key=config_data.get("anthropic_api_key"),
+            anthropic_api_key=get_secret("anthropic_api_key", config_data.get("anthropic_api_key")),
             anthropic_api_base=config_data.get("anthropic_api_base"),
             anthropic_protocol=config_data.get("anthropic_protocol", "auto"),
             anthropic_capabilities=ProviderCapabilities(

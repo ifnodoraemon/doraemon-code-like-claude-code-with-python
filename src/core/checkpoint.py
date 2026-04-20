@@ -226,6 +226,16 @@ class CheckpointManager:
         self._current = None
         self._pending_files.clear()
 
+    def snapshot(self, path: str, reason: str = "") -> bool:
+        """Convenience: take a single-file snapshot in its own checkpoint."""
+        self.begin_checkpoint(reason)
+        result = self.snapshot_file(path)
+        if result:
+            self.finalize_checkpoint(description=reason)
+        else:
+            self.discard_checkpoint()
+        return result
+
     def list_checkpoints(self, limit: int = 20) -> list[dict[str, Any]]:
         """List recent checkpoints."""
         result = []
