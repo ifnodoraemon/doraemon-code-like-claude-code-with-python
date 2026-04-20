@@ -163,7 +163,7 @@ class SessionManager:
 
     def _generate_id(self) -> str:
         """Generate a unique session ID."""
-        return uuid.uuid4().hex[:12]
+        return uuid.uuid4().hex[:20]
 
     def _is_safe_session_id(self, session_id: str) -> bool:
         """Return whether a session identifier is safe to use as a filename."""

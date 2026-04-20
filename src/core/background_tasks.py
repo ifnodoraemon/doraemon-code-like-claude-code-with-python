@@ -152,7 +152,7 @@ class BackgroundTaskManager:
                 "Wait for a task to complete or cancel one."
             )
 
-        task_id = str(uuid.uuid4())[:8]
+        task_id = uuid.uuid4().hex[:16]
         task = BackgroundTask(
             id=task_id,
             name=name,
@@ -266,7 +266,7 @@ class BackgroundTaskManager:
         Returns:
             Task ID
         """
-        task_id = str(uuid.uuid4())[:8]
+        task_id = uuid.uuid4().hex[:16]
         bg_task = BackgroundTask(
             id=task_id,
             name=name,

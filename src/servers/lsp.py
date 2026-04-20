@@ -529,6 +529,9 @@ async def lsp_rename(
     if not os.path.exists(valid_path):
         return f"Error: Path not found: {path}"
 
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", new_name):
+        return f"Error: Invalid new_name '{new_name}'. Only alphanumeric characters and underscores are allowed (must start with letter or underscore)."
+
     try:
         # Find affected files
         if os.path.isdir(valid_path):

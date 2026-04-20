@@ -4,6 +4,7 @@ Sessions API Routes
 Manages chat sessions, diffs, and undo.
 """
 
+import os
 import re
 import time
 from pathlib import Path
@@ -202,7 +203,11 @@ async def get_session_diff(
 
             after: dict[str, Any] = {"exists": False, "content": None, "size": None, "mtime": None}
             try:
-                current = Path(snap.path)
+                snap_path = snap.path
+                if not os.path.isabs(snap_path):
+                    continue
+                resolved = os.path.realpath(snap_path)
+                current = Path(resolved)
                 if current.exists():
                     after["exists"] = True
                     after["mtime"] = current.stat().st_mtime

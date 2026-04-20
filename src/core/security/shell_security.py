@@ -73,7 +73,7 @@ class ShellConfig:
             "rm -rf /*",
             "mkfs",
             "dd if=/dev/zero",
-            ":(){:|:&};:",  # fork bomb
+            ":(){ :|:& };:",  # fork bomb
             "chmod -R 777 /",
             "chown -R",
             "> /dev/sda",
@@ -88,6 +88,8 @@ class ShellConfig:
         default_factory=lambda: [
             "rm -rf",
             "rm -r",
+            "rm ",
+            "chmod ",
             "sudo",
             "chmod 777",
             "curl | bash",
@@ -102,6 +104,9 @@ class ShellConfig:
             "pkill",
             "docker rm",
             "docker rmi",
+            "sed -i",
+            "awk",
+            "tee ",
         ]
     )
 

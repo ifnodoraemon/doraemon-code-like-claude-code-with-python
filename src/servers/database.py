@@ -1,10 +1,13 @@
 import json
 import logging
+import os
 import re
 import sqlite3
 
 from src.core.logger import configure_root_logger
 from src.core.security.security import validate_path
+
+_DB_WRITE_MAX_ROWS = int(os.environ.get("AGENT_DB_WRITE_MAX_ROWS", "1000"))
 
 # Setup logging
 configure_root_logger()
@@ -90,7 +93,6 @@ def db_write_query(query: str, db_path: str, params: list | None = None) -> str:
     """
     conn = None
     try:
-        # Block destructive SQL operations
         first_keyword = query.strip().split()[0].upper() if query.strip() else ""
         destructive_keywords = {"DROP", "TRUNCATE", "ALTER"}
         if first_keyword in destructive_keywords:
@@ -103,12 +105,38 @@ def db_write_query(query: str, db_path: str, params: list | None = None) -> str:
         if _contains_multiple_statements(query):
             return "Error: Multiple SQL statements are not allowed. Please execute one statement at a time."
 
+        if first_keyword in ("UPDATE", "DELETE") or re.search(r'\b(UPDATE|DELETE)\b', query, re.IGNORECASE):
+            upper_q = query.upper()
+            update_delete_part = upper_q
+            cte_match = re.search(r'\bWITH\b', upper_q)
+            if cte_match:
+                last_update_delete = None
+                for m in re.finditer(r'\b(UPDATE|DELETE)\b', upper_q):
+                    last_update_delete = m.end()
+                if last_update_delete is not None:
+                    update_delete_part = upper_q[last_update_delete:]
+            stripped = re.sub(r"--[^\n]*", "", update_delete_part)
+            stripped = re.sub(r"/\*.*?\*/", "", stripped, flags=re.DOTALL)
+            stripped = re.sub(r"'[^']*'", "", stripped)
+            stripped = re.sub(r'"[^"]*"', "", stripped)
+            if "WHERE" not in stripped and "LIMIT" not in stripped:
+                return (
+                    "Error: UPDATE/DELETE without WHERE or LIMIT clause is blocked for safety. "
+                    "Add a WHERE clause or LIMIT to restrict affected rows."
+                )
+
         conn = _get_connection(db_path)
         with conn:
             cursor = conn.cursor()
             cursor.execute(query, params or [])
             conn.commit()
             row_count = cursor.rowcount
+
+        if row_count > _DB_WRITE_MAX_ROWS:
+            return (
+                f"Warning: Query affected {row_count} rows (limit: {_DB_WRITE_MAX_ROWS}). "
+                "Consider adding a more restrictive WHERE clause."
+            )
 
         return f"Query executed successfully. Rows affected: {row_count}"
 
@@ -145,6 +173,8 @@ def db_describe_table(table_name: str, db_path: str) -> str:
     if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
         return f"Error: Invalid table name '{table_name}'"
 
+    # PRAGMA does not support parameterized queries; the regex validation above
+    # ensures table_name is safe for string interpolation.
     query = f"PRAGMA table_info({table_name});"
     conn = None
     try:

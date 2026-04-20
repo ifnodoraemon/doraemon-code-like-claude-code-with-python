@@ -263,9 +263,12 @@ class PluginManager:
                 # Python script command
                 def make_handler(path: Path):
                     def handler(**kwargs):
-                        import runpy
-
-                        return runpy.run_path(str(path), run_name="__main__")
+                        logger.warning(
+                            "Plugin script execution is restricted: %s. "
+                            "Use MCP extensions for untrusted plugin code.",
+                            path,
+                        )
+                        return {"error": "Direct script execution is disabled for security. Use MCP extensions instead."}
 
                     return handler
 
@@ -412,12 +415,28 @@ class PluginManager:
                 # Install from cloned path
                 plugin = self._install_from_local(tmp_path, target_base, force)
 
-                if plugin and sha:
-                    plugin.sha = sha
-                    # Update state
+                if plugin:
+                    if sha:
+                        plugin.sha = sha
+                    else:
+                        result = subprocess.run(
+                            ["git", "rev-parse", "HEAD"],
+                            cwd=tmp_path,
+                            capture_output=True,
+                            text=True,
+                        )
+                        head_sha = result.stdout.strip() if result.returncode == 0 else None
+                        if head_sha:
+                            plugin.sha = head_sha
+                            logger.warning(
+                                "Plugin '%s' installed without pinned SHA. "
+                                "Current HEAD is %s. Pin with owner/repo@%s for reproducibility.",
+                                repo, head_sha, head_sha,
+                            )
+
                     state_path = plugin.path / ".state.json"
                     state = json.loads(state_path.read_text(encoding="utf-8"))
-                    state["sha"] = sha
+                    state["sha"] = plugin.sha
                     state["repository"] = repo
                     state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 

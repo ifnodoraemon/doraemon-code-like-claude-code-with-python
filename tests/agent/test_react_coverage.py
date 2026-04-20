@@ -174,11 +174,10 @@ class TestCompressContextSemantic:
 
 class TestSummarizeMessages:
     @pytest.mark.asyncio
-    async def test_summarize_messages_returns_empty(self):
+    async def test_summarize_messages_removed(self):
         llm = AsyncMock()
         agent = ReActAgent(llm_client=llm, tools=[])
-        result = await agent._summarize_messages([])
-        assert result == ""
+        assert not hasattr(agent, "_summarize_messages")
 
 
 class TestBuildResultNoStartTime:

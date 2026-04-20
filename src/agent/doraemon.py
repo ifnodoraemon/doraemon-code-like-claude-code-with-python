@@ -17,13 +17,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.core.checkpoint import CheckpointManager
-from src.core.hooks import HookManager
-from src.core.llm.model_client import ModelClient
-from src.core.skills import SkillManager
-from src.core.tasks import TaskManager
-from src.host.tools import ToolRegistry
-
 from src.agent.react import ReActAgent
 from src.agent.state import AgentState
 from src.agent.types import (
@@ -33,11 +26,14 @@ from src.agent.types import (
     Thought,
     ToolDefinition,
 )
+from src.core.checkpoint import CheckpointManager
 from src.core.home import Trace, set_project_dir
 from src.core.hooks import HookEvent, HookManager
-from src.core.tasks import TaskStatus
+from src.core.llm.model_client import ModelClient
+from src.core.skills import SkillManager
+from src.core.tasks import TaskManager, TaskStatus
 from src.core.tool_selector import get_capability_groups_for_mode
-from src.host.tools import LazyToolFunction
+from src.host.tools import LazyToolFunction, ToolRegistry
 
 logger = logging.getLogger(__name__)
 

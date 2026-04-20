@@ -6,8 +6,8 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from src.core.tool_selector import (
-    get_capability_groups_for_mode,
     get_capability_group_for_tool,
+    get_capability_groups_for_mode,
     get_tools_for_mode,
     get_visible_modes_for_tool,
 )

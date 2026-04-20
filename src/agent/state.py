@@ -7,7 +7,7 @@ Replaces multiple managers with a single cohesive state object.
 from dataclasses import dataclass, field
 from typing import Any
 
-from .types import Message, ToolCall
+from .types import AgentStatus, Message, ToolCall
 
 
 @dataclass
@@ -39,11 +39,11 @@ class AgentState:
     estimated_tokens: int = 0
 
     max_messages: int = 50
-    _compressed_summary: str = ""
+    _compressed_summary: str = field(default="")
 
     goal: str | None = None
     is_finished: bool = False
-    status: str = "idle"
+    status: str = "idle"  # Use AgentStatus values
 
     user_input: str | None = None
     last_response: str | None = None
@@ -170,7 +170,7 @@ class AgentState:
         self.turn_count = 0
         self.goal = None
         self.is_finished = False
-        self.status = "idle"
+        self.status = AgentStatus.IDLE.value
         self.user_input = None
         self.last_response = None
         self.last_error = None
@@ -179,17 +179,17 @@ class AgentState:
         """Set the agent's goal."""
         self.goal = goal
         self.is_finished = False
-        self.status = "running"
+        self.status = AgentStatus.RUNNING.value
 
     def mark_finished(self) -> None:
         """Mark the agent as finished."""
         self.is_finished = True
-        self.status = "finished"
+        self.status = AgentStatus.FINISHED.value
 
     def mark_error(self, error: str) -> None:
         """Mark an error state."""
         self.last_error = error
-        self.status = "error"
+        self.status = AgentStatus.ERROR.value
 
     def increment_turn(self) -> bool:
         """Increment turn counter, return True if within limits."""
@@ -212,28 +212,68 @@ class AgentState:
         """Serialize state to dictionary."""
         return {
             "mode": self.mode,
+            "max_turns": self.max_turns,
             "turn_count": self.turn_count,
             "is_finished": self.is_finished,
             "status": self.status,
             "goal": self.goal,
+            "max_context_tokens": self.max_context_tokens,
             "estimated_tokens": self.estimated_tokens,
+            "user_input": self.user_input,
+            "last_response": self.last_response,
+            "last_error": self.last_error,
+            "metadata": self.metadata,
             "tool_call_count": self.get_tool_call_count(),
             "message_count": len(self.messages),
+            "messages": [msg.to_api_format() for msg in self.messages],
+            "tool_history": [tc.to_dict() for tc in self.tool_history],
+            "compressed_summary": self._compressed_summary,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AgentState":
         """Deserialize state from dictionary."""
-        return cls(
+        messages = [
+            Message(
+                role=m.get("role", "user"),
+                content=m.get("content"),
+                provider_items=m.get("provider_items"),
+                tool_calls=m.get("tool_calls"),
+                tool_call_id=m.get("tool_call_id"),
+                name=m.get("name"),
+                thought=m.get("thought"),
+            )
+            for m in data.get("messages", [])
+        ]
+        tool_history = [
+            ToolCall(
+                id=tc.get("id", ""),
+                name=tc.get("name", ""),
+                arguments=tc.get("arguments", {}),
+                result=tc.get("result"),
+                error=tc.get("error"),
+                duration=tc.get("duration", 0.0),
+            )
+            for tc in data.get("tool_history", [])
+        ]
+        state = cls(
             mode=data.get("mode", "build"),
             max_turns=data.get("max_turns", 100),
             turn_count=data.get("turn_count", 0),
             max_context_tokens=data.get("max_context_tokens", 128000),
+            estimated_tokens=data.get("estimated_tokens", 0),
             goal=data.get("goal"),
             is_finished=data.get("is_finished", False),
             status=data.get("status", "idle"),
+            user_input=data.get("user_input"),
+            last_response=data.get("last_response"),
+            last_error=data.get("last_error"),
             metadata=data.get("metadata", {}),
+            messages=messages,
+            tool_history=tool_history,
         )
+        state._compressed_summary = data.get("compressed_summary", "")
+        return state
 
     def create_checkpoint(self) -> dict[str, Any]:
         """Create a checkpoint for recovery."""
@@ -248,7 +288,41 @@ class AgentState:
         if "state" in checkpoint:
             state_data = checkpoint["state"]
             self.mode = state_data.get("mode", self.mode)
+            self.max_turns = state_data.get("max_turns", self.max_turns)
             self.turn_count = state_data.get("turn_count", 0)
             self.is_finished = state_data.get("is_finished", False)
             self.status = state_data.get("status", "idle")
             self.goal = state_data.get("goal")
+            self.max_context_tokens = state_data.get("max_context_tokens", self.max_context_tokens)
+            self.estimated_tokens = state_data.get("estimated_tokens", 0)
+            self.user_input = state_data.get("user_input")
+            self.last_response = state_data.get("last_response")
+            self.last_error = state_data.get("last_error")
+            self.metadata = state_data.get("metadata", {})
+
+        if "messages" in checkpoint:
+            self.messages = [
+                Message(
+                    role=m.get("role", "user"),
+                    content=m.get("content"),
+                    provider_items=m.get("provider_items"),
+                    tool_calls=m.get("tool_calls"),
+                    tool_call_id=m.get("tool_call_id"),
+                    name=m.get("name"),
+                    thought=m.get("thought"),
+                )
+                for m in checkpoint["messages"]
+            ]
+
+        if "tool_history" in checkpoint:
+            self.tool_history = [
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=tc.get("arguments", {}),
+                    result=tc.get("result"),
+                    error=tc.get("error"),
+                    duration=tc.get("duration", 0.0),
+                )
+                for tc in checkpoint["tool_history"]
+            ]

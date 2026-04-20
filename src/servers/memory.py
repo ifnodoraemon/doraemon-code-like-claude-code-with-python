@@ -42,7 +42,8 @@ def _notes_root() -> Path:
 
 def _notes_dir(collection_name: str) -> Path:
     """Resolve the directory for a project's notes."""
-    return _notes_root() / collection_name
+    safe_name = _slugify(collection_name)
+    return _notes_root() / safe_name
 
 
 def _slugify(value: str) -> str:
@@ -277,7 +278,8 @@ def _validate_note_path(note_path: Path, collection_name: str) -> bool:
     try:
         notes_root = _notes_dir(collection_name).resolve()
         resolved = note_path.resolve()
-        return str(resolved).startswith(str(notes_root))
+        resolved.relative_to(notes_root)
+        return True
     except (ValueError, OSError):
         return False
 

@@ -13,6 +13,7 @@ Modes:
 import logging
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -87,15 +88,34 @@ def _indent_code(code: str, spaces: int) -> str:
 
 
 def _get_sandbox_wrapper_code(user_code: str) -> str:
-    """Wrap user code with safety measures."""
+    """Wrap user code with safety measures.
+
+    NOTE: This wrapper provides defense-in-depth but is NOT a security
+    boundary. See _SANDBOX_WARNING for details.
+    """
     return f"""
 import sys
-import os
 
 _BLOCKED_MODULES = frozenset({{
     'subprocess', 'shutil', 'socket', 'http', 'urllib',
     'ftplib', 'smtplib', 'telnetlib', 'ctypes', 'multiprocessing',
+    'importlib', 'codecs', 'code', 'codeop', 'compileall',
+    'zipimport', 'pkgutil', 'site', 'runpy', 'pdb',
+    'os', 'signal', 'posixpath', 'ntpath',
 }})
+
+_UNSAFE_BUILTINS = frozenset({{
+    'exec', 'eval', 'compile', '__import__', 'globals', 'locals',
+    'breakpoint', 'exit', 'quit',
+}})
+
+_UNSAFE_DUNDERS = frozenset({{
+    '__import__',
+}})
+
+for _mod in list(sys.modules.keys()):
+    if _mod.split('.')[0] in _BLOCKED_MODULES:
+        del sys.modules[_mod]
 
 class _SandboxImportBlocker:
     def find_spec(self, name, path=None, target=None):
@@ -109,23 +129,35 @@ sys.meta_path.insert(0, _SandboxImportBlocker())
 import builtins as _builtins
 _SAFE_BUILTINS = frozenset({{
     'abs', 'all', 'any', 'bin', 'bool', 'divmod', 'enumerate', 'filter',
-    'float', 'getattr', 'hasattr', 'hash', 'hex', 'id', 'int', 'isinstance',
+    'float', 'hash', 'hex', 'id', 'int', 'isinstance',
     'issubclass', 'iter', 'len', 'list', 'map', 'max', 'min', 'next', 'oct',
     'ord', 'pow', 'print', 'range', 'repr', 'reversed', 'round', 'set',
-    'slice', 'sorted', 'str', 'sum', 'tuple', 'type', 'zip',
+    'slice', 'sorted', 'str', 'sum', 'tuple', 'zip',
     'True', 'False', 'None', 'bool', 'bytes', 'dict', 'float', 'frozenset',
     'int', 'list', 'set', 'str', 'tuple', 'complex', 'bytearray',
-    'classmethod', 'staticmethod', 'property', 'super', 'object',
+    'classmethod', 'staticmethod', 'property', 'super',
     'Exception', 'TypeError', 'ValueError', 'KeyError', 'IndexError',
     'AttributeError', 'RuntimeError', 'StopIteration', 'NotImplementedError',
     'IsADirectoryError', 'FileExistsError', 'FileNotFoundError',
     'PermissionError', 'IsADirectoryError', 'OSError', 'IOError',
 }})
 _original_getattr = _builtins.__dict__.get
+_ALLOWED_DUNDERS = frozenset({{
+    '__name__', '__doc__', '__module__',
+    '__init__', '__repr__', '__str__', '__len__',
+    '__iter__', '__next__', '__getitem__',
+    '__contains__', '__bool__', '__hash__', '__eq__',
+    '__enter__', '__exit__',
+}})
+
 class _SandboxBuiltins:
     def __getattr__(self, name):
-        if name.startswith('__') or name in _SAFE_BUILTINS:
+        if name in _UNSAFE_BUILTINS or name in _UNSAFE_DUNDERS:
+            raise NameError(f"name '{{name}}' is not available in sandbox mode")
+        if name in _ALLOWED_DUNDERS or name in _SAFE_BUILTINS:
             return _original_getattr(name)
+        if name.startswith('__'):
+            raise NameError(f"name '{{name}}' is not available in sandbox mode")
         raise NameError(f"name '{{name}}' is not available in sandbox mode")
     def __dir__(self):
         return list(_SAFE_BUILTINS)
@@ -292,8 +324,23 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
         return f"Error executing command: {str(e)}"
 
 
+_SANDBOX_WARNING = (
+    "Python sandbox mode runs code in a subprocess with resource limits "
+    "and import/builtin restrictions. It is NOT a true security boundary — "
+    "a determined attacker with knowledge of Python internals can escape "
+    "via object introspection chains. For untrusted code, use container "
+    "or VM isolation instead."
+)
+
+
 def _run_python(code: str, timeout: int) -> str:
-    """Execute Python code in a sandboxed environment."""
+    """Execute Python code in a sandboxed environment.
+
+    WARNING: The sandbox provides defense-in-depth (import blocking, builtin
+    restrictions, resource limits) but is NOT a security boundary. It runs
+    in the same OS user context and can be escaped via MRO chain traversal.
+    Only run code from sources you trust, or add container/VM isolation.
+    """
     logger.info("Executing Python code (%s chars)", len(code))
 
     limits = ResourceLimits(
@@ -307,9 +354,12 @@ def _run_python(code: str, timeout: int) -> str:
 
     script_path = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        tmp_dir = tempfile.mkdtemp(prefix="doraemon_sandbox_")
+        os.chmod(tmp_dir, 0o700)
+        script_path = os.path.join(tmp_dir, "_sandbox_code.py")
+        with open(script_path, "w", encoding="utf-8") as f:
             f.write(wrapped_code)
-            script_path = f.name
+        os.chmod(script_path, 0o600)
 
         subprocess_kwargs: dict = {
             "capture_output": True,
@@ -339,10 +389,11 @@ def _run_python(code: str, timeout: int) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
     finally:
-        if script_path and os.path.exists(script_path):
+        if script_path:
+            tmp_dir = os.path.dirname(script_path)
             try:
-                os.remove(script_path)
-            except OSError:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            except Exception:
                 pass
 
 

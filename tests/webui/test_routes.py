@@ -439,7 +439,7 @@ def test_root_api_routes_accept_paths_without_trailing_slash(monkeypatch):
 async def test_get_project_context_returns_startup_directory():
     payload = await get_project_context()
 
-    assert payload["project_dir"]
+    assert "project_dir" not in payload
     assert payload["project_name"]
 
 

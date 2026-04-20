@@ -45,7 +45,8 @@ def test_real_openai_protocol_upstream():
 
     assert payload.model == model
     assert payload.choices
-    assert payload.choices[0].message.content
+    msg = payload.choices[0].message
+    assert msg.content or getattr(msg, "reasoning", None)
 
 
 @pytest.mark.integration

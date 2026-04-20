@@ -103,10 +103,12 @@ class TestProxyConfig:
         assert url == "socks5://socks.example.com:1080"
 
     def test_proxy_config_to_url_with_auth(self):
-        """Test converting proxy config with auth to URL."""
+        """Test converting proxy config with auth to URL (password hidden by default)."""
         config = ProxyConfig(host="proxy.example.com", port=8080, username="user", password="pass")
         url = config.to_url()
-        assert url == "http://user:pass@proxy.example.com:8080"
+        assert url == "http://user@proxy.example.com:8080"
+        url_with_creds = config.to_url(include_credentials=True)
+        assert url_with_creds == "http://user:pass@proxy.example.com:8080"
 
     def test_proxy_config_to_url_with_username_only(self):
         """Test converting proxy config with username only to URL."""
@@ -672,7 +674,7 @@ class TestProxyIntegration:
         """Test proxy URL conversion roundtrip."""
         original_url = "http://user:pass@proxy.example.com:8080"
         config = ProxyConfig.from_url(original_url)
-        converted_url = config.to_url()
+        converted_url = config.to_url(include_credentials=True)
         assert converted_url == original_url
 
     def test_proxy_with_special_characters(self):
@@ -680,7 +682,7 @@ class TestProxyIntegration:
         config = ProxyConfig(
             host="proxy.example.com", port=8080, username="user", password="p@ss:word"
         )
-        url = config.to_url()
+        url = config.to_url(include_credentials=True)
         assert "p@ss:word" in url
 
     def test_multiple_rules_priority(self):

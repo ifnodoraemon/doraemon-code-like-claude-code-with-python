@@ -17,6 +17,7 @@ Supported Events:
 import asyncio
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -25,6 +26,44 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_BLOCKED_HOOK_COMMANDS = frozenset({
+    "rm", "mkfs", "dd", "shred", "wget", "curl",
+    "chmod", "chown", "sudo", "su",
+    "halt", "poweroff", "reboot", "shutdown",
+    "fdisk", "parted", "wipefs",
+})
+
+_DANGEROUS_HOOK_PATTERNS = [
+    r"\|\s*(bash|sh|zsh)\b",
+    r">\s*/dev/sd",
+    r"eval\s+",
+    r"base64\s+(?:-d|--decode)\s*\|",
+]
+
+
+def _is_hook_command_safe(command: str) -> tuple[bool, str]:
+    """Validate a hook shell command for safety."""
+    import re as _re
+    import shlex
+
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False, "Invalid shell syntax in hook command"
+
+    if not tokens:
+        return False, "Empty hook command"
+
+    base = os.path.basename(tokens[0])
+    if base in _BLOCKED_HOOK_COMMANDS:
+        return False, f"Blocked command in hook: {base}"
+
+    for pattern in _DANGEROUS_HOOK_PATTERNS:
+        if _re.search(pattern, command):
+            return False, "Blocked pattern in hook command"
+
+    return True, ""
 
 
 class HookEvent(Enum):
@@ -366,6 +405,10 @@ class HookManager:
         timeout: float,
     ) -> HookResult:
         """Run a shell command hook."""
+        is_safe, reason = _is_hook_command_safe(command)
+        if not is_safe:
+            logger.warning("Blocked unsafe hook command: %s (%s)", command, reason)
+            return HookResult(success=False, reason=f"Blocked hook command: {reason}")
         # Prepare environment
         env = {**self._env}
         proc = None
@@ -546,9 +589,17 @@ class HookManager:
                         hook_type = hook_def.get("type", "command")
 
                         if hook_type == "command":
+                            cmd = hook_def.get("command", "")
+                            is_safe, reason = _is_hook_command_safe(cmd or "")
+                            if not is_safe:
+                                logger.warning(
+                                    "Skipping blocked hook command in %s: %s (%s)",
+                                    path, cmd, reason,
+                                )
+                                continue
                             self.register(
                                 event=event,
-                                command=hook_def.get("command"),
+                                command=cmd,
                                 matcher=matcher,
                                 timeout=hook_def.get("timeout", 60),
                             )

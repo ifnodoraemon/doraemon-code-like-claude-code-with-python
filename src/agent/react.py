@@ -26,6 +26,7 @@ from .types import (
     Action,
     ActionType,
     AgentResult,
+    AgentStatus,
     Message,
     Observation,
     Thought,
@@ -371,7 +372,7 @@ class ReActAgent(BaseAgent):
         race conditions and state inconsistency.
         """
         has_modifier = any(
-            (tc.get("name") or tc.get("function", {}).get("name", "")) == "write"
+            (tc.get("name") or tc.get("function", {}).get("name", "")) in ("write", "edit")
             for tc in tool_calls
         )
 
@@ -478,14 +479,9 @@ class ReActAgent(BaseAgent):
 
                     yield {"type": "tool_call", "name": name, "args": args}
 
-                results = await asyncio.gather(
-                    *(
-                        self._execute_tool_with_permission(name, args)
-                        for _, name, args in tool_call_infos
-                    )
-                )
+                results = await self._execute_tools_parallel_sandboxed(tool_call_infos)
 
-                for (call_id, name, args), (result, error) in zip(tool_call_infos, results):
+                for (call_id, name, args), (result, error) in zip(tool_call_infos, results, strict=False):
                     yield {"type": "tool_result", "name": name, "result": result, "error": error}
                     self.state.add_tool_call(
                         ToolCall(
@@ -727,6 +723,29 @@ When the task is complete, provide a summary of what was done."""
 
         return await self.execute_tool(name, args)
 
+    async def _execute_tools_parallel_sandboxed(
+        self,
+        tool_call_infos: list[tuple[str, str, dict]],
+    ) -> list[tuple[str, str | None]]:
+        """Execute multiple tool calls with write-tool safety guard.
+
+        If any tool is a write/edit tool, fall back to sequential execution
+        to prevent concurrent file modifications.
+        """
+        has_modifier = any(name == "write" or name == "edit" for _, name, _ in tool_call_infos)
+
+        if has_modifier:
+            logger.info("Modifying tool detected in stream. Switching to sequential execution for safety.")
+            results = []
+            for _, name, args in tool_call_infos:
+                result, error = await self._execute_tool_with_permission(name, args)
+                results.append((result, error))
+            return results
+
+        return await asyncio.gather(
+            *(self._execute_tool_with_permission(name, args) for _, name, args in tool_call_infos)
+        )
+
     async def _compress_context(self) -> None:
         """Perform semantic compression of the conversation history using the LLM."""
         messages_to_keep = 12
@@ -758,16 +777,12 @@ When the task is complete, provide a summary of what was done."""
         except (RuntimeError, ValueError, OSError) as e:
             logger.error("Semantic compression failed: %s", e)
 
-    async def _summarize_messages(self, messages: list[Message]) -> str:
-        """Deprecated: Integrated into _compress_context for better semantic control."""
-        return ""
-
     def _build_result(self, error: str | None = None) -> AgentResult:
         """Build the final result."""
         duration = time.time() - self._start_time if self._start_time else 0
 
         return AgentResult(
-            success=error is None and self.state.status != "error",
+            success=error is None and self.state.status != AgentStatus.ERROR.value,
             response=self.state.last_response,
             tool_calls=self.state.tool_history,
             messages=self.state.messages,

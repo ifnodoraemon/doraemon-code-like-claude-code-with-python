@@ -19,7 +19,9 @@ Tools provided:
 """
 
 import asyncio
+import ipaddress
 import logging
+import urllib.parse
 from pathlib import Path
 
 from playwright.async_api import Browser, Page, async_playwright
@@ -29,6 +31,43 @@ from src.core.security.security import validate_path
 
 configure_root_logger()
 logger = logging.getLogger(__name__)
+
+_BROWSER_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("::ffff:0.0.0.0/96"),
+]
+
+
+def _is_browser_private_url(url: str) -> bool:
+    """Check if a URL points to a private/internal network address."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return True
+        if hostname in ("localhost", "localhost.localdomain"):
+            return True
+        try:
+            addr = ipaddress.ip_address(hostname)
+        except ValueError:
+            return False
+        if isinstance(addr, ipaddress.IPv6Address):
+            try:
+                mapped_ipv4 = addr.ipv4_mapped
+                if mapped_ipv4 is not None:
+                    addr = mapped_ipv4
+            except ValueError:
+                pass
+        return any(addr in net for net in _BROWSER_PRIVATE_NETWORKS)
+    except Exception:
+        return True
 
 _browser: Browser | None = None
 _playwright = None
@@ -88,6 +127,8 @@ async def browse_page(
     """
     logger.info("Browsing: %s", url)
     try:
+        if _is_browser_private_url(url):
+            return "Error: URLs pointing to private/internal network addresses are not allowed"
         page, pid = await get_or_create_page(page_id)
         await page.goto(url, timeout=30000, wait_until=wait_until)
 
@@ -120,6 +161,8 @@ async def take_screenshot(
         Success message with file path
     """
     logger.info("Screenshotting: %s -> %s", url, path)
+    if _is_browser_private_url(url):
+        return "Error: URLs pointing to private/internal network addresses are not allowed"
     try:
         validate_path(path)
     except (ValueError, PermissionError) as e:
@@ -217,12 +260,8 @@ async def browser_evaluate(
     """
     Execute JavaScript on a page.
 
-    Args:
-        page_id: ID of the page
-        script: JavaScript code to execute
-
-    Returns:
-        Script result
+    WARNING: Arbitrary JS execution can exfiltrate data from the page's
+    origin. Only evaluate scripts you trust.
     """
     if page_id not in _pages:
         return f"Error: Page '{page_id}' not found"

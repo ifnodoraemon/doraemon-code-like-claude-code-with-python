@@ -31,20 +31,25 @@ logger = logging.getLogger(__name__)
 
 
 def load_config() -> dict[str, Any]:
-    """Load gateway configuration from environment."""
+    """Load gateway configuration from environment.
+
+    API keys are never stored in the config dict. Instead, the env var
+    name is recorded so the router can read keys at initialization time.
+    This prevents accidental leakage via debug endpoints or error messages.
+    """
     return {
         "google": {
             "enabled": bool(os.getenv("GOOGLE_API_KEY")),
-            "api_key": os.getenv("GOOGLE_API_KEY"),
+            "api_key_env": "GOOGLE_API_KEY",
         },
         "openai": {
             "enabled": bool(os.getenv("OPENAI_API_KEY")),
-            "api_key": os.getenv("OPENAI_API_KEY"),
+            "api_key_env": "OPENAI_API_KEY",
             "api_base": os.getenv("OPENAI_API_BASE"),
         },
         "anthropic": {
             "enabled": bool(os.getenv("ANTHROPIC_API_KEY")),
-            "api_key": os.getenv("ANTHROPIC_API_KEY"),
+            "api_key_env": "ANTHROPIC_API_KEY",
             "api_base": os.getenv("ANTHROPIC_API_BASE"),
         },
     }
@@ -92,32 +97,49 @@ MAX_REQUEST_BODY_BYTES = int(os.getenv("AGENT_MAX_REQUEST_BYTES", str(10 * 1024 
 
 @app.middleware("http")
 async def limit_request_body(request: Request, call_next):
-    """Reject requests whose body exceeds the configured size limit."""
+    """Reject requests whose body exceeds the configured size limit and add security headers."""
     content_length = request.headers.get("content-length")
     if content_length:
         try:
             if int(content_length) > MAX_REQUEST_BODY_BYTES:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=413,
                     content={"detail": "Request body too large"},
                 )
+                _add_security_headers(response)
+                return response
             # Content-Length is present and within limits — skip full body read
-            return await call_next(request)
+            resp = await call_next(request)
+            _add_security_headers(resp)
+            return resp
         except ValueError:
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=400,
                 content={"detail": "Invalid Content-Length header"},
             )
+            _add_security_headers(response)
+            return response
 
     # No Content-Length (e.g. chunked transfer) — must read body to check size
     body = await request.body()
     if len(body) > MAX_REQUEST_BODY_BYTES:
-        return JSONResponse(
+        response = JSONResponse(
             status_code=413,
             content={"detail": "Request body too large"},
         )
+        _add_security_headers(response)
+        return response
 
-    return await call_next(request)
+    resp = await call_next(request)
+    _add_security_headers(resp)
+    return resp
+
+
+def _add_security_headers(response):
+    """Add security headers to HTTP responses."""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
 
 # Gateway API key (required by default; set AGENT_GATEWAY_ALLOW_NO_KEY=1 to allow unauthenticated access)
@@ -562,8 +584,8 @@ async def chat_completions(
 
     if isinstance(response, ErrorResponse):
         raise HTTPException(
-            status_code=500,
-            detail=response.to_dict(),
+            status_code=502,
+            detail={"error": "Bad Gateway", "code": response.code},
         )
 
     return response.to_dict()
@@ -597,7 +619,7 @@ async def anthropic_messages(
 
     if isinstance(response, ErrorResponse):
         raise HTTPException(
-            status_code=500, detail={"error": "Internal server error", "code": response.code}
+            status_code=502, detail={"error": "Bad Gateway", "code": response.code}
         )
 
     return _convert_chat_response_to_anthropic(response)
@@ -613,7 +635,7 @@ async def stream_anthropic_response(request: ChatRequest, router: ModelRouter):
         if isinstance(chunk, ErrorResponse):
             yield _format_sse(
                 "error",
-                {"type": "error", "error": {"type": chunk.code, "message": chunk.error}},
+                {"type": "error", "error": {"type": chunk.code, "message": "Bad Gateway"}},
             )
             break
 
@@ -708,7 +730,7 @@ async def stream_response(
     try:
         async for chunk in router.chat_stream(request, preferred_provider=preferred_provider):
             if isinstance(chunk, ErrorResponse):
-                yield f"data: {json.dumps(chunk.to_dict())}\n\n"
+                yield f"data: {json.dumps({'error': 'Bad Gateway', 'code': chunk.code})}\n\n"
                 break
 
             yield f"data: {json.dumps(chunk.to_dict())}\n\n"
@@ -742,7 +764,7 @@ def main():
     """Run the gateway server."""
     import uvicorn
 
-    host = os.getenv("AGENT_GATEWAY_HOST", "0.0.0.0")
+    host = os.getenv("AGENT_GATEWAY_HOST", "127.0.0.1")
     port = int(os.getenv("AGENT_GATEWAY_PORT", "8000"))
 
     print(f"Starting Model Gateway on {host}:{port}")

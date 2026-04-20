@@ -42,7 +42,7 @@ class ToolCache:
 
     def _make_key(self, tool_name: str, args: dict) -> str:
         """Create cache key from tool name and args."""
-        args_hash = hashlib.md5(str(sorted(args.items())).encode()).hexdigest()[:8]
+        args_hash = hashlib.sha256(str(sorted(args.items())).encode()).hexdigest()[:16]
         return f"{tool_name}:{args_hash}"
 
     def get(self, tool_name: str, args: dict) -> str | None:

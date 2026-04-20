@@ -7,6 +7,20 @@ Provides path validation, sanitization, and security checks.
 import os
 from pathlib import Path
 
+_CACHED_BASE_DIR: str | None = None
+
+
+def set_base_dir(base_dir: str) -> str:
+    """Set the base directory for the workspace sandbox.
+
+    Call this once at application startup to pin the sandbox root,
+    so that subsequent os.chdir() calls do not change the sandbox boundary.
+    If never called, validate_path uses os.getcwd() as before.
+    """
+    global _CACHED_BASE_DIR
+    _CACHED_BASE_DIR = os.path.abspath(base_dir)
+    return _CACHED_BASE_DIR
+
 SENSITIVE_PATHS = {
     "/etc/passwd",
     "/etc/shadow",
@@ -47,14 +61,16 @@ def is_sensitive_path(path: str) -> bool:
 
     path_lower = path.lower()
     for pattern in SENSITIVE_PATTERNS:
-        if pattern.lower() in path_lower:
-            if pattern.startswith("."):
-                if f"/{pattern}" in path_lower or f"\\{pattern}" in path_lower:
-                    return True
-                if path_lower.startswith(pattern.lower()):
-                    return True
-            elif pattern in path_lower:
+        pl = pattern.lower()
+        if pl.startswith("."):
+            if f"/{pl}" in path_lower or f"\\{pl}" in path_lower:
                 return True
+            if path_lower.startswith(pl):
+                return True
+        elif f"/{pl}" in path_lower or f"\\{pl}" in path_lower:
+            return True
+        elif path_lower.endswith(pl):
+            return True
 
     return False
 
@@ -90,7 +106,10 @@ def validate_path(path: str, base_dir: str | None = None) -> str:
         )
 
     if base_dir is None:
-        base_dir = os.getcwd()
+        if _CACHED_BASE_DIR is not None:
+            base_dir = _CACHED_BASE_DIR
+        else:
+            base_dir = os.getcwd()
 
     try:
         expanded_path = os.path.expanduser(path)

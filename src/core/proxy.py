@@ -42,8 +42,13 @@ class ProxyConfig:
     password: str | None = None
     name: str = ""  # Optional friendly name
 
-    def to_url(self) -> str:
-        """Convert to proxy URL string."""
+    def to_url(self, include_credentials: bool = False) -> str:
+        """Convert to proxy URL string.
+
+        Args:
+            include_credentials: If False (default), password is omitted from URL
+                to prevent credential leakage in logs.
+        """
         scheme = self.proxy_type.value
         if scheme == "direct":
             return ""
@@ -51,7 +56,7 @@ class ProxyConfig:
         auth = ""
         if self.username:
             auth = self.username
-            if self.password:
+            if include_credentials and self.password:
                 auth += f":{self.password}"
             auth += "@"
 
@@ -283,16 +288,16 @@ class ProxyManager:
         proxies = {}
 
         if "env_http" in self._proxies:
-            proxies["http"] = self._proxies["env_http"].to_url()
+            proxies["http"] = self._proxies["env_http"].to_url(include_credentials=True)
 
         if "env_https" in self._proxies:
-            proxies["https"] = self._proxies["env_https"].to_url()
+            proxies["https"] = self._proxies["env_https"].to_url(include_credentials=True)
         elif self._default_proxy and self._default_proxy in self._proxies:
             default = self._proxies[self._default_proxy]
             if "http" not in proxies:
-                proxies["http"] = default.to_url()
+                proxies["http"] = default.to_url(include_credentials=True)
             if "https" not in proxies:
-                proxies["https"] = default.to_url()
+                proxies["https"] = default.to_url(include_credentials=True)
 
         return proxies
 
@@ -306,17 +311,17 @@ class ProxyManager:
         env = {}
 
         if "env_http" in self._proxies:
-            url = self._proxies["env_http"].to_url()
+            url = self._proxies["env_http"].to_url(include_credentials=True)
             env["HTTP_PROXY"] = url
             env["http_proxy"] = url
 
         if "env_https" in self._proxies:
-            url = self._proxies["env_https"].to_url()
+            url = self._proxies["env_https"].to_url(include_credentials=True)
             env["HTTPS_PROXY"] = url
             env["https_proxy"] = url
 
         if self._default_proxy and self._default_proxy in self._proxies:
-            url = self._proxies[self._default_proxy].to_url()
+            url = self._proxies[self._default_proxy].to_url(include_credentials=True)
             env["ALL_PROXY"] = url
             env["all_proxy"] = url
 

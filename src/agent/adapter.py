@@ -160,9 +160,7 @@ async def run_agent_turn(
         if not display_output:
             return
 
-        if event_type == "thinking":
-            pass
-        elif event_type == "thought":
+        if event_type == "thought":
             if data.get("reasoning"):
                 console.print(
                     Panel(

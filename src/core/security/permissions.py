@@ -300,7 +300,18 @@ class PermissionManager:
         self._max_audit_entries = 1000
 
     def add_rule(self, rule: PermissionRule):
-        """Add a permission rule."""
+        """Add a permission rule.
+
+        Rules with level=DENY and high priority cannot be overridden
+        by rules with level=ALLOW loaded from external files.
+        """
+        existing = next((r for r in self._rules if r.name == rule.name), None)
+        if existing and existing.level == PermissionLevel.DENY and rule.level == PermissionLevel.ALLOW:
+            logger.warning(
+                "Refusing to override DENY rule '%s' with ALLOW rule from external source",
+                rule.name,
+            )
+            return
         self._rules.append(rule)
         # Re-sort by priority
         self._rules.sort(key=lambda r: r.priority, reverse=True)

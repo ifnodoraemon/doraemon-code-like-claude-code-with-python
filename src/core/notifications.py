@@ -152,14 +152,28 @@ class DesktopNotifier:
             logger.error("Failed to send notification: %s", e)
             return False
 
+    @staticmethod
+    def _escape_applescript(s: str) -> str:
+        """Escape a string for safe interpolation into AppleScript."""
+        return (
+            s.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
+
     def _send_macos(self, notification: Notification) -> bool:
         """Send notification on macOS."""
+        safe_msg = self._escape_applescript(notification.message)
+        safe_title = self._escape_applescript(notification.title)
         script = f'''
-        display notification "{notification.message}" with title "{notification.title}"
+        display notification "{safe_msg}" with title "{safe_title}"
         '''
 
         if notification.sound:
-            script += f' sound name "{notification.sound}"'
+            safe_sound = self._escape_applescript(notification.sound)
+            script += f' sound name "{safe_sound}"'
 
         subprocess.run(
             ["osascript", "-e", script],
@@ -206,11 +220,12 @@ class DesktopNotifier:
             )
             return True
         except ImportError:
-            # Fallback to PowerShell
+            safe_title = notification.title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            safe_msg = notification.message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             script = f"""
             [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
             [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-            $template = "<toast><visual><binding template='ToastText02'><text id='1'>{notification.title}</text><text id='2'>{notification.message}</text></binding></visual></toast>"
+            $template = "<toast><visual><binding template='ToastText02'><text id='1'>{safe_title}</text><text id='2'>{safe_msg}</text></binding></visual></toast>"
             $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
             $xml.LoadXml($template)
             $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
@@ -405,12 +420,13 @@ class NotificationManager:
             return False
 
         try:
+            import json as _json
             import urllib.request
 
             data = notification.to_dict()
             req = urllib.request.Request(
                 self.config.webhook_url,
-                data=str(data).encode(),
+                data=_json.dumps(data).encode(),
                 headers={"Content-Type": "application/json"},
             )
             urllib.request.urlopen(req, timeout=5)

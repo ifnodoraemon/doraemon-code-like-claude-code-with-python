@@ -37,8 +37,8 @@ from typing import Any, Union, get_args, get_origin
 
 from google.genai import types
 from src.core.config.config import load_config
-from src.core.tool_selector import get_capability_group_for_tool
 from src.core.tool_policy import get_default_tool_policy_engine
+from src.core.tool_selector import get_capability_group_for_tool
 
 logger = logging.getLogger(__name__)
 

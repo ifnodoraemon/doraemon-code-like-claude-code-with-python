@@ -297,6 +297,13 @@ class StdioMCPClient:
         self._request_id += 1
         return self._request_id
 
+    _BLOCKED_ENV_KEYS = frozenset({
+        "LD_PRELOAD", "LD_LIBRARY_PATH", "PYTHONPATH",
+        "PYTHONHOME", "PYTHONSTARTUP", "PYTHONIOENCODING",
+        "PATH", "HOME", "USER", "SHELL",
+        "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
+    })
+
     async def _ensure_process(self) -> asyncio.subprocess.Process:
         if self._process and self._process.returncode is None:
             return self._process
@@ -314,7 +321,14 @@ class StdioMCPClient:
             "TMP",
         }
         env = {k: v for k, v in os.environ.items() if k in safe_env_keys}
-        env.update(self.server.env)
+        for k, v in self.server.env.items():
+            if k in self._BLOCKED_ENV_KEYS:
+                logger.warning(
+                    "Blocked dangerous env key '%s' for MCP server '%s'",
+                    k, self.server.name,
+                )
+                continue
+            env[k] = v
         self._process = await asyncio.create_subprocess_exec(
             self.server.command,
             *self.server.args,

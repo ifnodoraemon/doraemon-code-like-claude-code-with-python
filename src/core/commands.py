@@ -33,6 +33,7 @@ Usage:
 import asyncio
 import logging
 import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -362,15 +363,49 @@ class CommandExecutor:
 
         return {"success": False, "error": f"Unknown step type: {step_type}"}
 
+    _MODIFYING_TOOLS = frozenset({"write", "edit"})
+
     def _substitute(self, template: str, args: dict[str, str]) -> str:
-        """Substitute variables in a template string."""
+        """Substitute variables in a template string with shell-safe quoting.
+
+        For RUN/ASYNC steps, values are shell-quoted via shlex.quote.
+        For READ steps, use _substitute_path which does NOT quote.
+        """
         result = template
 
-        for key, value in args.items():
-            result = result.replace(f"${key}", str(value))
-            result = result.replace(f"${{{key}}}", str(value))
+        sorted_keys = sorted(args.keys(), key=len, reverse=True)
+        for key in sorted_keys:
+            safe_value = shlex.quote(str(value)) if (value := args[key]) else "''"
+            result = result.replace(f"${{{key}}}", safe_value)
+            result = result.replace(f"${key}", safe_value)
 
         return result
+
+    def _substitute_path(self, template: str, args: dict[str, str]) -> str:
+        """Substitute variables in a path template without shell quoting."""
+        result = template
+
+        sorted_keys = sorted(args.keys(), key=len, reverse=True)
+        for key in sorted_keys:
+            value = args[key]
+            result = result.replace(f"${{{key}}}", str(value))
+            result = result.replace(f"${key}", str(value))
+
+        return result
+
+    _BLOCKED_RUN_COMMANDS = frozenset({
+        "rm -rf /", "rm -rf /*", "mkfs", "dd if=/dev/zero",
+        "chmod -R 777 /", "chown -R", "> /dev/sda",
+        "wget -O- | sh", "curl -s | sh",
+    })
+
+    def _is_run_command_safe(self, command: str) -> tuple[bool, str]:
+        """Check if a RUN command template is safe to execute."""
+        command_lower = command.lower()
+        for blocked in self._BLOCKED_RUN_COMMANDS:
+            if blocked.lower() in command_lower:
+                return False, f"Blocked dangerous pattern in command: {blocked}"
+        return True, ""
 
     async def _execute_run(
         self,
@@ -379,7 +414,12 @@ class CommandExecutor:
         use_cache: bool,
     ) -> dict[str, Any]:
         """Execute a RUN command."""
-        command = self._substitute(step["command"], args)
+        raw_command = step["command"]
+        is_safe, reason = self._is_run_command_safe(raw_command)
+        if not is_safe:
+            return {"success": False, "error": reason}
+
+        command = self._substitute(raw_command, args)
 
         cache_key = f"run:{command}"
         if use_cache and cache_key in self._cache:
@@ -423,8 +463,13 @@ class CommandExecutor:
         args: dict[str, str],
     ) -> dict[str, Any]:
         """Execute a READ file directive."""
-        path_str = self._substitute(step["path"], args)
-        path = self.project_dir / path_str
+        path_str = self._substitute_path(step["path"], args)
+        path = (self.project_dir / path_str).resolve()
+
+        try:
+            path.relative_to(self.project_dir.resolve())
+        except ValueError:
+            return {"success": False, "error": "Path escapes project directory"}
 
         if not path.exists():
             return {"success": False, "error": f"File not found: {path}"}
@@ -441,7 +486,12 @@ class CommandExecutor:
         args: dict[str, str],
     ) -> dict[str, Any]:
         """Execute an ASYNC command (non-blocking)."""
-        command = self._substitute(step["command"], args)
+        raw_command = step["command"]
+        is_safe, reason = self._is_run_command_safe(raw_command)
+        if not is_safe:
+            return {"success": False, "error": reason}
+
+        command = self._substitute(raw_command, args)
 
         try:
             await asyncio.create_subprocess_shell(

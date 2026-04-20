@@ -254,8 +254,8 @@ class TestSessionManager:
         """Test ID generation."""
         id1 = session_manager._generate_id()
         id2 = session_manager._generate_id()
-        assert len(id1) == 12
-        assert len(id2) == 12
+        assert len(id1) == 20
+        assert len(id2) == 20
         assert id1 != id2  # IDs should be unique
 
     def test_get_session_path(self, session_manager):

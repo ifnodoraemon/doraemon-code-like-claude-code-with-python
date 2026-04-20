@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from .state import AgentState
-from .types import Action, AgentResult, Observation, Thought, ToolDefinition
+from .types import Action, AgentResult, AgentStatus, Observation, Thought, ToolDefinition
 
 
 class BaseAgent(ABC):
@@ -214,7 +214,7 @@ class BaseAgent(ABC):
         """Reset agent state for a new task."""
         self.state.clear_history()
         self.state.is_finished = False
-        self.state.status = "idle"
+        self.state.status = AgentStatus.IDLE.value
         self.state.goal = None
         self.state.last_error = None
 

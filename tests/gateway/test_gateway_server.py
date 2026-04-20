@@ -361,7 +361,7 @@ class TestLoadConfig:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "a-key")
         config = load_config()
         assert config["google"]["enabled"] is True
-        assert config["openai"]["api_key"] == "o-key"
+        assert config["openai"]["api_key_env"] == "OPENAI_API_KEY"
         assert config["anthropic"]["enabled"] is True
 
 

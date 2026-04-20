@@ -24,6 +24,7 @@ Design Principles:
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -550,8 +551,19 @@ def restore_backup(backup_path: Path, target: Path) -> bool:
 # ========================================
 
 
+_SAFE_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_session_id(session_id: str) -> str:
+    """Validate session ID to prevent path traversal."""
+    if not _SAFE_SESSION_ID_RE.match(session_id):
+        raise ValueError(f"Invalid session ID: {session_id}")
+    return session_id
+
+
 def save_session(session_id: str, data: dict[str, Any]) -> Path:
     """Save session data to project conversations."""
+    _validate_session_id(session_id)
     sessions_dir = get_conversations_dir()
     session_file = sessions_dir / f"{session_id}.json"
 
@@ -563,6 +575,7 @@ def save_session(session_id: str, data: dict[str, Any]) -> Path:
 
 def load_session(session_id: str) -> dict[str, Any] | None:
     """Load session data from project conversations."""
+    _validate_session_id(session_id)
     sessions_dir = get_conversations_dir()
     session_file = sessions_dir / f"{session_id}.json"
 

@@ -150,7 +150,7 @@ class TaskManager:
         priority: int = 0,
         workspace_id: str | None = None,
     ) -> Task:
-        task_id = uuid.uuid4().hex[:8]
+        task_id = uuid.uuid4().hex[:16]
         normalized_dependencies = self._normalize_dependencies(dependencies or [], task_id=task_id)
         workspace_meta = self._build_workspace_metadata(task_id, workspace_id=workspace_id)
         task = Task(

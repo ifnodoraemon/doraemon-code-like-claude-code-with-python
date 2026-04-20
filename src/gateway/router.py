@@ -1,6 +1,7 @@
 """Model Router - Routes requests to appropriate provider adapter."""
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -41,8 +42,10 @@ class ModelRouter:
                 continue
 
             try:
+                env_var = provider_config.get("api_key_env", "")
+                api_key = os.getenv(env_var) if env_var else None
                 adapter_config = AdapterConfig(
-                    api_key=provider_config.get("api_key"),
+                    api_key=api_key,
                     api_base=provider_config.get("api_base"),
                     timeout=provider_config.get("timeout", 60.0),
                     max_retries=provider_config.get("max_retries", 3),

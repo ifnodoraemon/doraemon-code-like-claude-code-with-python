@@ -17,6 +17,5 @@ async def get_project_context():
     """Return the effective project directory for the current Web UI process."""
     cwd = Path.cwd().resolve()
     return {
-        "project_dir": str(cwd),
         "project_name": cwd.name or str(cwd),
     }
