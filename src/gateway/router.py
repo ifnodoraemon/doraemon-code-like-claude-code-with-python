@@ -56,7 +56,7 @@ class ModelRouter:
                     for alias in model.aliases:
                         self._model_cache[alias] = provider
             except Exception as e:
-                logger.error(f"Failed to initialize {provider}: {type(e).__name__}")
+                logger.error("Failed to initialize %s: %s", provider, type(e).__name__)
 
     def _get_adapter(
         self, model_id: str, preferred_provider: str | None = None
@@ -100,7 +100,7 @@ class ModelRouter:
             async for chunk in adapter.chat_stream(request):
                 yield chunk
         except Exception as e:
-            logger.error(f"Stream error for {request.model}: {type(e).__name__}")
+            logger.error("Stream error for %s: %s", request.model, type(e).__name__)
             yield ErrorResponse(error=str(e), code="provider_error")
 
     def list_models(self, provider: str | None = None) -> list[ModelInfo]:
@@ -140,6 +140,6 @@ class ModelRouter:
             try:
                 await adapter.close()
             except Exception as e:
-                logger.error(f"Error closing {provider} adapter: {type(e).__name__}")
+                logger.error("Error closing %s adapter: %s", provider, type(e).__name__)
         self._adapters.clear()
         self._model_cache.clear()

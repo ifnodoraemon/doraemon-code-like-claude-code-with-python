@@ -104,9 +104,9 @@ class CommandHistory:
         try:
             data = json.loads(self._history_file.read_text(encoding="utf-8"))
             self._entries = [HistoryEntry.from_dict(e) for e in data.get("entries", [])]
-            logger.debug(f"Loaded {len(self._entries)} history entries")
+            logger.debug("Loaded %s history entries", len(self._entries))
         except Exception as e:
-            logger.error(f"Failed to load history: {e}")
+            logger.error("Failed to load history: %s", e)
 
     def _save(self):
         """Save history to file."""
@@ -124,7 +124,7 @@ class CommandHistory:
                 json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
             )
         except Exception as e:
-            logger.error(f"Failed to save history: {e}")
+            logger.error("Failed to save history: %s", e)
 
     def add(self, command: str):
         """
@@ -245,7 +245,7 @@ class CommandHistory:
             logger.debug("Readline history setup complete")
 
         except Exception as e:
-            logger.warning(f"Failed to setup readline: {e}")
+            logger.warning("Failed to setup readline: %s", e)
 
     def setup_completer(self, commands: list[str]):
         """
@@ -277,9 +277,9 @@ class CommandHistory:
             readline.set_completer(completer)
             readline.set_completer_delims(" \t\n")
             readline.parse_and_bind("tab: complete")
-            logger.debug(f"Tab completion setup for {len(commands)} commands")
+            logger.debug("Tab completion setup for %s commands", len(commands))
         except Exception as e:
-            logger.warning(f"Failed to setup tab completion: {e}")
+            logger.warning("Failed to setup tab completion: %s", e)
 
     def get_stats(self) -> dict[str, Any]:
         """Get history statistics."""

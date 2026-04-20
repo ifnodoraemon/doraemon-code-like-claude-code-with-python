@@ -74,7 +74,7 @@ def _create_sandbox_preexec(limits: ResourceLimits):
             resource.setrlimit(resource.RLIMIT_FSIZE, (file_size_bytes, file_size_bytes))
             resource.setrlimit(resource.RLIMIT_NPROC, (limits.max_processes, limits.max_processes))
         except (ImportError, OSError) as e:
-            logger.warning(f"Could not set resource limits: {e}")
+            logger.warning("Could not set resource limits: %s", e)
 
     return set_limits
 
@@ -92,36 +92,45 @@ def _get_sandbox_wrapper_code(user_code: str) -> str:
 import sys
 import os
 
-_BLOCKED_MODULES = {{
+_BLOCKED_MODULES = frozenset({{
     'subprocess', 'shutil', 'socket', 'http', 'urllib',
     'ftplib', 'smtplib', 'telnetlib', 'ctypes', 'multiprocessing',
-}}
+}})
 
 class _SandboxImportBlocker:
-    def find_module(self, name, path=None):
+    def find_spec(self, name, path=None, target=None):
         top_level = name.split('.')[0]
         if top_level in _BLOCKED_MODULES:
-            return self
+            raise ImportError(f"Module '{{name}}' is blocked in sandbox mode")
         return None
-    def load_module(self, name):
-        raise ImportError(f"Module '{{name}}' is blocked in sandbox mode")
 
 sys.meta_path.insert(0, _SandboxImportBlocker())
 
-import builtins
-_SAFE_BUILTINS = {{
+import builtins as _builtins
+_SAFE_BUILTINS = frozenset({{
     'abs', 'all', 'any', 'bin', 'bool', 'divmod', 'enumerate', 'filter',
     'float', 'getattr', 'hasattr', 'hash', 'hex', 'id', 'int', 'isinstance',
     'issubclass', 'iter', 'len', 'list', 'map', 'max', 'min', 'next', 'oct',
     'ord', 'pow', 'print', 'range', 'repr', 'reversed', 'round', 'set',
     'slice', 'sorted', 'str', 'sum', 'tuple', 'type', 'zip',
-}}
-for name in list(builtins.__dict__):
-    if name not in _SAFE_BUILTINS and not name.startswith('__'):
-        try:
-            del builtins.__dict__[name]
-        except Exception:
-            pass
+    'True', 'False', 'None', 'bool', 'bytes', 'dict', 'float', 'frozenset',
+    'int', 'list', 'set', 'str', 'tuple', 'complex', 'bytearray',
+    'classmethod', 'staticmethod', 'property', 'super', 'object',
+    'Exception', 'TypeError', 'ValueError', 'KeyError', 'IndexError',
+    'AttributeError', 'RuntimeError', 'StopIteration', 'NotImplementedError',
+    'IsADirectoryError', 'FileExistsError', 'FileNotFoundError',
+    'PermissionError', 'IsADirectoryError', 'OSError', 'IOError',
+}})
+_original_getattr = _builtins.__dict__.get
+class _SandboxBuiltins:
+    def __getattr__(self, name):
+        if name.startswith('__') or name in _SAFE_BUILTINS:
+            return _original_getattr(name)
+        raise NameError(f"name '{{name}}' is not available in sandbox mode")
+    def __dir__(self):
+        return list(_SAFE_BUILTINS)
+
+sys.modules['builtins'] = _SandboxBuiltins()
 
 sys.setrecursionlimit(1000)
 
@@ -171,7 +180,7 @@ def run(
     working_dir: str | None = None,
 ) -> str:
     """Unified execution tool."""
-    logger.info(f"run(mode={mode}, command={command[:50]}...)")
+    logger.info("run(mode=%s, command=%s...)", mode, command[:50])
 
     if mode == "shell":
         return _run_shell(command, timeout, working_dir)
@@ -189,12 +198,12 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
     import queue
 
     if _is_command_blocked(command):
-        logger.warning(f"Blocked dangerous command: {command}")
+        logger.warning("Blocked dangerous command: %s", command)
         return "Error: This command is blocked for safety reasons."
 
     git_safety_msg = _check_git_safety(command)
     if git_safety_msg:
-        logger.warning(f"Git safety check failed: {command}")
+        logger.warning("Git safety check failed: %s", command)
         return git_safety_msg
 
     resolved_dir = working_dir or os.getcwd()
@@ -256,7 +265,7 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
 
             if time.time() - last_activity_time > timeout:
                 process.kill()
-                logger.warning(f"Command timed out: {command}")
+                logger.warning("Command timed out: %s", command)
                 return (
                     "".join(output_lines)
                     + f"\n\nError: Command timed out. No output for {timeout} seconds."
@@ -272,13 +281,13 @@ def _run_shell(command: str, timeout: int, working_dir: str | None) -> str:
         return output
 
     except Exception as e:
-        logger.error(f"Command execution failed: {e}")
+        logger.error("Command execution failed: %s", e)
         return f"Error executing command: {str(e)}"
 
 
 def _run_python(code: str, timeout: int) -> str:
     """Execute Python code in a sandboxed environment."""
-    logger.info(f"Executing Python code ({len(code)} chars)")
+    logger.info("Executing Python code (%s chars)", len(code))
 
     limits = ResourceLimits(
         max_memory_mb=DEFAULT_LIMITS.max_memory_mb,
@@ -332,7 +341,7 @@ def _run_python(code: str, timeout: int) -> str:
 
 def _run_background(command: str, working_dir: str | None) -> str:
     """Start a command in the background."""
-    logger.info(f"Starting background command: {command}")
+    logger.info("Starting background command: %s", command)
 
     if _is_command_blocked(command):
         return "Error: This command is blocked for safety reasons."
@@ -351,9 +360,8 @@ def _run_background(command: str, working_dir: str | None) -> str:
 
     try:
         proc = subprocess.Popen(
-            command,
-            shell=True,
-            executable=DEFAULT_SHELL_CONFIG.shell,
+            [DEFAULT_SHELL_CONFIG.shell, "-c", command],
+            shell=False,
             cwd=resolved_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -365,7 +373,7 @@ def _run_background(command: str, working_dir: str | None) -> str:
         return f"Started background process with PID: {pid}\nCommand: {command}"
 
     except Exception as e:
-        logger.error(f"Failed to start background command: {e}")
+        logger.error("Failed to start background command: %s", e)
         return f"Error starting background process: {str(e)}"
 
 
@@ -374,7 +382,7 @@ def _run_install(package_name: str) -> str:
     from urllib.error import URLError
     from urllib.request import urlopen
 
-    logger.info(f"Installing package: {package_name}")
+    logger.info("Installing package: %s", package_name)
 
     is_valid, error_msg = _validate_package_name(package_name)
     if not is_valid:
@@ -387,7 +395,8 @@ def _run_install(package_name: str) -> str:
             if resp.status != 200:
                 return f"Error: Package '{package_name}' not found on PyPI."
         except URLError:
-            logger.debug(f"PyPI check skipped for {package_name} (network unavailable)")
+            logger.warning("PyPI unreachable for %s; refusing install for safety", package_name)
+            return f"Error: Cannot verify package '{package_name}' on PyPI (network unavailable). Installation refused for safety."
 
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", package_name],

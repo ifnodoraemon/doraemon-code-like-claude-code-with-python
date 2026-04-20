@@ -441,7 +441,7 @@ class TestGatewayModelClientInit:
         with patch("httpx.AsyncClient"):
             with patch("httpx.Timeout") as mock_timeout:
                 await client.connect()
-                mock_timeout.assert_called_with(120.0)
+                mock_timeout.assert_called_with(connect=30.0, read=120.0, write=30.0, pool=30.0)
 
 
 # ============================================================================

@@ -96,14 +96,14 @@ def _read_path_outline(path: str) -> str:
     try:
         valid_path = validate_path(path)
     except (PermissionError, ValueError) as e:
-        logger.warning(f"Path validation failed for '{path}': {e}")
+        logger.warning("Path validation failed for '%s': %s", path, e)
         return f"Error: {e}"
 
     if not os.path.exists(valid_path):
-        logger.warning(f"File not found: {valid_path}")
+        logger.warning("File not found: %s", valid_path)
         return "Error: File not found."
 
-    logger.debug(f"Reading outline of: {valid_path}")
+    logger.debug("Reading outline of: %s", valid_path)
     return outline.parse_outline(valid_path)
 
 
@@ -330,7 +330,7 @@ def _write_path_content(path: str, content: str) -> str:
     try:
         valid_path = validate_path(path)
     except (PermissionError, ValueError) as e:
-        logger.warning(f"Path validation failed for '{path}': {e}")
+        logger.warning("Path validation failed for '%s': %s", path, e)
         return f"Error: {e}"
 
     try:
@@ -341,10 +341,10 @@ def _write_path_content(path: str, content: str) -> str:
         with open(valid_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        logger.info(f"Successfully wrote {len(content)} bytes to {path}")
+        logger.info("Successfully wrote %s bytes to %s", len(content), path)
         return f"Successfully wrote to {path}"
     except Exception as e:
-        logger.error(f"Failed to write file '{path}': {e}")
+        logger.error("Failed to write file '%s': %s", path, e)
         return f"Error writing file: {str(e)}"
 
 
@@ -353,11 +353,11 @@ def _replace_path_content(path: str, old_string: str, new_string: str, count: in
     try:
         valid_path = validate_path(path)
     except (PermissionError, ValueError) as e:
-        logger.warning(f"Path validation failed for '{path}': {e}")
+        logger.warning("Path validation failed for '%s': %s", path, e)
         return f"Error: {e}"
 
     if not os.path.exists(valid_path):
-        logger.warning(f"File not found: {valid_path}")
+        logger.warning("File not found: %s", valid_path)
         return f"Error: File not found: {path}"
 
     try:
@@ -365,7 +365,7 @@ def _replace_path_content(path: str, old_string: str, new_string: str, count: in
             content = f.read()
 
         if old_string not in content:
-            logger.debug(f"Search string not found in {path}")
+            logger.debug("Search string not found in %s", path)
             return f"Error: Search string not found in {path}:\n'{old_string[:100]}...'"
 
         occurrences = content.count(old_string)
@@ -380,11 +380,11 @@ def _replace_path_content(path: str, old_string: str, new_string: str, count: in
         with open(valid_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
-        logger.info(f"Edited {path}: {replaced_count} replacement(s)")
+        logger.info("Edited %s: %s replacement(s)", path, replaced_count)
         return f"Successfully edited {path} ({replaced_count} replacement(s) made)"
 
     except Exception as e:
-        logger.error(f"Failed to edit file '{path}': {e}")
+        logger.error("Failed to edit file '%s': %s", path, e)
         return f"Error editing file: {str(e)}"
 
 
@@ -434,11 +434,11 @@ def _move_path(src: str, dst: str) -> str:
         src_path = validate_path(src)
         dst_path = validate_path(dst)
     except (PermissionError, ValueError) as e:
-        logger.warning(f"Path validation failed: {e}")
+        logger.warning("Path validation failed: %s", e)
         return f"Error: {e}"
 
     if not os.path.exists(src_path):
-        logger.warning(f"Source not found: {src_path}")
+        logger.warning("Source not found: %s", src_path)
         return f"Error: Source not found: {src}"
 
     try:
@@ -447,11 +447,11 @@ def _move_path(src: str, dst: str) -> str:
             os.makedirs(dst_dir, exist_ok=True)
 
         shutil.move(src_path, dst_path)
-        logger.info(f"Moved {src} to {dst}")
+        logger.info("Moved %s to %s", src, dst)
         return f"Successfully moved {src} to {dst}"
 
     except Exception as e:
-        logger.error(f"Failed to move {src} to {dst}: {e}")
+        logger.error("Failed to move %s to %s: %s", src, dst, e)
         return f"Error moving file: {str(e)}"
 
 
@@ -489,11 +489,11 @@ def _delete_path(path: str, recursive: bool = False) -> str:
     try:
         valid_path = validate_path(path)
     except (PermissionError, ValueError) as e:
-        logger.warning(f"Path validation failed for '{path}': {e}")
+        logger.warning("Path validation failed for '%s': %s", path, e)
         return f"Error: {e}"
 
     if not os.path.exists(valid_path):
-        logger.warning(f"Path not found: {valid_path}")
+        logger.warning("Path not found: %s", valid_path)
         return f"Error: Path not found: {path}"
 
     try:
@@ -502,15 +502,15 @@ def _delete_path(path: str, recursive: bool = False) -> str:
                 return f"Error: {path} is a directory. Use recursive=True to delete it."
 
             shutil.rmtree(valid_path)
-            logger.info(f"Deleted directory: {path}")
+            logger.info("Deleted directory: %s", path)
             return f"Successfully deleted directory: {path}"
         else:
             os.remove(valid_path)
-            logger.info(f"Deleted file: {path}")
+            logger.info("Deleted file: %s", path)
             return f"Successfully deleted file: {path}"
 
     except Exception as e:
-        logger.error(f"Failed to delete '{path}': {e}")
+        logger.error("Failed to delete '%s': %s", path, e)
         return f"Error deleting: {str(e)}"
 
 
@@ -603,7 +603,7 @@ def read(
         else:
             return f"Error: Invalid mode '{mode}'. Must be one of: file, outline, directory, tree"
     except Exception as e:
-        logger.error(f"Read operation failed: {e}", exc_info=True)
+        logger.error("Read operation failed: %s", e, exc_info=True)
         return f"Error in read operation: {str(e)}"
 
 
@@ -687,7 +687,7 @@ def write(
             return f"Error: Invalid operation '{operation}'. Must be one of: create, edit, delete, move, copy"
 
     except Exception as e:
-        logger.error(f"Write operation failed: {e}", exc_info=True)
+        logger.error("Write operation failed: %s", e, exc_info=True)
         return f"Error in write operation: {str(e)}"
 
 
@@ -744,7 +744,7 @@ def search(
             return f"Error: Invalid mode '{mode}'. Must be one of: content, files, symbol"
 
     except Exception as e:
-        logger.error(f"Search operation failed: {e}", exc_info=True)
+        logger.error("Search operation failed: %s", e, exc_info=True)
         return f"Error in search operation: {str(e)}"
 
 

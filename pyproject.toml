@@ -196,6 +196,7 @@ markers = [
     "slow: marks tests as slow",
     "integration: marks tests as integration tests",
     "benchmark: marks tests as benchmarks",
+    "security: security red team tests",
 ]
 
 # Coverage configuration
@@ -211,7 +212,7 @@ omit = [
 precision = 2
 show_missing = true
 skip_covered = false
-fail_under = 60
+fail_under = 70
 
 # MyPy configuration
 [tool.mypy]

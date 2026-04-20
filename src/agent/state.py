@@ -65,15 +65,31 @@ class AgentState:
             self.messages = self.messages[-self.max_messages :]
 
     def _compress_messages(self, old_messages: list[Message]) -> None:
-        """Mark messages for compression.
-        The actual semantic summarization is handled by the Agent's LLM to preserve technical details.
+        """Create a structured summary of compressed messages.
+
+        Preserves key information: user intents, tool names, and outcomes.
+        Full semantic summarization is handled by the Agent's LLM via _compress_context.
         """
         if not old_messages:
             return
 
-        self._compressed_summary += (
-            f"\n[Context: {len(old_messages)} messages archived for semantic summarization]"
-        )
+        user_intents = [m.content for m in old_messages if m.role == "user" and m.content]
+        tool_names = []
+        for m in old_messages:
+            if m.tool_calls:
+                for tc in m.tool_calls:
+                    name = tc.get("name") or tc.get("function", {}).get("name", "")
+                    if name:
+                        tool_names.append(name)
+
+        summary_parts = [f"[Context: {len(old_messages)} messages archived]"]
+        if user_intents:
+            recent_intents = user_intents[-3:]
+            summary_parts.append(f"User intents: {'; '.join(recent_intents)}")
+        if tool_names:
+            summary_parts.append(f"Tools used: {', '.join(dict.fromkeys(tool_names))}")
+
+        self._compressed_summary += "\n" + "\n".join(summary_parts)
 
     def get_compressed_summary(self) -> str:
         """Get summary of compressed messages."""
@@ -87,6 +103,7 @@ class AgentState:
     def add_assistant_message(
         self,
         content: str | None = None,
+        provider_items: list[dict[str, Any]] | None = None,
         tool_calls: list[dict] | None = None,
         thought: str | None = None,
     ) -> None:
@@ -95,6 +112,7 @@ class AgentState:
             Message(
                 role="assistant",
                 content=content,
+                provider_items=provider_items,
                 tool_calls=tool_calls,
                 thought=thought,
             )

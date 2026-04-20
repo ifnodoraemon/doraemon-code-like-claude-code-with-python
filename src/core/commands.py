@@ -118,14 +118,14 @@ class CommandLoader:
         command_file = commands_dir / f"{name}.md"
 
         if not command_file.exists():
-            logger.warning(f"Command not found: {name}")
+            logger.warning("Command not found: %s", name)
             return None
 
         try:
             content = command_file.read_text(encoding="utf-8")
             return self._parse_command_file(content, command_file)
         except Exception as e:
-            logger.error(f"Failed to load command {name}: {e}")
+            logger.error("Failed to load command %s: %s", name, e)
             return None
 
     def load_all_commands(self) -> dict[str, CommandDefinition]:
@@ -190,7 +190,7 @@ class CommandLoader:
             metadata = yaml.safe_load(frontmatter) or {}
             return metadata, body
         except yaml.YAMLError as e:
-            logger.warning(f"Invalid YAML frontmatter: {e}")
+            logger.warning("Invalid YAML frontmatter: %s", e)
             return {}, body
 
     def _parse_steps(self, body: str) -> list[dict[str, Any]]:
@@ -299,11 +299,11 @@ class CommandExecutor:
                 if step_result.get("error"):
                     result.errors.append(step_result["error"])
                 if not step_result.get("success", True):
-                    logger.warning(f"Step {i} failed in command {command.name}")
+                    logger.warning("Step %s failed in command %s", i, command.name)
 
             except Exception as e:
                 result.errors.append(f"Step {i} failed: {str(e)}")
-                logger.error(f"Error in step {i} of command {command.name}: {e}")
+                logger.error("Error in step %s of command %s: %s", i, command.name, e)
 
         result.success = len(result.errors) == 0
         result.duration = time.time() - start_time
@@ -565,5 +565,5 @@ RUN echo "Hello from {name} command"
         command_file = commands_dir / f"{name}.md"
         command_file.write_text(template, encoding="utf-8")
 
-        logger.info(f"Created command template: {command_file}")
+        logger.info("Created command template: %s", command_file)
         return command_file

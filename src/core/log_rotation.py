@@ -100,10 +100,10 @@ class CompressingRotatingFileHandler(RotatingFileHandler):
 
             # Remove original
             os.remove(filepath)
-            logger.debug(f"Compressed: {filepath}")
+            logger.debug("Compressed: %s", filepath)
 
         except Exception as e:
-            logger.error(f"Failed to compress {filepath}: {e}")
+            logger.error("Failed to compress %s: %s", filepath, e)
 
 
 class CompressingTimedRotatingFileHandler(TimedRotatingFileHandler):
@@ -155,10 +155,10 @@ class CompressingTimedRotatingFileHandler(TimedRotatingFileHandler):
                     shutil.copyfileobj(f_in, f_out)
 
             os.remove(filepath)
-            logger.debug(f"Compressed: {filepath}")
+            logger.debug("Compressed: %s", filepath)
 
         except Exception as e:
-            logger.error(f"Failed to compress {filepath}: {e}")
+            logger.error("Failed to compress %s: %s", filepath, e)
 
 
 class LogRotationManager:
@@ -271,12 +271,12 @@ class LogRotationManager:
                     try:
                         log_file.unlink()
                         deleted += 1
-                        logger.debug(f"Deleted old log: {log_file}")
+                        logger.debug("Deleted old log: %s", log_file)
                     except Exception as e:
-                        logger.error(f"Failed to delete {log_file}: {e}")
+                        logger.error("Failed to delete %s: %s", log_file, e)
 
         if deleted > 0:
-            logger.info(f"Cleaned up {deleted} old log files")
+            logger.info("Cleaned up %s old log files", deleted)
 
         return deleted
 
@@ -337,7 +337,7 @@ class LogRotationManager:
                 return True
             return False
         except Exception as e:
-            logger.error(f"Failed to rotate: {e}")
+            logger.error("Failed to rotate: %s", e)
             return False
 
     def decompress_log(self, gz_path: Path | str) -> Path | None:
@@ -364,7 +364,7 @@ class LogRotationManager:
             return output_path
 
         except Exception as e:
-            logger.error(f"Failed to decompress {gz_path}: {e}")
+            logger.error("Failed to decompress %s: %s", gz_path, e)
             return None
 
 

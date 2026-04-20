@@ -334,7 +334,7 @@ class ToolCache:
             self.config.persist_path.write_text(json.dumps(data, default=str), encoding="utf-8")
 
         except Exception as e:
-            logger.warning(f"Failed to save cache: {e}")
+            logger.warning("Failed to save cache: %s", e)
 
     def _load_cache(self):
         """Load cache from disk."""
@@ -361,10 +361,10 @@ class ToolCache:
                 self._cache[key] = entry
                 self._memory_usage += entry.size_bytes
 
-            logger.info(f"Loaded {len(self._cache)} cache entries")
+            logger.info("Loaded %s cache entries", len(self._cache))
 
         except Exception as e:
-            logger.warning(f"Failed to load cache: {e}")
+            logger.warning("Failed to load cache: %s", e)
 
     def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""

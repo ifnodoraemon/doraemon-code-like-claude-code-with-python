@@ -294,6 +294,8 @@ class PermissionManager:
         self._mode = mode
         self._approval_callback = approval_callback
         self._approved_requests: set[str] = set()  # Session approvals
+        self._approval_timestamps: dict[str, float] = {}  # Expiry tracking
+        self._approval_ttl: float = 300.0  # Approvals expire after 5 minutes
         self._audit_log: list[AuditEntry] = []
         self._max_audit_entries = 1000
 
@@ -336,13 +338,18 @@ class PermissionManager:
                 message="Write operations not allowed in plan mode",
             )
 
-        # Check if already approved in this session
+        # Check if already approved in this session (with expiry)
         request_key = self._make_request_key(request)
         if request_key in self._approved_requests:
-            return PermissionResult(
-                level=PermissionLevel.ALLOW,
-                message="Previously approved",
-            )
+            approved_at = self._approval_timestamps.get(request_key, 0)
+            if time.time() - approved_at > self._approval_ttl:
+                self._approved_requests.discard(request_key)
+                self._approval_timestamps.pop(request_key, None)
+            else:
+                return PermissionResult(
+                    level=PermissionLevel.ALLOW,
+                    message="Previously approved",
+                )
 
         # Find matching rule (highest priority first)
         for rule in self._rules:
@@ -384,6 +391,7 @@ class PermissionManager:
         """
         request_key = self._make_request_key(request)
         self._approved_requests.add(request_key)
+        self._approval_timestamps[request_key] = time.time()
 
         # Update audit log
         entry = AuditEntry(
@@ -456,11 +464,11 @@ class PermissionManager:
                 )
                 self.add_rule(rule)
 
-            logger.info(f"Loaded {len(data.get('rules', []))} permission rules")
+            logger.info("Loaded %s permission rules", len(data.get('rules', [])))
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load permission rules: {e}")
+            logger.error("Failed to load permission rules: %s", e)
             return False
 
     def get_summary(self) -> dict[str, Any]:

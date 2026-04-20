@@ -7,7 +7,7 @@ Includes message conversion, tool definitions, and response handling.
 
 import base64
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -101,11 +101,20 @@ class Provider(Enum):
 
 
 @dataclass
+class ProviderCapabilities:
+    """Capability overrides for direct provider integrations."""
+
+    tools: bool = True
+    streaming: bool = True
+
+
+@dataclass
 class Message:
     """Unified message format. content can be str or list[dict] for multimodal."""
 
     role: str
     content: str | list[dict] | None = None
+    provider_items: list[dict[str, Any]] | None = None
     thought: str | None = None  # Reasoning/thought process
     tool_calls: list[dict] | None = None
     tool_call_id: str | None = None
@@ -115,6 +124,8 @@ class Message:
         result = {"role": self.role}
         if self.content is not None:
             result["content"] = self.content
+        if self.provider_items:
+            result["provider_items"] = self.provider_items
         if self.thought is not None:
             result["thought"] = self.thought
         if self.tool_calls:
@@ -166,6 +177,7 @@ class ChatResponse:
 
     content: str | None = None
     thought: str | None = None  # Reasoning/thought process
+    provider_items: list[dict[str, Any]] | None = None
     tool_calls: list[dict] | None = None
     finish_reason: str | None = None
     usage: dict | None = None
@@ -229,8 +241,13 @@ class ClientConfig:
     google_api_key: str | None = None
     openai_api_key: str | None = None
     openai_api_base: str | None = None
+    openai_protocol: str = "auto"
+    openai_capabilities: ProviderCapabilities = field(default_factory=ProviderCapabilities)
+    openai_responses_include: list[str] = field(default_factory=list)
     anthropic_api_key: str | None = None
     anthropic_api_base: str | None = None
+    anthropic_protocol: str = "auto"
+    anthropic_capabilities: ProviderCapabilities = field(default_factory=ProviderCapabilities)
 
     @classmethod
     def from_env(cls) -> "ClientConfig":
@@ -254,6 +271,13 @@ class ClientConfig:
             google_api_key=config_data.get("google_api_key"),
             openai_api_key=config_data.get("openai_api_key"),
             openai_api_base=config_data.get("openai_api_base"),
+            openai_protocol=config_data.get("openai_protocol", "auto"),
+            openai_capabilities=ProviderCapabilities(**config_data.get("openai_capabilities", {})),
+            openai_responses_include=config_data.get("openai_responses_include", []),
             anthropic_api_key=config_data.get("anthropic_api_key"),
             anthropic_api_base=config_data.get("anthropic_api_base"),
+            anthropic_protocol=config_data.get("anthropic_protocol", "auto"),
+            anthropic_capabilities=ProviderCapabilities(
+                **config_data.get("anthropic_capabilities", {})
+            ),
         )

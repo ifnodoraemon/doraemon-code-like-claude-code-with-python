@@ -275,7 +275,7 @@ class ThemeManager:
                     self._custom_themes[name] = Theme.from_dict(theme_data)
 
             except Exception as e:
-                logger.warning(f"Failed to load theme config: {e}")
+                logger.warning("Failed to load theme config: %s", e)
 
     def _save_config(self):
         """Save theme configuration."""
@@ -292,7 +292,7 @@ class ThemeManager:
             self._config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
         except Exception as e:
-            logger.warning(f"Failed to save theme config: {e}")
+            logger.warning("Failed to save theme config: %s", e)
 
     def list_themes(self) -> list[Theme]:
         """List all available themes."""
@@ -324,12 +324,12 @@ class ThemeManager:
             True if theme was set
         """
         if name not in BUILTIN_THEMES and name not in self._custom_themes:
-            logger.error(f"Theme not found: {name}")
+            logger.error("Theme not found: %s", name)
             return False
 
         self._current_theme = name
         self._save_config()
-        logger.info(f"Theme set to: {name}")
+        logger.info("Theme set to: %s", name)
         return True
 
     def get_color(self, element: str) -> str:
@@ -360,7 +360,7 @@ class ThemeManager:
             True if added
         """
         if theme.name in BUILTIN_THEMES:
-            logger.error(f"Cannot override builtin theme: {theme.name}")
+            logger.error("Cannot override builtin theme: %s", theme.name)
             return False
 
         self._custom_themes[theme.name] = theme

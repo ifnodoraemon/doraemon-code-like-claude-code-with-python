@@ -149,11 +149,11 @@ class BrowserManager:
             self._page = await self._context.new_page()
             self._page.set_default_timeout(self.config.timeout)
 
-            logger.info(f"Browser launched: {self.config.browser_type}")
+            logger.info("Browser launched: %s", self.config.browser_type)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to launch browser: {e}")
+            logger.error("Failed to launch browser: %s", e)
             return False
 
     async def close(self):
@@ -176,7 +176,7 @@ class BrowserManager:
             logger.info("Browser closed")
 
         except Exception as e:
-            logger.error(f"Error closing browser: {e}")
+            logger.error("Error closing browser: %s", e)
 
     async def navigate(self, url: str, wait_until: str = "load") -> bool:
         """
@@ -195,10 +195,10 @@ class BrowserManager:
 
         try:
             await self._page.goto(url, wait_until=wait_until)
-            logger.info(f"Navigated to: {url}")
+            logger.info("Navigated to: %s", url)
             return True
         except Exception as e:
-            logger.error(f"Navigation failed: {e}")
+            logger.error("Navigation failed: %s", e)
             return False
 
     async def click(self, selector: str) -> bool:
@@ -218,7 +218,7 @@ class BrowserManager:
             await self._page.click(selector)
             return True
         except Exception as e:
-            logger.error(f"Click failed on {selector}: {e}")
+            logger.error("Click failed on %s: %s", selector, e)
             return False
 
     async def fill(self, selector: str, value: str) -> bool:
@@ -239,7 +239,7 @@ class BrowserManager:
             await self._page.fill(selector, value)
             return True
         except Exception as e:
-            logger.error(f"Fill failed on {selector}: {e}")
+            logger.error("Fill failed on %s: %s", selector, e)
             return False
 
     async def type(self, selector: str, text: str, delay: int = 50) -> bool:
@@ -261,7 +261,7 @@ class BrowserManager:
             await self._page.type(selector, text, delay=delay)
             return True
         except Exception as e:
-            logger.error(f"Type failed on {selector}: {e}")
+            logger.error("Type failed on %s: %s", selector, e)
             return False
 
     async def press(self, key: str) -> bool:
@@ -281,7 +281,7 @@ class BrowserManager:
             await self._page.keyboard.press(key)
             return True
         except Exception as e:
-            logger.error(f"Press failed for {key}: {e}")
+            logger.error("Press failed for %s: %s", key, e)
             return False
 
     async def select(self, selector: str, value: str) -> bool:
@@ -302,7 +302,7 @@ class BrowserManager:
             await self._page.select_option(selector, value)
             return True
         except Exception as e:
-            logger.error(f"Select failed on {selector}: {e}")
+            logger.error("Select failed on %s: %s", selector, e)
             return False
 
     async def wait_for_selector(self, selector: str, timeout: int | None = None) -> bool:
@@ -323,7 +323,7 @@ class BrowserManager:
             await self._page.wait_for_selector(selector, timeout=timeout)
             return True
         except Exception as e:
-            logger.error(f"Wait failed for {selector}: {e}")
+            logger.error("Wait failed for %s: %s", selector, e)
             return False
 
     async def get_text(self, selector: str) -> str | None:
@@ -342,7 +342,7 @@ class BrowserManager:
         try:
             return await self._page.text_content(selector)
         except Exception as e:
-            logger.error(f"Get text failed for {selector}: {e}")
+            logger.error("Get text failed for %s: %s", selector, e)
             return None
 
     async def get_attribute(self, selector: str, attribute: str) -> str | None:
@@ -362,7 +362,7 @@ class BrowserManager:
         try:
             return await self._page.get_attribute(selector, attribute)
         except Exception as e:
-            logger.error(f"Get attribute failed: {e}")
+            logger.error("Get attribute failed: %s", e)
             return None
 
     async def screenshot(
@@ -400,7 +400,7 @@ class BrowserManager:
             return await self._page.screenshot(**options)
 
         except Exception as e:
-            logger.error(f"Screenshot failed: {e}")
+            logger.error("Screenshot failed: %s", e)
             return None
 
     async def pdf(self, path: str | Path) -> bool:
@@ -420,7 +420,7 @@ class BrowserManager:
             await self._page.pdf(path=str(path))
             return True
         except Exception as e:
-            logger.error(f"PDF generation failed: {e}")
+            logger.error("PDF generation failed: %s", e)
             return False
 
     async def evaluate(self, script: str) -> Any:
@@ -439,7 +439,7 @@ class BrowserManager:
         try:
             return await self._page.evaluate(script)
         except Exception as e:
-            logger.error(f"Evaluate failed: {e}")
+            logger.error("Evaluate failed: %s", e)
             return None
 
     async def get_page_info(self) -> PageInfo | None:
@@ -458,7 +458,7 @@ class BrowserManager:
                 cookies_count=len(cookies),
             )
         except Exception as e:
-            logger.error(f"Get page info failed: {e}")
+            logger.error("Get page info failed: %s", e)
             return None
 
     async def get_content(self) -> str | None:
@@ -469,7 +469,7 @@ class BrowserManager:
         try:
             return await self._page.content()
         except Exception as e:
-            logger.error(f"Get content failed: {e}")
+            logger.error("Get content failed: %s", e)
             return None
 
     async def set_cookies(self, cookies: list[dict]) -> bool:
@@ -489,7 +489,7 @@ class BrowserManager:
             await self._context.add_cookies(cookies)
             return True
         except Exception as e:
-            logger.error(f"Set cookies failed: {e}")
+            logger.error("Set cookies failed: %s", e)
             return False
 
     async def clear_cookies(self) -> bool:
@@ -501,7 +501,7 @@ class BrowserManager:
             await self._context.clear_cookies()
             return True
         except Exception as e:
-            logger.error(f"Clear cookies failed: {e}")
+            logger.error("Clear cookies failed: %s", e)
             return False
 
     def is_launched(self) -> bool:

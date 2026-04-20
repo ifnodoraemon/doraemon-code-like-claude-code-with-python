@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the internet for up-to-date information."""
-    logger.info(f"Searching for: {query}")
+    logger.info("Searching for: %s", query)
     if DDGS is None:
         return "Search error: duckduckgo-search not installed"
     try:
@@ -36,19 +36,19 @@ def web_search(query: str, max_results: int = 5) -> str:
         for r in results:
             output.append(f"Title: {r['title']}\nLink: {r['href']}\nSnippet: {r['body']}\n---")
 
-        logger.info(f"Found {len(results)} search results")
+        logger.info("Found %s search results", len(results))
         return "\n".join(output)
     except (DuckDuckGoSearchException, httpx.HTTPError, ConnectionError, TimeoutError) as e:
-        logger.error(f"Search error: {e}")
+        logger.error("Search error: %s", e)
         return f"Search error: {str(e)}"
     except Exception as e:
-        logger.error(f"Unexpected search error: {type(e).__name__}: {e}")
+        logger.error("Unexpected search error: %s: %s", type(e).__name__, e)
         return f"Search error: {str(e)}"
 
 
 def web_fetch(url: str) -> str:
     """Fetch and extract main content from a web page."""
-    logger.info(f"Fetching URL: {url}")
+    logger.info("Fetching URL: %s", url)
     if not url.startswith(("http://", "https://")):
         return "Error: Only http/https URLs are allowed"
     if trafilatura is None:
@@ -56,16 +56,16 @@ def web_fetch(url: str) -> str:
     try:
         downloaded = trafilatura.fetch_url(url)
         if downloaded is None:
-            logger.warning(f"Failed to fetch URL: {url}")
+            logger.warning("Failed to fetch URL: %s", url)
             return f"Error: Failed to fetch {url}"
 
         result = trafilatura.extract(downloaded)
         if not result:
-            logger.warning(f"Could not extract content from: {url}")
+            logger.warning("Could not extract content from: %s", url)
             return "Error: Could not extract content from page."
 
-        logger.info(f"Successfully extracted {len(result)} characters from {url}")
+        logger.info("Successfully extracted %s characters from %s", len(result), url)
         return result
     except Exception as e:
-        logger.error(f"Fetch error for {url}: {e}")
+        logger.error("Fetch error for %s: %s", url, e)
         return f"Fetch error: {str(e)}"

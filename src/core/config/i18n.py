@@ -285,10 +285,10 @@ class I18n:
                 else:
                     self._translations[lang_code] = data
 
-                logger.debug(f"Loaded translations for: {lang_code}")
+                logger.debug("Loaded translations for: %s", lang_code)
 
             except Exception as e:
-                logger.warning(f"Failed to load translation file {file}: {e}")
+                logger.warning("Failed to load translation file %s: %s", file, e)
 
     def t(self, key: str, **kwargs) -> str:
         """
@@ -340,11 +340,11 @@ class I18n:
             True if locale was set
         """
         if locale_code not in self._translations:
-            logger.warning(f"Unknown locale: {locale_code}")
+            logger.warning("Unknown locale: %s", locale_code)
             return False
 
         self._current_locale = locale_code
-        logger.info(f"Locale set to: {locale_code}")
+        logger.info("Locale set to: %s", locale_code)
         return True
 
     def get_locale(self) -> str:

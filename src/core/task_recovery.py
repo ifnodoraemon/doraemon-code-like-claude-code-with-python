@@ -227,14 +227,14 @@ class TaskRecoveryManager:
             task.interruption_type = interruption_type
             task.updated_at = time.time()
             self._save_task(task)
-            logger.info(f"Task interrupted: {task.name} ({interruption_type.value})")
+            logger.info("Task interrupted: %s (%s)", task.name, interruption_type.value)
 
         # Call shutdown callbacks
         for callback in self._shutdown_callbacks:
             try:
                 callback()
             except Exception as e:
-                logger.error(f"Shutdown callback error: {e}")
+                logger.error("Shutdown callback error: %s", e)
 
     def on_shutdown(self, callback: Callable):
         """Register a shutdown callback."""
@@ -282,7 +282,7 @@ class TaskRecoveryManager:
         self._current_task = task_id
         self._save_task(task)
 
-        logger.info(f"Started recoverable task: {name} ({task_id})")
+        logger.info("Started recoverable task: %s (%s)", name, task_id)
         return task_id
 
     def update_progress(
@@ -348,7 +348,7 @@ class TaskRecoveryManager:
         if self._current_task == task_id:
             self._current_task = None
 
-        logger.info(f"Task completed: {task.name}")
+        logger.info("Task completed: %s", task.name)
 
     def fail_task(self, task_id: str, error_message: str):
         """Mark a task as failed."""
@@ -365,7 +365,7 @@ class TaskRecoveryManager:
         if self._current_task == task_id:
             self._current_task = None
 
-        logger.error(f"Task failed: {task.name} - {error_message}")
+        logger.error("Task failed: %s - %s", task.name, error_message)
 
     def pause_task(self, task_id: str):
         """Pause a task."""
@@ -377,7 +377,7 @@ class TaskRecoveryManager:
         task.updated_at = time.time()
         self._save_task(task)
 
-        logger.info(f"Task paused: {task.name}")
+        logger.info("Task paused: %s", task.name)
 
     def resume_task(self, task_id: str) -> RecoverableTask | None:
         """
@@ -394,13 +394,13 @@ class TaskRecoveryManager:
             self._load_task(task_id)
 
         if task_id not in self._tasks:
-            logger.error(f"Task not found: {task_id}")
+            logger.error("Task not found: %s", task_id)
             return None
 
         task = self._tasks[task_id]
 
         if task.state not in (TaskState.INTERRUPTED, TaskState.PAUSED):
-            logger.warning(f"Task not resumable: {task.name} ({task.state.value})")
+            logger.warning("Task not resumable: %s (%s)", task.name, task.state.value)
             return None
 
         task.state = TaskState.RUNNING
@@ -408,7 +408,7 @@ class TaskRecoveryManager:
         self._current_task = task_id
         self._save_task(task)
 
-        logger.info(f"Task resumed: {task.name}")
+        logger.info("Task resumed: %s", task.name)
         return task
 
     def cancel_task(self, task_id: str):
@@ -424,7 +424,7 @@ class TaskRecoveryManager:
         if self._current_task == task_id:
             self._current_task = None
 
-        logger.info(f"Task cancelled: {task.name}")
+        logger.info("Task cancelled: %s", task.name)
 
     def get_task(self, task_id: str) -> RecoverableTask | None:
         """Get a task by ID."""
@@ -474,7 +474,7 @@ class TaskRecoveryManager:
             self.delete_task(task_id)
 
         if to_delete:
-            logger.info(f"Cleaned up {len(to_delete)} old tasks")
+            logger.info("Cleaned up %s old tasks", len(to_delete))
 
     def _save_task(self, task: RecoverableTask):
         """Save a task to storage."""
@@ -485,7 +485,7 @@ class TaskRecoveryManager:
                 encoding="utf-8",
             )
         except Exception as e:
-            logger.error(f"Failed to save task: {e}")
+            logger.error("Failed to save task: %s", e)
 
     def _save_all_tasks(self):
         """Save all tasks to storage."""
@@ -504,7 +504,7 @@ class TaskRecoveryManager:
             self._tasks[task_id] = task
             return True
         except Exception as e:
-            logger.error(f"Failed to load task {task_id}: {e}")
+            logger.error("Failed to load task %s: %s", task_id, e)
             return False
 
     def _load_tasks(self):
@@ -515,7 +515,7 @@ class TaskRecoveryManager:
                 task = RecoverableTask.from_dict(data)
                 self._tasks[task.id] = task
             except Exception as e:
-                logger.warning(f"Failed to load task file {task_file}: {e}")
+                logger.warning("Failed to load task file %s: %s", task_file, e)
 
         # Find any that were running when we crashed
         for task in self._tasks.values():
@@ -526,7 +526,7 @@ class TaskRecoveryManager:
 
         interrupted = self.get_interrupted_tasks()
         if interrupted:
-            logger.info(f"Found {len(interrupted)} interrupted tasks")
+            logger.info("Found %s interrupted tasks", len(interrupted))
 
     def get_recovery_prompt(self, task: RecoverableTask) -> str:
         """

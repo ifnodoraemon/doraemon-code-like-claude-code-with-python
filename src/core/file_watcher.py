@@ -120,7 +120,7 @@ class DebouncedHandler:
                 try:
                     self._callback(event)
                 except Exception as e:
-                    logger.error(f"Error in file event callback: {e}")
+                    logger.error("Error in file event callback: %s", e)
             self._pending.clear()
 
 
@@ -267,12 +267,12 @@ class FileWatcher:
 
         path = config.path
         if not path.exists():
-            logger.error(f"Path does not exist: {path}")
+            logger.error("Path does not exist: %s", path)
             return False
 
         key = str(path)
         if key in self._observers:
-            logger.warning(f"Already watching: {path}")
+            logger.warning("Already watching: %s", path)
             return True
 
         try:
@@ -288,11 +288,11 @@ class FileWatcher:
 
             self._observers[key] = observer
             self._running = True
-            logger.info(f"Watching: {path}")
+            logger.info("Watching: %s", path)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to watch {path}: {e}")
+            logger.error("Failed to watch %s: %s", path, e)
             return False
 
     def unwatch(self, path: Path | str):
@@ -302,7 +302,7 @@ class FileWatcher:
             self._observers[key].stop()
             self._observers[key].join()
             del self._observers[key]
-            logger.info(f"Stopped watching: {path}")
+            logger.info("Stopped watching: %s", path)
 
     def stop(self):
         """Stop all watchers."""
@@ -316,7 +316,7 @@ class FileWatcher:
             try:
                 callback(event)
             except Exception as e:
-                logger.error(f"Error in file change callback: {e}")
+                logger.error("Error in file change callback: %s", e)
 
     def get_watched_paths(self) -> list[str]:
         """Get list of watched paths."""

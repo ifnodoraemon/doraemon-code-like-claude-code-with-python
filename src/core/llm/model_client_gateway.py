@@ -52,9 +52,9 @@ class GatewayModelClient(BaseModelClient):
         self._client = httpx.AsyncClient(
             base_url=self.config.gateway_url,
             headers=headers,
-            timeout=httpx.Timeout(120.0),
+            timeout=httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0),
         )
-        logger.info(f"Connected to gateway: {self.config.gateway_url}")
+        logger.info("Connected to gateway: %s", self.config.gateway_url)
 
     async def _make_api_call(
         self, endpoint: str, payload: dict | None = None, method: str = "POST"
@@ -251,7 +251,7 @@ class GatewayModelClient(BaseModelClient):
                     except json.JSONDecodeError:
                         continue
         except (httpx.StreamError, httpx.RemoteProtocolError) as e:
-            logger.error(f"Stream connection error: {e}")
+            logger.error("Stream connection error: %s", e)
             raise
 
     async def list_models(self) -> list[dict]:

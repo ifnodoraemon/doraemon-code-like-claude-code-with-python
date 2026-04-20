@@ -68,17 +68,14 @@ jobs:
     - name: Run ruff (linter)
       run: |
         ruff check src/ tests/
-      continue-on-error: true
     
     - name: Run ruff (formatter check)
       run: |
         ruff format --check src/ tests/
-      continue-on-error: true
     
     - name: Run mypy (type checker)
       run: |
         mypy src/ --ignore-missing-imports
-      continue-on-error: true
 
   security:
     name: Security Scan
@@ -101,10 +98,8 @@ jobs:
     - name: Run bandit (security linter)
       run: |
         bandit -r src/ -f json -o bandit-report.json
-      continue-on-error: true
     
     - name: Check for known vulnerabilities
       run: |
         pip install pip-audit
         pip-audit
-      continue-on-error: true

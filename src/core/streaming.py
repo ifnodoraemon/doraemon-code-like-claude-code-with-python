@@ -239,7 +239,7 @@ class StreamManager:
         except Exception as e:
             self._state = StreamState.ERROR
             self._stats.end_time = time.time()
-            logger.error(f"Stream error: {e}")
+            logger.error("Stream error: %s", e)
             raise
 
     def _extract_text(self, response: Any) -> str:
@@ -335,7 +335,7 @@ class StreamingChat:
             self._history.append({"role": "model", "parts": [{"text": full_response}]})
 
         except Exception as e:
-            logger.error(f"Streaming error: {e}")
+            logger.error("Streaming error: %s", e)
             raise
 
     def get_history(self) -> list[dict]:

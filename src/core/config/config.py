@@ -46,11 +46,11 @@ def load_config(override_path: str | None = None, validate: bool = True) -> dict
     # 1. Runtime override
     if override_path and os.path.exists(override_path):
         config_file = Path(override_path)
-        logger.info(f"Loading config from override: {config_file}")
+        logger.info("Loading config from override: %s", config_file)
     # 2. Project Level
     elif default_config_path().exists():
         config_file = default_config_path()
-        logger.info(f"Loading config from project: {config_file}")
+        logger.info("Loading config from project: %s", config_file)
     else:
         logger.warning("No project config file found, using defaults")
         return get_default_config()
@@ -77,13 +77,13 @@ def load_config(override_path: str | None = None, validate: bool = True) -> dict
         return config_data
 
     except ValueError as e:
-        logger.error(f"Configuration validation failed: {e}")
+        logger.error("Configuration validation failed: %s", e)
         raise
     except (PermissionError, json.JSONDecodeError) as e:
-        logger.error(f"Failed to load configuration: {e}", exc_info=True)
+        logger.error("Failed to load configuration: %s", e, exc_info=True)
         raise
     except Exception as e:
-        logger.error(f"Failed to load configuration: {e}", exc_info=True)
+        logger.error("Failed to load configuration: %s", e, exc_info=True)
         return get_default_config()
 
 

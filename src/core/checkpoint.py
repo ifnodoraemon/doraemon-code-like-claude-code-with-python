@@ -142,7 +142,7 @@ class CheckpointManager:
         )
         self._pending_files.clear()
 
-        logger.debug(f"Started checkpoint {checkpoint_id}")
+        logger.debug("Started checkpoint %s", checkpoint_id)
         return checkpoint_id
 
     def snapshot_file(self, path: str) -> bool:
@@ -162,7 +162,7 @@ class CheckpointManager:
                 size = stat_result.st_size
                 mtime = stat_result.st_mtime
                 if size > self.config.max_file_size:
-                    logger.warning(f"File too large for snapshot: {path} ({size} bytes)")
+                    logger.warning("File too large for snapshot: %s (%s bytes)", path, size)
                     snapshot = FileSnapshot(
                         path=abs_path,
                         content=None,
@@ -190,11 +190,11 @@ class CheckpointManager:
 
             self._current.files.append(snapshot)
             self._pending_files.add(abs_path)
-            logger.debug(f"Snapshot taken: {path}")
+            logger.debug("Snapshot taken: %s", path)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to snapshot file {path}: {e}")
+            logger.error("Failed to snapshot file %s: %s", path, e)
             return False
 
     def finalize_checkpoint(self, description: str = "") -> str | None:
@@ -214,7 +214,7 @@ class CheckpointManager:
         self._save_checkpoint(self._current)
         self._save_index()
 
-        logger.info(f"Checkpoint {checkpoint_id} saved with {len(self._current.files)} file(s)")
+        logger.info("Checkpoint %s saved with %s file(s)", checkpoint_id, len(self._current.files))
 
         self._current = None
         self._pending_files.clear()
@@ -273,7 +273,7 @@ class CheckpointManager:
                     self._restore_file(snapshot)
                     result["restored_files"].append(snapshot.path)
                 except Exception as e:
-                    logger.error(f"Failed to restore {snapshot.path}: {e}")
+                    logger.error("Failed to restore %s: %s", snapshot.path, e)
                     result["failed_files"].append({"path": snapshot.path, "error": str(e)})
 
         if mode in ("conversation", "both"):
@@ -317,7 +317,7 @@ class CheckpointManager:
         if not snapshot.exists:
             if file_path.exists():
                 file_path.unlink()
-                logger.debug(f"Deleted file: {snapshot.path}")
+                logger.debug("Deleted file: %s", snapshot.path)
             return
 
         if snapshot.content is None:
@@ -325,7 +325,7 @@ class CheckpointManager:
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(snapshot.content, encoding="utf-8")
-        logger.debug(f"Restored file: {snapshot.path}")
+        logger.debug("Restored file: %s", snapshot.path)
 
     def _get_checkpoint_path(self, checkpoint_id: str) -> Path:
         """Get path for checkpoint data file."""
@@ -361,7 +361,7 @@ class CheckpointManager:
 
             return Checkpoint.from_dict(data)
         except Exception as e:
-            logger.error(f"Failed to load checkpoint {checkpoint_id}: {e}")
+            logger.error("Failed to load checkpoint %s: %s", checkpoint_id, e)
             return None
 
     def _delete_checkpoint_file(self, checkpoint_id: str):
@@ -413,11 +413,11 @@ class CheckpointManager:
                         )
                     )
 
-            logger.info(f"Loaded {len(self.checkpoints)} checkpoints")
+            logger.info("Loaded %s checkpoints", len(self.checkpoints))
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load checkpoint index: {e}")
+            logger.error("Failed to load checkpoint index: %s", e)
             return False
 
     def _cleanup_old_checkpoints(self):
@@ -439,4 +439,4 @@ class CheckpointManager:
         if removed > 0:
             self.checkpoints = new_checkpoints
             self._save_index()
-            logger.info(f"Cleaned up {removed} old checkpoints")
+            logger.info("Cleaned up %s old checkpoints", removed)

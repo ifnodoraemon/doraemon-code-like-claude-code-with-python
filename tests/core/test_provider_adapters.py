@@ -87,7 +87,7 @@ def test_google_convert_messages_maps_tool_result_to_user_function_response():
             {"role": "tool", "tool_call_id": "1", "name": "read", "content": "file body"},
         ],
         None,
-        types_module,
+        types_module=types_module,
     )
 
     assert contents[0].role == "model"

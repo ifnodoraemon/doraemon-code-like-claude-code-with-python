@@ -93,7 +93,7 @@ class ThinkingManager:
     def set_mode(self, mode: ThinkingMode):
         """Set thinking mode."""
         self._mode = mode
-        logger.info(f"Thinking mode set to: {mode.value}")
+        logger.info("Thinking mode set to: %s", mode.value)
 
     def toggle_mode(self) -> ThinkingMode:
         """Toggle between normal and extended thinking."""

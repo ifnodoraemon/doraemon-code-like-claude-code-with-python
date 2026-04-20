@@ -200,7 +200,7 @@ exit 0
             if hook_path.exists():
                 backup_path = hook_path.with_suffix(".backup")
                 hook_path.rename(backup_path)
-                logger.info(f"Backed up existing hook: {hook_type.value}")
+                logger.info("Backed up existing hook: %s", hook_type.value)
 
             # Write new hook
             hook_path.write_text(script, encoding="utf-8")
@@ -208,11 +208,11 @@ exit 0
             # Make executable
             hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC)
 
-            logger.info(f"Installed hook: {hook_type.value}")
+            logger.info("Installed hook: %s", hook_type.value)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to install hook {hook_type.value}: {e}")
+            logger.error("Failed to install hook %s: %s", hook_type.value, e)
             return False
 
     def uninstall(self, hooks: list[GitHookType] | None = None):
@@ -229,13 +229,13 @@ exit 0
 
             if hook_path.exists():
                 hook_path.unlink()
-                logger.info(f"Removed hook: {hook_type.value}")
+                logger.info("Removed hook: %s", hook_type.value)
 
                 # Restore backup if exists
                 backup_path = hook_path.with_suffix(".backup")
                 if backup_path.exists():
                     backup_path.rename(hook_path)
-                    logger.info(f"Restored backup: {hook_type.value}")
+                    logger.info("Restored backup: %s", hook_type.value)
 
     def add_hook(self, hook: HookScript):
         """
@@ -330,7 +330,7 @@ exit 0
                 try:
                     callback()
                 except Exception as e:
-                    logger.error(f"Hook callback error: {e}")
+                    logger.error("Hook callback error: %s", e)
 
         duration = time.time() - start_time
 

@@ -95,7 +95,7 @@ class HotReloadManager:
         key = str(path)
 
         if not path.exists():
-            logger.warning(f"Config file does not exist: {path}")
+            logger.warning("Config file does not exist: %s", path)
             return False
 
         # Load initial value
@@ -104,7 +104,7 @@ class HotReloadManager:
             value = parser(content)
 
             if validator and not validator(value):
-                logger.error(f"Invalid config: {path}")
+                logger.error("Invalid config: %s", path)
                 return False
 
             config_file = ConfigFile(
@@ -119,11 +119,11 @@ class HotReloadManager:
             with self._lock:
                 self._configs[key] = config_file
 
-            logger.info(f"Watching config: {path}")
+            logger.info("Watching config: %s", path)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load config {path}: {e}")
+            logger.error("Failed to load config %s: %s", path, e)
             return False
 
     def watch_json(
@@ -170,7 +170,7 @@ class HotReloadManager:
         with self._lock:
             if key in self._configs:
                 del self._configs[key]
-                logger.info(f"Stopped watching: {path}")
+                logger.info("Stopped watching: %s", path)
 
     def on_change(self, callback: Callable[[str, dict], None]):
         """
@@ -198,7 +198,7 @@ class HotReloadManager:
             self._watcher.watch(dir_path)
 
         self._running = True
-        logger.info(f"Hot reload started for {len(self._configs)} configs")
+        logger.info("Hot reload started for %s configs", len(self._configs))
 
     def stop(self):
         """Stop watching all config files."""
@@ -243,7 +243,7 @@ class HotReloadManager:
 
             # Validate
             if config.validator and not config.validator(new_value):
-                logger.error(f"Invalid config after reload: {config.path}")
+                logger.error("Invalid config after reload: %s", config.path)
                 return
 
             # Check if actually changed
@@ -255,23 +255,23 @@ class HotReloadManager:
                 config.last_value = new_value
                 config.last_modified = config.path.stat().st_mtime
 
-            logger.info(f"Config reloaded: {config.path}")
+            logger.info("Config reloaded: %s", config.path)
 
             # Call callbacks
             if config.on_change:
                 try:
                     config.on_change(new_value)
                 except Exception as e:
-                    logger.error(f"Error in config callback: {e}")
+                    logger.error("Error in config callback: %s", e)
 
             for callback in self._global_callbacks:
                 try:
                     callback(str(config.path), new_value)
                 except Exception as e:
-                    logger.error(f"Error in global callback: {e}")
+                    logger.error("Error in global callback: %s", e)
 
         except Exception as e:
-            logger.error(f"Failed to reload config {config.path}: {e}")
+            logger.error("Failed to reload config %s: %s", config.path, e)
 
     def get_config(self, path: Path | str) -> dict | None:
         """

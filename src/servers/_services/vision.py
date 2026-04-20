@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import logging
 from abc import ABC, abstractmethod
@@ -67,10 +68,10 @@ class GoogleAdapter(VisionAdapter):
             )
             return response.text
         except FileNotFoundError:
-            logger.error(f"Image file not found: {image_path}")
+            logger.error("Image file not found: %s", image_path)
             return f"[Error: Image file not found: {image_path}]"
         except PermissionError:
-            logger.error(f"Permission denied reading image: {image_path}")
+            logger.error("Permission denied reading image: %s", image_path)
             return f"[Error: Permission denied reading image: {image_path}]"
         except Exception as e:
             logger.exception(f"Gemini vision processing failed for {image_path}")
@@ -134,10 +135,10 @@ class OpenAIAdapter(VisionAdapter):
             )
             return response.choices[0].message.content
         except FileNotFoundError:
-            logger.error(f"Image file not found: {image_path}")
+            logger.error("Image file not found: %s", image_path)
             return f"[Error: Image file not found: {image_path}]"
         except PermissionError:
-            logger.error(f"Permission denied reading image: {image_path}")
+            logger.error("Permission denied reading image: %s", image_path)
             return f"[Error: Permission denied reading image: {image_path}]"
         except Exception as e:
             logger.exception(f"OpenAI vision processing failed for {image_path}")
@@ -162,3 +163,10 @@ def process_image(
 ) -> str:
     adapter = get_vision_adapter()
     return adapter.process(path, prompt)
+
+
+async def process_image_async(
+    path: str, prompt: str = "Extract all text and describe any diagrams in this image."
+) -> str:
+    """Async wrapper that runs vision processing in a thread to avoid blocking the event loop."""
+    return await asyncio.to_thread(process_image, path, prompt)

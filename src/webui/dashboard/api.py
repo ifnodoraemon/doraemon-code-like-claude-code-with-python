@@ -141,7 +141,7 @@ def list_evaluation_files() -> list[dict[str, Any]]:
                     }
                 )
             except (json.JSONDecodeError, OSError) as e:
-                logger.warning(f"Failed to read {summary_file}: {e}")
+                logger.warning("Failed to read %s: %s", summary_file, e)
                 continue
 
     # Sort by timestamp (newest first)
@@ -312,7 +312,7 @@ def calculate_task_statistics() -> dict[str, Any]:
             total_success += summary.get("successful_tasks", 0)
 
         except (FileNotFoundError, ValueError) as e:
-            logger.warning(f"Failed to load evaluation {eval_data['id']}: {e}")
+            logger.warning("Failed to load evaluation %s: %s", eval_data['id'], e)
             continue
 
     # Calculate success rates
@@ -396,7 +396,7 @@ async def run_evaluation_async(
     except Exception as e:
         progress.status = "failed"
         progress.error = str(e)
-        logger.error(f"Evaluation {eval_id} failed: {e}")
+        logger.error("Evaluation %s failed: %s", eval_id, e)
 
     finally:
         progress.end_time = datetime.now().isoformat()

@@ -197,7 +197,7 @@ class ToolHistoryManager:
             error_message: Error message if failed
         """
         if exec_id not in self._pending:
-            logger.warning(f"Unknown execution ID: {exec_id}")
+            logger.warning("Unknown execution ID: %s", exec_id)
             return
 
         pending = self._pending.pop(exec_id)
@@ -416,9 +416,9 @@ class ToolHistoryManager:
                 execution = ToolExecution.from_dict(entry_data)
                 self._entries.append(execution)
             except Exception as e:
-                logger.warning(f"Failed to import entry: {e}")
+                logger.warning("Failed to import entry: %s", e)
 
-        logger.info(f"Imported {len(data.get('entries', []))} entries")
+        logger.info("Imported %s entries", len(data.get('entries', [])))
 
     def _save_history(self):
         """Save history to disk."""
@@ -432,7 +432,7 @@ class ToolHistoryManager:
             }
             self._persist_path.write_text(json.dumps(data), encoding="utf-8")
         except Exception as e:
-            logger.warning(f"Failed to save history: {e}")
+            logger.warning("Failed to save history: %s", e)
 
     def _load_history(self):
         """Load history from disk."""
@@ -443,9 +443,9 @@ class ToolHistoryManager:
                     self._entries.append(ToolExecution.from_dict(entry_data))
                 except Exception:
                     pass
-            logger.info(f"Loaded {len(self._entries)} history entries")
+            logger.info("Loaded %s history entries", len(self._entries))
         except Exception as e:
-            logger.warning(f"Failed to load history: {e}")
+            logger.warning("Failed to load history: %s", e)
 
 
 class ExecutionRecorder:

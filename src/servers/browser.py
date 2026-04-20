@@ -86,7 +86,7 @@ async def browse_page(
     Returns:
         Page title, URL, and text content
     """
-    logger.info(f"Browsing: {url}")
+    logger.info("Browsing: %s", url)
     try:
         page, pid = await get_or_create_page(page_id)
         await page.goto(url, timeout=30000, wait_until=wait_until)
@@ -97,7 +97,7 @@ async def browse_page(
         return f"Page ID: {pid}\nTitle: {title}\nURL: {url}\n\n{text[:10000]}..."
 
     except Exception as e:
-        logger.error(f"Browser error for {url}: {e}")
+        logger.error("Browser error for %s: %s", url, e)
         return f"Error: {str(e)}"
 
 
@@ -119,7 +119,7 @@ async def take_screenshot(
     Returns:
         Success message with file path
     """
-    logger.info(f"Screenshotting: {url} -> {path}")
+    logger.info("Screenshotting: %s -> %s", url, path)
     try:
         validate_path(path)
     except (ValueError, PermissionError) as e:
@@ -147,7 +147,7 @@ async def take_screenshot(
         finally:
             await page.close()
     except Exception as e:
-        logger.error(f"Screenshot error: {e}")
+        logger.error("Screenshot error: %s", e)
         return f"Error: {str(e)}"
 
 

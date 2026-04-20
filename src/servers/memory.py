@@ -248,10 +248,10 @@ def memory_put(
 
     try:
         _write_note_file(title=title, content=content, collection_name=collection_name, tags=tags)
-        logger.info(f"Saved note '{title}' to project '{collection_name}'")
+        logger.info("Saved note '%s' to project '%s'", title, collection_name)
         return f"Note '{title}' saved to project {collection_name}."
     except Exception as e:
-        logger.error(f"Failed to save note '{title}': {e}")
+        logger.error("Failed to save note '%s': %s", title, e)
         return f"Failed to save note: {e}"
 
 
@@ -272,17 +272,31 @@ def memory_search(query: str, collection_name: str = "default", n_results: int =
         return f"Search failed: {e}"
 
 
+def _validate_note_path(note_path: Path, collection_name: str) -> bool:
+    """Ensure the note path is within the expected notes root to prevent traversal."""
+    try:
+        notes_root = _notes_dir(collection_name).resolve()
+        resolved = note_path.resolve()
+        return str(resolved).startswith(str(notes_root))
+    except (ValueError, OSError):
+        return False
+
+
 def memory_delete(title: str, collection_name: str = "default") -> str:
     """Delete a memory entry by title."""
     try:
         note = _load_note_by_title(collection_name, title)
         if note is None:
             return f"Note '{title}' not found in project {collection_name}."
-        Path(note["path"]).unlink()
-        logger.info(f"Deleted note '{title}' from project '{collection_name}'")
+        note_path = Path(note["path"])
+        if not _validate_note_path(note_path, collection_name):
+            logger.error("Path traversal attempt blocked in memory_delete: %s", note_path)
+            return "Error: Invalid note path — deletion denied for security."
+        note_path.unlink()
+        logger.info("Deleted note '%s' from project '%s'", title, collection_name)
         return f"Note '{title}' deleted from project {collection_name}."
     except Exception as e:
-        logger.error(f"Failed to delete note '{title}': {e}")
+        logger.error("Failed to delete note '%s': %s", title, e)
         return f"Failed to delete note: {e}"
 
 
@@ -307,7 +321,7 @@ def memory_list(collection_name: str = "default", limit: int = 20) -> str:
 
         return "\n".join(output)
     except Exception as e:
-        logger.error(f"Failed to list notes: {e}")
+        logger.error("Failed to list notes: %s", e)
         return f"Failed to list notes: {e}"
 
 

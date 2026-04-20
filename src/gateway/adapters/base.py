@@ -125,7 +125,7 @@ class BaseAdapter(ABC):
             models = self.get_models()
             self._health_cache = len(models) > 0
         except Exception as e:
-            logger.error(f"Health check failed for {self.provider_name}: {type(e).__name__}")
+            logger.error("Health check failed for %s: %s", self.provider_name, type(e).__name__)
             self._health_cache = False
         self._health_cache_time = now
         return self._health_cache

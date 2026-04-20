@@ -99,7 +99,7 @@ class GoogleAdapter(BaseAdapter):
                 config=gen_config,
             )
         except Exception as e:
-            logger.error(f"Google API error: {e}")
+            logger.error("Google API error: %s", e)
             raise RuntimeError(f"Google API request failed: {e}") from e
 
         # Convert response
@@ -120,7 +120,7 @@ class GoogleAdapter(BaseAdapter):
                 config=gen_config,
             )
         except Exception as e:
-            logger.error(f"Google stream API error: {e}")
+            logger.error("Google stream API error: %s", e)
             raise RuntimeError(f"Google stream API request failed: {e}") from e
 
         async for chunk in response:
@@ -140,7 +140,7 @@ class GoogleAdapter(BaseAdapter):
                             try:
                                 args = dict(fc.args) if fc.args else {}
                             except (TypeError, ValueError):
-                                logger.warning(f"Failed to convert function call args: {fc.args}")
+                                logger.warning("Failed to convert function call args: %s", fc.args)
                                 args = {}
                             tool_calls = [
                                 ToolCall(

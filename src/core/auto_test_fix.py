@@ -176,7 +176,7 @@ class TestRunner:
         cmd = command or self.get_test_command()
         cmd_str = " ".join(cmd)
 
-        logger.info(f"Running tests: {cmd_str}")
+        logger.info("Running tests: %s", cmd_str)
 
         start_time = time.time()
 
@@ -345,7 +345,7 @@ class AutoTestFix:
             Tuple of (success, fix_history)
         """
         for iteration in range(1, self.max_iterations + 1):
-            logger.info(f"Test-fix iteration {iteration}/{self.max_iterations}")
+            logger.info("Test-fix iteration %s/%s", iteration, self.max_iterations)
 
             # Run tests
             result = await self.runner.run_tests(test_command)
@@ -356,7 +356,7 @@ class AutoTestFix:
 
             # Analyze failures
             failed_tests = self.runner.get_failed_tests(result)
-            logger.info(f"Found {len(failed_tests)} failed tests")
+            logger.info("Found %s failed tests", len(failed_tests))
 
             if not failed_tests:
                 # No specific failures found, but tests failed

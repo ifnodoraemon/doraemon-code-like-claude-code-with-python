@@ -28,7 +28,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +76,7 @@ def _message_from_session_data(payload: dict[str, Any]) -> Message:
     return Message(
         role=payload.get("role", "assistant"),
         content=payload.get("content"),
+        provider_items=payload.get("provider_items"),
         tool_calls=payload.get("tool_calls"),
         tool_call_id=payload.get("tool_call_id"),
         name=payload.get("name"),
@@ -88,6 +89,8 @@ def _message_to_session_data(message: Message) -> dict[str, Any]:
     payload: dict[str, Any] = {"role": message.role}
     if message.content is not None:
         payload["content"] = message.content
+    if message.provider_items:
+        payload["provider_items"] = message.provider_items
     if message.tool_calls:
         payload["tool_calls"] = message.tool_calls
     if message.tool_call_id:
@@ -109,11 +112,7 @@ class AgentTurnResult:
     duration: float
     success: bool
     error: str | None = None
-    files_modified: list[str] = None
-
-    def __post_init__(self):
-        if self.files_modified is None:
-            self.files_modified = []
+    files_modified: list[str] = field(default_factory=list)
 
 
 async def run_agent_turn(
@@ -249,8 +248,8 @@ async def run_agent_turn(
             error="Agent timed out",
             files_modified=[],
         )
-    except Exception as e:
-        logger.error(f"Agent turn failed: {e}")
+    except (RuntimeError, ValueError, OSError, TypeError, KeyError) as e:
+        logger.error("Agent turn failed: %s", e)
         return AgentTurnResult(
             response="",
             tool_calls=[],
@@ -369,8 +368,8 @@ class AgentSession:
                 error=result.error,
                 files_modified=_collect_modified_paths(result.tool_calls),
             )
-        except Exception as e:
-            logger.error(f"Agent turn failed: {e}")
+        except (RuntimeError, ValueError, OSError, TypeError, KeyError) as e:
+            logger.error("Agent turn failed: %s", e)
             if self._trace:
                 self._trace.error(str(e), {"exception_type": type(e).__name__})
             self._save_session_state()
@@ -432,7 +431,7 @@ class AgentSession:
                     prior_state=prior_run,
                     trace_run_id=run_id,
                 )
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError, TypeError, KeyError) as e:
             self._rollback_orchestration_messages(message_start_index)
             if self._trace and self.enable_trace:
                 self._trace.error(str(e), {"exception_type": type(e).__name__, "run_id": run_id})
@@ -476,8 +475,8 @@ class AgentSession:
         try:
             async for event in self._agent.run_stream(user_input, **kwargs):
                 yield event
-        except Exception as e:
-            logger.error(f"Agent streaming turn failed: {e}")
+        except (RuntimeError, ValueError, OSError, TypeError, KeyError) as e:
+            logger.error("Agent streaming turn failed: %s", e)
             if self._trace:
                 self._trace.error(str(e), {"exception_type": type(e).__name__})
             yield {"type": "error", "error": str(e)}
@@ -622,7 +621,11 @@ class AgentSession:
         self._session_record = self._resume_existing_session()
 
     def _ensure_session_record(self) -> None:
-        if not self.persist_session or self._session_record is not None or self._session_manager is None:
+        if (
+            not self.persist_session
+            or self._session_record is not None
+            or self._session_manager is None
+        ):
             return
 
         self._session_record = self._session_manager.create_session(
@@ -743,7 +746,11 @@ class AgentSession:
             self._state.add_message(_message_from_session_data(payload))
 
         for message in reversed(self._state.messages):
-            if self._state.last_response is None and message.role == "assistant" and message.content:
+            if (
+                self._state.last_response is None
+                and message.role == "assistant"
+                and message.content
+            ):
                 self._state.last_response = message.content
             if self._state.user_input is None and message.role == "user" and message.content:
                 self._state.user_input = message.content
@@ -827,7 +834,11 @@ class AgentSession:
         self._state.messages = self._state.messages[:message_start_index]
         self._state._update_token_estimate()
         self._state.user_input = next(
-            (message.content for message in reversed(self._state.messages) if message.role == "user"),
+            (
+                message.content
+                for message in reversed(self._state.messages)
+                if message.role == "user"
+            ),
             None,
         )
         self._state.last_response = next(

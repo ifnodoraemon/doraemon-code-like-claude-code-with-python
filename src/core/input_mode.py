@@ -93,10 +93,10 @@ class InputManager:
                 readline.set_completer(self._completer)
                 readline.parse_and_bind("tab: complete")
 
-            logger.debug(f"Input mode set to: {self._mode.value}")
+            logger.debug("Input mode set to: %s", self._mode.value)
 
         except Exception as e:
-            logger.warning(f"Failed to setup readline: {e}")
+            logger.warning("Failed to setup readline: %s", e)
 
     def _completer(self, text: str, state: int) -> str | None:
         """Readline completer function."""

@@ -185,7 +185,7 @@ class SessionManager:
                     meta = SessionMetadata.from_dict(entry)
                     self._index[meta.id] = meta
             except Exception as e:
-                logger.error(f"Failed to load session index: {e}")
+                logger.error("Failed to load session index: %s", e)
 
     def _save_index(self):
         """Save session index."""
@@ -235,7 +235,7 @@ class SessionManager:
         self._index[session_id] = metadata
         self._save_index()
 
-        logger.info(f"Created session {session_id}" + (f" ({name})" if name else ""))
+        logger.info("Created session %s%s", session_id, f" ({name})" if name else "")
         return session
 
     def _save_session(self, session: SessionData):
@@ -249,7 +249,7 @@ class SessionManager:
     def load_session(self, session_id: str) -> SessionData | None:
         """Load a session by ID."""
         if not self._is_safe_session_id(session_id):
-            logger.warning(f"Rejected unsafe session ID: {session_id}")
+            logger.warning("Rejected unsafe session ID: %s", session_id)
             return None
 
         path = self._get_session_path(session_id)
@@ -260,7 +260,7 @@ class SessionManager:
             data = json.loads(path.read_text(encoding="utf-8"))
             return SessionData.from_dict(data)
         except Exception as e:
-            logger.error(f"Failed to load session {session_id}: {e}")
+            logger.error("Failed to load session %s: %s", session_id, e)
             return None
 
     def save_session(self, session: SessionData):
@@ -284,7 +284,7 @@ class SessionManager:
         # Try as ID first
         session = self.load_session(identifier)
         if session:
-            logger.info(f"Resumed session {identifier}")
+            logger.info("Resumed session %s", identifier)
             return session
 
         # Try as name
@@ -292,10 +292,10 @@ class SessionManager:
             if meta.name == identifier:
                 session = self.load_session(meta.id)
                 if session:
-                    logger.info(f"Resumed session {meta.id} ({identifier})")
+                    logger.info("Resumed session %s (%s)", meta.id, identifier)
                     return session
 
-        logger.warning(f"Session not found: {identifier}")
+        logger.warning("Session not found: %s", identifier)
         return None
 
     def fork_session(
@@ -363,7 +363,7 @@ class SessionManager:
         self._index[new_id] = metadata
         self._save_index()
 
-        logger.info(f"Forked session {session_id} -> {new_id}")
+        logger.info("Forked session %s -> %s", session_id, new_id)
         return forked
 
     def list_sessions(
@@ -454,7 +454,7 @@ class SessionManager:
             self._save_session(session)
 
         self._save_index()
-        logger.info(f"Renamed session {session_id} to '{new_name}'")
+        logger.info("Renamed session %s to '%s'", session_id, new_name)
         return True
 
     def delete_session(self, session_id: str) -> bool:
@@ -471,7 +471,7 @@ class SessionManager:
         del self._index[session_id]
         self._save_index()
 
-        logger.info(f"Deleted session {session_id}")
+        logger.info("Deleted session %s", session_id)
         return True
 
     def export_session(
@@ -509,7 +509,7 @@ class SessionManager:
 
         if path:
             Path(path).write_text(content, encoding="utf-8")
-            logger.info(f"Exported session {session_id} to {path}")
+            logger.info("Exported session %s to %s", session_id, path)
 
         return content
 

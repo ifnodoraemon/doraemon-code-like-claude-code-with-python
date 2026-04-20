@@ -182,17 +182,17 @@ class BackgroundTaskManager:
                 task.output = str(result) if result else ""
                 task.status = TaskStatus.COMPLETED
                 task.progress = 100
-                logger.info(f"Background task {task_id} completed: {name}")
+                logger.info("Background task %s completed: %s", task_id, name)
 
             except asyncio.CancelledError:
                 task.status = TaskStatus.CANCELLED
                 task.error = "Task was cancelled"
-                logger.info(f"Background task {task_id} cancelled: {name}")
+                logger.info("Background task %s cancelled: %s", task_id, name)
 
             except Exception as e:
                 task.status = TaskStatus.FAILED
                 task.error = str(e)
-                logger.error(f"Background task {task_id} failed: {e}")
+                logger.error("Background task %s failed: %s", task_id, e)
 
             finally:
                 task.completed_at = time.time()
@@ -202,11 +202,11 @@ class BackgroundTaskManager:
                     try:
                         on_complete(task)
                     except Exception as e:
-                        logger.error(f"on_complete callback failed: {e}")
+                        logger.error("on_complete callback failed: %s", e)
 
         # Start the task
         task._task = asyncio.create_task(run_task())
-        logger.info(f"Started background task {task_id}: {name}")
+        logger.info("Started background task %s: %s", task_id, name)
 
         return task_id
 
@@ -297,7 +297,7 @@ class BackgroundTaskManager:
                 bg_task.error = str(e)
 
         task.add_done_callback(on_done)
-        logger.info(f"Backgrounded task {task_id}: {name}")
+        logger.info("Backgrounded task %s: %s", task_id, name)
 
         return task_id
 
@@ -393,7 +393,7 @@ class BackgroundTaskManager:
 
         if task._task:
             task._task.cancel()
-            logger.info(f"Cancelled task {task_id}")
+            logger.info("Cancelled task %s", task_id)
             return True
 
         return False
@@ -429,7 +429,7 @@ class BackgroundTaskManager:
             del self._tasks[task_id]
 
         if to_remove:
-            logger.debug(f"Cleaned up {len(to_remove)} old tasks")
+            logger.debug("Cleaned up %s old tasks", len(to_remove))
 
 
 # Global instance

@@ -5,17 +5,18 @@ Main FastAPI application for the Web UI.
 """
 
 import logging
+import os
+import secrets
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.core.logger import configure_root_logger
 from src.webui.routes import chat, projects, sessions, tasks, tools
 
-# Setup logging
 configure_root_logger()
 logger = logging.getLogger(__name__)
 
@@ -72,23 +73,39 @@ def _load_dashboard_router():
         return None
     return dashboard_router
 
+
+# ---------------------------------------------------------------------------
+# API key authentication
+# ---------------------------------------------------------------------------
+WEBUI_API_KEY = os.getenv("AGENT_WEBUI_API_KEY")
+_AUTH_EXEMPT_PATHS = {"/", "/health", "/api/health"}
+_AUTH_EXEMPT_PREFIXES = ("/assets/", "/dashboard/static/")
+
+
+def _verify_webui_api_key(authorization: str | None) -> bool:
+    if not WEBUI_API_KEY:
+        return True
+    if not authorization:
+        return False
+    key = authorization[7:] if authorization.startswith("Bearer ") else authorization
+    return secrets.compare_digest(key, WEBUI_API_KEY)
+
+
 app = FastAPI(
     title="Doraemon Code API",
     description="Backend API for Doraemon Code Web UI",
     version="0.8.0",
 )
 
-# CORS configuration
-origins = [
-    "http://localhost:5173",  # Vite dev server
-    "http://localhost:8000",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8000",
-]
+# CORS configuration — configurable via environment
+_cors_origins = os.getenv(
+    "AGENT_WEBUI_CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:8000,http://127.0.0.1:5173,http://127.0.0.1:8000",
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[o.strip() for o in _cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
@@ -97,13 +114,29 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    """Add security headers to all responses."""
     response: Response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     return response
+
+
+@app.middleware("http")
+async def enforce_api_key(request: Request, call_next):
+    """Reject requests without a valid API key when AGENT_WEBUI_API_KEY is set."""
+    if WEBUI_API_KEY is None:
+        return await call_next(request)
+
+    path = request.url.path
+    if path in _AUTH_EXEMPT_PATHS or any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
+        return await call_next(request)
+
+    authorization = request.headers.get("Authorization")
+    if _verify_webui_api_key(authorization):
+        return await call_next(request)
+
+    return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
 
 
 # Include routers
@@ -143,7 +176,9 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, reload: bool = False
     """Start the Web UI server."""
     import uvicorn
 
-    logger.info(f"Starting Doraemon Code Web UI at http://{host}:{port}")
+    logger.info("Starting Doraemon Code Web UI at http://%s:%s", host, port)
+    if WEBUI_API_KEY:
+        logger.info("WebUI API key authentication enabled")
     uvicorn.run(
         "src.webui.server:app",
         host=host,

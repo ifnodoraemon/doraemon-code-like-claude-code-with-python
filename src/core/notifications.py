@@ -149,7 +149,7 @@ class DesktopNotifier:
                 return self._send_windows(notification)
             return False
         except Exception as e:
-            logger.error(f"Failed to send notification: {e}")
+            logger.error("Failed to send notification: %s", e)
             return False
 
     def _send_macos(self, notification: Notification) -> bool:
@@ -325,7 +325,7 @@ class NotificationManager:
             try:
                 callback(notification)
             except Exception as e:
-                logger.error(f"Notification callback error: {e}")
+                logger.error("Notification callback error: %s", e)
 
         return success
 
@@ -382,7 +382,7 @@ class NotificationManager:
 
             return True
         except Exception as e:
-            logger.debug(f"Sound failed: {e}")
+            logger.debug("Sound failed: %s", e)
             return False
 
     def _send_log(self, notification: Notification) -> bool:
@@ -416,7 +416,7 @@ class NotificationManager:
             urllib.request.urlopen(req, timeout=5)
             return True
         except Exception as e:
-            logger.error(f"Webhook failed: {e}")
+            logger.error("Webhook failed: %s", e)
             return False
 
     # Convenience methods

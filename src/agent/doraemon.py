@@ -17,6 +17,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from src.core.checkpoint import CheckpointManager
+from src.core.hooks import HookManager
+from src.core.llm.model_client import ModelClient
+from src.core.skills import SkillManager
+from src.core.tasks import TaskManager
+from src.host.tools import ToolRegistry
+
 from src.agent.react import ReActAgent
 from src.agent.state import AgentState
 from src.agent.types import (
@@ -50,14 +57,14 @@ class DoraemonAgent(ReActAgent):
 
     def __init__(
         self,
-        llm_client: Any,
-        tool_registry: Any,
+        llm_client: ModelClient,
+        tool_registry: ToolRegistry,
         state: AgentState | None = None,
         *,
         hooks: HookManager | None = None,
-        checkpoints: Any = None,
-        skills: Any = None,
-        task_manager: Any = None,
+        checkpoints: CheckpointManager | None = None,
+        skills: SkillManager | None = None,
+        task_manager: TaskManager | None = None,
         permission_callback: Callable | None = None,
         display_callback: Callable | None = None,
         project_dir: Path | None = None,
@@ -157,7 +164,9 @@ class DoraemonAgent(ReActAgent):
             )
         return task.id
 
-    def _finish_runtime_task(self, task_id: str | None, *, success: bool, error: str | None = None) -> None:
+    def _finish_runtime_task(
+        self, task_id: str | None, *, success: bool, error: str | None = None
+    ) -> None:
         """Finalize the current runtime task after an agent turn completes."""
         if self.task_manager is None or task_id is None:
             return
@@ -209,12 +218,20 @@ class DoraemonAgent(ReActAgent):
                         policy = None
                     if policy is not None and not policy["visible"]:
                         continue
-                    sensitive = policy["requires_approval"] if policy is not None else (
-                        name in registry._sensitive_tools if hasattr(registry, "_sensitive_tools") else False
+                    sensitive = (
+                        policy["requires_approval"]
+                        if policy is not None
+                        else (
+                            name in registry._sensitive_tools
+                            if hasattr(registry, "_sensitive_tools")
+                            else False
+                        )
                     )
                 else:
                     sensitive = (
-                        name in registry._sensitive_tools if hasattr(registry, "_sensitive_tools") else False
+                        name in registry._sensitive_tools
+                        if hasattr(registry, "_sensitive_tools")
+                        else False
                     )
                 tools.append(
                     ToolDefinition(
@@ -259,7 +276,9 @@ class DoraemonAgent(ReActAgent):
                             name=tool_def.name,
                             description=tool_def.description,
                             parameters=tool_def.parameters,
-                            sensitive=policy["requires_approval"] if policy is not None else tool_def.sensitive,
+                            sensitive=policy["requires_approval"]
+                            if policy is not None
+                            else tool_def.sensitive,
                         )
                     )
                     tool_name_set.add(name)
@@ -278,7 +297,10 @@ class DoraemonAgent(ReActAgent):
         policy = None
         if self.allowed_tool_names is not None and name not in self.allowed_tool_names:
             logger.warning("Worker tool scope denied access to '%s'", name)
-            return "", f"Permission Error: Tool '{name}' is not available for worker role '{self.worker_role or 'default'}'."
+            return (
+                "",
+                f"Permission Error: Tool '{name}' is not available for worker role '{self.worker_role or 'default'}'.",
+            )
 
         check_tool_execution = getattr(self.tool_registry, "check_tool_execution", None)
         if callable(check_tool_execution):
@@ -614,13 +636,13 @@ Always verify your changes by running relevant tests or checks."""
 
 
 def create_doraemon_agent(
-    llm_client: Any,
-    tool_registry: Any,
+    llm_client: ModelClient,
+    tool_registry: ToolRegistry,
     mode: str = "build",
     hooks: HookManager | None = None,
-    checkpoints: Any = None,
-    skills: Any = None,
-    task_manager: Any = None,
+    checkpoints: CheckpointManager | None = None,
+    skills: SkillManager | None = None,
+    task_manager: TaskManager | None = None,
     permission_callback: Callable | None = None,
     display_callback: Callable | None = None,
     max_turns: int = 100,
@@ -657,13 +679,13 @@ def create_doraemon_agent(
 
 
 async def create_doraemon_agent_with_tools(
-    llm_client: Any,
+    llm_client: ModelClient,
     mode: str = "build",
     config_path: Path | None = None,
     hooks: HookManager | None = None,
-    checkpoints: Any = None,
-    skills: Any = None,
-    task_manager: Any = None,
+    checkpoints: CheckpointManager | None = None,
+    skills: SkillManager | None = None,
+    task_manager: TaskManager | None = None,
     permission_callback: Callable | None = None,
     display_callback: Callable | None = None,
     max_turns: int = 100,
@@ -690,12 +712,12 @@ async def create_doraemon_agent_with_tools(
 
 
 async def create_doraemon_agent_with_mcp(
-    llm_client: Any,
+    llm_client: ModelClient,
     mode: str = "build",
     config_path: Path | None = None,
     hooks: HookManager | None = None,
-    checkpoints: Any = None,
-    skills: Any = None,
+    checkpoints: CheckpointManager | None = None,
+    skills: SkillManager | None = None,
     permission_callback: Callable | None = None,
     display_callback: Callable | None = None,
     max_turns: int = 100,

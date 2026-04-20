@@ -55,17 +55,9 @@ class ShellConfig:
             "python3",
             "node",
             "echo",
-            "mkdir",
             "chmod",
-            "chown",
             "df",
             "du",
-            "ps",
-            "top",
-            "kill",
-            "chmod",
-            "chmod",
-            "grep",
             "sed",
             "awk",
             "sort",
@@ -240,7 +232,7 @@ def is_command_blocked(command: str, config: ShellConfig = DEFAULT_CONFIG) -> bo
             effective_base = os.path.basename(effective_tokens[0])
             # 2. Whitelist Check: If not in allowed_base_commands, block it
             if effective_base not in config.allowed_base_commands:
-                logger.warning(f"Command '{effective_base}' is not in whitelist")
+                logger.warning("Command '%s' is not in whitelist", effective_base)
                 return True
         else:
             return True

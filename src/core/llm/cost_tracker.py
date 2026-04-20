@@ -203,7 +203,7 @@ class CostTracker:
                 data = json.loads(path.read_text(encoding="utf-8"))
                 self._today_records = [UsageRecord.from_dict(r) for r in data.get("records", [])]
             except Exception as e:
-                logger.error(f"Failed to load usage records: {e}")
+                logger.error("Failed to load usage records: %s", e)
 
     def _save_today_records(self):
         """Save today's usage records."""
@@ -286,7 +286,7 @@ class CostTracker:
         # Save to disk
         self._save_today_records()
 
-        logger.debug(f"Tracked usage: {input_tokens}+{output_tokens} tokens, ${cost:.4f}")
+        logger.debug("Tracked usage: %s+%s tokens, $%s", input_tokens, output_tokens, cost:.4f)
 
         return record
 

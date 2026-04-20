@@ -1,6 +1,7 @@
 """Configuration schema validation using Pydantic."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -77,6 +78,13 @@ class MCPServerConfig(BaseModel):
         return self
 
 
+class ProviderCapabilitiesConfig(BaseModel):
+    """Optional capability overrides for direct provider integrations."""
+
+    tools: bool = Field(default=True, description="Whether tool/function calling is supported")
+    streaming: bool = Field(default=True, description="Whether streaming responses are supported")
+
+
 class AgentConfig(BaseModel):
     """Main agent configuration."""
 
@@ -88,9 +96,29 @@ class AgentConfig(BaseModel):
     openai_api_base: str | None = Field(
         default=None, description="OpenAI-compatible API base URL"
     )
+    openai_protocol: Literal["auto", "responses", "chat_completions"] = Field(
+        default="auto",
+        description="OpenAI-compatible protocol selection",
+    )
+    openai_capabilities: ProviderCapabilitiesConfig = Field(
+        default_factory=ProviderCapabilitiesConfig,
+        description="OpenAI-compatible capability overrides",
+    )
+    openai_responses_include: list[str] = Field(
+        default_factory=list,
+        description="Optional include fields passed through to the OpenAI Responses API",
+    )
     anthropic_api_key: str | None = Field(default=None, description="Anthropic API key")
     anthropic_api_base: str | None = Field(
         default=None, description="Anthropic-compatible API base URL"
+    )
+    anthropic_protocol: Literal["auto", "messages"] = Field(
+        default="auto",
+        description="Anthropic-compatible protocol selection",
+    )
+    anthropic_capabilities: ProviderCapabilitiesConfig = Field(
+        default_factory=ProviderCapabilitiesConfig,
+        description="Anthropic-compatible capability overrides",
     )
     temperature: float | None = Field(default=None, description="Model temperature override")
     daily_budget_usd: float | None = Field(default=None, description="Daily budget in USD")
@@ -174,6 +202,11 @@ def get_default_config() -> dict:
     return {
         "persona": {"name": "Agent", "role": "Generalist AI Assistant & Coder"},
         "mcp_extensions": [],
+        "openai_protocol": "auto",
+        "openai_capabilities": {"tools": True, "streaming": True},
+        "openai_responses_include": [],
+        "anthropic_protocol": "auto",
+        "anthropic_capabilities": {"tools": True, "streaming": True},
         "sensitive_tools": [
             "write",
             "run",

@@ -37,6 +37,7 @@ class Message:
 
     role: str  # "user", "assistant", "tool", "system"
     content: str | None = None
+    provider_items: list[dict[str, Any]] | None = None
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     name: str | None = None
@@ -45,14 +46,18 @@ class Message:
     def to_api_format(self) -> dict[str, Any]:
         """Convert to API format."""
         result = {"role": self.role}
-        if self.content:
+        if self.content is not None:
             result["content"] = self.content
+        if self.provider_items:
+            result["provider_items"] = self.provider_items
         if self.tool_calls:
             result["tool_calls"] = self.tool_calls
         if self.tool_call_id:
             result["tool_call_id"] = self.tool_call_id
         if self.name:
             result["name"] = self.name
+        if self.thought:
+            result["thought"] = self.thought
         return result
 
 
@@ -93,6 +98,7 @@ class Thought:
     """Agent's reasoning about what to do next."""
 
     reasoning: str = ""
+    provider_items: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     response: str | None = None
     is_finished: bool = False

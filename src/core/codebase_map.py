@@ -219,7 +219,7 @@ class CodebaseMapper:
                         codebase_map.total_symbols += len(file_info.symbols)
                         file_count += 1
                 except Exception as e:
-                    logger.debug(f"Failed to analyze {file_path}: {e}")
+                    logger.debug("Failed to analyze %s: %s", file_path, e)
 
             if file_count >= max_files:
                 break

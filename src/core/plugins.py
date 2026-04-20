@@ -211,7 +211,7 @@ class PluginManager:
         manifest_path = plugin_path / "plugin.json"
 
         if not manifest_path.exists():
-            logger.warning(f"No plugin.json found in {plugin_path}")
+            logger.warning("No plugin.json found in %s", plugin_path)
             return False
 
         try:
@@ -242,11 +242,11 @@ class PluginManager:
             if plugin.enabled:
                 self._register_plugin_commands(plugin)
 
-            logger.info(f"Loaded plugin: {manifest.name} v{manifest.version}")
+            logger.info("Loaded plugin: %s v%s", manifest.name, manifest.version)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load plugin from {plugin_path}: {e}")
+            logger.error("Failed to load plugin from %s: %s", plugin_path, e)
             return False
 
     def _register_plugin_commands(self, plugin: InstalledPlugin):
@@ -319,7 +319,7 @@ class PluginManager:
             # GitHub repo (owner/repo)
             return self._install_from_github(source, target_base, sha, force)
         else:
-            logger.error(f"Unknown plugin source: {source}")
+            logger.error("Unknown plugin source: %s", source)
             return None
 
     def _install_from_local(
@@ -329,12 +329,12 @@ class PluginManager:
         source_path = source_path.resolve()
 
         if not source_path.exists():
-            logger.error(f"Plugin path not found: {source_path}")
+            logger.error("Plugin path not found: %s", source_path)
             return None
 
         manifest_path = source_path / "plugin.json"
         if not manifest_path.exists():
-            logger.error(f"No plugin.json found in {source_path}")
+            logger.error("No plugin.json found in %s", source_path)
             return None
 
         try:
@@ -342,7 +342,7 @@ class PluginManager:
                 json.loads(manifest_path.read_text(encoding="utf-8"))
             )
         except Exception as e:
-            logger.error(f"Invalid plugin.json: {e}")
+            logger.error("Invalid plugin.json: %s", e)
             return None
 
         target_path = target_base / manifest.name
@@ -350,7 +350,7 @@ class PluginManager:
         # Check if exists
         if target_path.exists():
             if not force:
-                logger.error(f"Plugin already installed: {manifest.name}")
+                logger.error("Plugin already installed: %s", manifest.name)
                 return None
             shutil.rmtree(target_path)
 
@@ -369,7 +369,7 @@ class PluginManager:
         scope = self._get_scope_for_path(target_base)
         self._load_plugin(target_path, scope)
 
-        logger.info(f"Installed plugin: {manifest.name}")
+        logger.info("Installed plugin: %s", manifest.name)
         return self._plugins.get(manifest.name)
 
     def _install_from_github(
@@ -394,7 +394,7 @@ class PluginManager:
 
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
-                    logger.error(f"Git clone failed: {result.stderr}")
+                    logger.error("Git clone failed: %s", result.stderr)
                     return None
 
                 # Checkout specific SHA if provided
@@ -406,7 +406,7 @@ class PluginManager:
                         text=True,
                     )
                     if result.returncode != 0:
-                        logger.error(f"Git checkout failed: {result.stderr}")
+                        logger.error("Git checkout failed: %s", result.stderr)
                         return None
 
                 # Install from cloned path
@@ -424,7 +424,7 @@ class PluginManager:
                 return plugin
 
             except Exception as e:
-                logger.error(f"Failed to install from GitHub: {e}")
+                logger.error("Failed to install from GitHub: %s", e)
                 return None
 
     def _get_scope_for_path(self, path: Path) -> PluginScope:
@@ -439,7 +439,7 @@ class PluginManager:
         """Uninstall a plugin."""
         plugin = self._plugins.get(name)
         if not plugin:
-            logger.error(f"Plugin not found: {name}")
+            logger.error("Plugin not found: %s", name)
             return False
 
         try:
@@ -452,11 +452,11 @@ class PluginManager:
             # Remove commands
             self._commands = {k: v for k, v in self._commands.items() if v.plugin_name != name}
 
-            logger.info(f"Uninstalled plugin: {name}")
+            logger.info("Uninstalled plugin: %s", name)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to uninstall plugin: {e}")
+            logger.error("Failed to uninstall plugin: %s", e)
             return False
 
     def enable(self, name: str) -> bool:
@@ -552,7 +552,7 @@ class PluginManager:
         """
         # For now, return empty list
         # This could be extended to search GitHub, a registry, etc.
-        logger.info(f"Plugin search not yet implemented: {query}")
+        logger.info("Plugin search not yet implemented: %s", query)
         return []
 
     def get_summary(self) -> dict[str, Any]:

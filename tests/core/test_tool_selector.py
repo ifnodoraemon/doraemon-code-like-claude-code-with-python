@@ -30,10 +30,10 @@ class TestToolSelector:
         assert tools.index("read") < tools.index("write")
         assert tools.index("search") < tools.index("run")
 
-    def test_task_tools_are_not_exposed_by_default(self):
+    def test_task_tools_are_exposed_in_both_modes(self):
         selector = ToolSelector()
         plan_tools = selector.get_tools_for_mode("plan")
         build_tools = selector.get_tools_for_mode("build")
 
-        assert "task" not in plan_tools
-        assert "task" not in build_tools
+        assert "task" in plan_tools
+        assert "task" in build_tools

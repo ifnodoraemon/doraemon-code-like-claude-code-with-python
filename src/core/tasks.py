@@ -112,7 +112,7 @@ class TaskManager:
             with self.storage_path.open(encoding="utf-8") as handle:
                 raw = json.load(handle)
         except Exception as exc:
-            logger.error(f"Failed to load tasks: {exc}")
+            logger.error("Failed to load tasks: %s", exc)
             return
 
         items: list[dict[str, Any]]
@@ -128,7 +128,7 @@ class TaskManager:
             try:
                 task = Task.from_dict(item)
             except Exception as exc:
-                logger.error(f"Skipping invalid task entry: {exc}")
+                logger.error("Skipping invalid task entry: %s", exc)
                 continue
             self._tasks[task.id] = task
 
@@ -139,7 +139,7 @@ class TaskManager:
             with self.storage_path.open("w", encoding="utf-8") as handle:
                 json.dump(payload, handle, indent=2, sort_keys=True)
         except Exception as exc:
-            logger.error(f"Failed to save tasks: {exc}")
+            logger.error("Failed to save tasks: %s", exc)
 
     def create_task(
         self,

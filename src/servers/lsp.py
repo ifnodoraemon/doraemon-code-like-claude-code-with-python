@@ -94,7 +94,7 @@ class PylspClient:
             logger.warning("pylsp not found. Install with: pip install python-lsp-server")
             return False
         except Exception as e:
-            logger.error(f"Failed to start pylsp: {e}")
+            logger.error("Failed to start pylsp: %s", e)
             return False
 
     async def _initialize(self):
@@ -155,7 +155,7 @@ class PylspClient:
                     content = self._process.stdout.read(content_length).decode()
                     return json.loads(content)
             except Exception as e:
-                logger.error(f"LSP request failed: {e}")
+                logger.error("LSP request failed: %s", e)
             return None
 
         return await loop.run_in_executor(None, _do_io)
@@ -178,7 +178,7 @@ class PylspClient:
             self._process.stdin.write(message.encode())
             self._process.stdin.flush()
         except Exception as e:
-            logger.error(f"LSP notification failed: {e}")
+            logger.error("LSP notification failed: %s", e)
 
     async def get_diagnostics(self, file_path: str) -> list[Diagnostic]:
         """Get diagnostics for a file."""
@@ -568,7 +568,7 @@ async def lsp_rename(
                     f.write(re.sub(r"\b" + re.escape(old_name) + r"\b", new_name, content))
                 applied += 1
             except Exception as e:
-                logger.warning(f"Failed to rename in {fp}: {e}")
+                logger.warning("Failed to rename in %s: %s", fp, e)
         return f"Renamed '{old_name}' -> '{new_name}' in {applied} file(s)"
 
     except subprocess.TimeoutExpired:

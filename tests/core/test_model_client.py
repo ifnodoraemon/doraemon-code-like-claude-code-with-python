@@ -4,6 +4,7 @@ Unit tests for model_client.py
 Tests the unified model client interface, retry logic, and error handling.
 """
 
+import base64
 import sys
 import types
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,7 +18,16 @@ from src.core.llm.model_client import (
     ModelClient,
 )
 from src.core.llm.model_client_direct import _OPENAI_PROTOCOL_CACHE
-from src.core.llm.model_utils import ChatResponse, ClientConfig, ClientMode, Message, Provider
+from src.core.llm.model_utils import (
+    ChatResponse,
+    ClientConfig,
+    ClientMode,
+    Message,
+    Provider,
+    StreamChunk,
+    ToolDefinition,
+)
+from src.core.llm.provider_adapters import OpenAIAdapter
 
 
 class TestGatewayModelClient:
@@ -279,6 +289,8 @@ class TestDirectModelClient:
             tools=None,
             temperature=0.0,
             max_output_tokens=None,
+            include=["reasoning.encrypted_content"],
+            stream=True,
         )
 
         assert params["input"] == [
@@ -292,6 +304,8 @@ class TestDirectModelClient:
             },
         ]
         assert "temperature" not in params
+        assert params["include"] == ["reasoning.encrypted_content"]
+        assert params["stream"] is True
 
     def test_build_openai_responses_params_encodes_tool_history_for_responses(self):
         """Assistant tool calls and tool outputs should be encoded in Responses format."""
@@ -343,6 +357,61 @@ class TestDirectModelClient:
             },
         ]
 
+    def test_build_openai_responses_params_prefers_provider_items_for_replay(self):
+        """Stored provider items should be replayed verbatim for Responses tool loops."""
+        params = DirectModelClient._build_openai_responses_params(
+            model="gpt-5.4",
+            msg_list=[
+                {
+                    "role": "assistant",
+                    "provider_items": [
+                        {"type": "reasoning", "id": "rs_1", "encrypted_content": "enc"},
+                        {
+                            "type": "function_call",
+                            "call_id": "call_1",
+                            "name": "echo",
+                            "arguments": "{\"text\":\"hi\"}",
+                        },
+                    ],
+                }
+            ],
+            tools=None,
+            temperature=0.7,
+            max_output_tokens=None,
+        )
+
+        assert params["input"] == [
+            {"type": "reasoning", "id": "rs_1", "encrypted_content": "enc"},
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "echo",
+                "arguments": "{\"text\":\"hi\"}",
+            },
+        ]
+
+    def test_build_openai_responses_tools_sets_non_strict_mode(self):
+        """Responses tool definitions should explicitly disable strict mode for compatibility."""
+        tools = DirectModelClient._build_openai_responses_tools(
+            [
+                ToolDefinition(
+                    name="echo",
+                    description="Echo text",
+                    parameters={"type": "object", "properties": {"text": {"type": "string"}}},
+                )
+            ]
+        )
+
+        assert tools == [
+            {
+                "type": "function",
+                "name": "echo",
+                "description": "Echo text",
+                "parameters": {"type": "object", "properties": {"text": {"type": "string"}}},
+                "strict": False,
+            }
+        ]
+
     @pytest.mark.asyncio
     async def test_chat_openai_skips_responses_for_custom_base_url(self):
         """Third-party OpenAI-compatible upstreams should go straight to chat.completions."""
@@ -371,6 +440,169 @@ class TestDirectModelClient:
         mock_provider.responses.create.assert_not_called()
         mock_provider.chat.completions.create.assert_called_once()
         assert response.content == "pong"
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_respects_forced_chat_completions_protocol(self):
+        """Explicit chat_completions config should skip Responses even on official URLs."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://api.openai.com/v1",
+            openai_protocol="chat_completions",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="pong", tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai([Message(role="user", content="ping")])
+
+        mock_provider.responses.create.assert_not_called()
+        mock_provider.chat.completions.create.assert_called_once()
+        assert response.content == "pong"
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_forced_responses_does_not_fallback(self):
+        """Explicit responses config should fail fast instead of silently falling back."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://api.openai.com/v1",
+            openai_protocol="responses",
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.responses.create.side_effect = RuntimeError("400 bad_response_status_code")
+        client._providers[Provider.OPENAI] = mock_provider
+
+        with pytest.raises(RuntimeError, match="bad_response_status_code"):
+            await client._chat_openai([Message(role="user", content="ping")])
+
+        mock_provider.chat.completions.create.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_drops_tools_when_config_disables_tool_calling(self):
+        """OpenAI-compatible requests should omit tools when disabled by config."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://compat.example/v1",
+            openai_protocol="chat_completions",
+            openai_capabilities=types.SimpleNamespace(tools=False, streaming=True),
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="pong", tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        await client._chat_openai(
+            [Message(role="user", content="ping")],
+            tools=[
+                ToolDefinition(
+                    name="echo",
+                    description="Echo text",
+                    parameters={"type": "object", "properties": {"text": {"type": "string"}}},
+                )
+            ],
+        )
+
+        params = mock_provider.chat.completions.create.call_args.kwargs
+        assert "tools" not in params
+
+    @pytest.mark.asyncio
+    async def test_chat_stream_falls_back_when_openai_streaming_disabled(self):
+        """Streaming-disabled upstreams should use one-shot chat and emit a single chunk."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_api_base="https://compat.example/v1",
+            openai_protocol="chat_completions",
+            openai_capabilities=types.SimpleNamespace(tools=True, streaming=False),
+            model="gpt-5.4",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content="pong", tool_calls=None),
+                    finish_reason="stop",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        chunks = []
+        async for chunk in client.chat_stream([Message(role="user", content="ping")]):
+            chunks.append(chunk)
+
+        assert chunks == [
+            StreamChunk(
+                content="pong",
+                thought=None,
+                tool_calls=None,
+                finish_reason="stop",
+                usage={"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+            )
+        ]
+        mock_provider.chat.completions.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_chat_anthropic_drops_tools_when_config_disables_tool_calling(self):
+        """Anthropic-compatible requests should omit tools when disabled by config."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            anthropic_api_key="test-key",
+            anthropic_protocol="messages",
+            anthropic_capabilities=types.SimpleNamespace(tools=False, streaming=True),
+            model="claude-sonnet-4-20250514",
+        )
+        client = DirectModelClient(config)
+
+        mock_provider = AsyncMock()
+        mock_provider.messages.create.return_value = types.SimpleNamespace(
+            content=[types.SimpleNamespace(type="text", text="pong")],
+            usage=types.SimpleNamespace(input_tokens=3, output_tokens=1),
+        )
+        client._providers[Provider.ANTHROPIC] = mock_provider
+
+        await client._chat_anthropic(
+            [Message(role="user", content="ping")],
+            tools=[
+                ToolDefinition(
+                    name="echo",
+                    description="Echo text",
+                    parameters={"type": "object", "properties": {"text": {"type": "string"}}},
+                )
+            ],
+        )
+
+        params = mock_provider.messages.create.call_args.kwargs
+        assert "tools" not in params
 
     @pytest.mark.asyncio
     async def test_chat_openai_allows_responses_for_official_openai_url(self):
@@ -684,6 +916,171 @@ class TestDirectModelClient:
         mock_provider.responses.create.assert_called_once()
         mock_provider.chat.completions.create.assert_called_once()
         assert response.content == "done"
+
+    @pytest.mark.asyncio
+    async def test_chat_openai_preserves_gemini_thought_signature_in_tool_calls(self):
+        """Thought signatures from OpenAI-compatible tool calls should survive replay."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_protocol="chat_completions",
+            model="gemini-3-flash-preview",
+        )
+        client = DirectModelClient(config)
+
+        thought_signature = b"sig"
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.return_value = types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(
+                        content=None,
+                        tool_calls=[
+                            types.SimpleNamespace(
+                                id="call_1",
+                                thought_signature=thought_signature,
+                                function=types.SimpleNamespace(
+                                    name="run",
+                                    arguments='{"command":"pwd"}',
+                                ),
+                            )
+                        ],
+                    ),
+                    finish_reason="tool_calls",
+                )
+            ],
+            usage=types.SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        )
+        client._providers[Provider.OPENAI] = mock_provider
+
+        response = await client._chat_openai([Message(role="user", content="use run")])
+
+        assert response.tool_calls is not None
+        assert response.tool_calls[0]["thought_signature"] == "base64:" + base64.b64encode(
+            thought_signature
+        ).decode("ascii")
+        assert (
+            response.tool_calls[0]["function"]["thought_signature"]
+            == response.tool_calls[0]["thought_signature"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_stream_openai_preserves_gemini_thought_signature_in_tool_deltas(self):
+        """Streaming OpenAI-compatible tool deltas should include thought signatures."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="test-key",
+            openai_protocol="chat_completions",
+            model="gemini-3-flash-preview",
+        )
+        client = DirectModelClient(config)
+
+        thought_signature = b"sig"
+
+        class MockStream:
+            def __aiter__(self):
+                async def gen():
+                    yield types.SimpleNamespace(
+                        choices=[
+                            types.SimpleNamespace(
+                                delta=types.SimpleNamespace(
+                                    content=None,
+                                    tool_calls=[
+                                        types.SimpleNamespace(
+                                            index=0,
+                                            id="call_1",
+                                            thought_signature=thought_signature,
+                                            function=types.SimpleNamespace(
+                                                name="run",
+                                                arguments='{"command":"pwd"}',
+                                                thought_signature=thought_signature,
+                                            ),
+                                        )
+                                    ],
+                                ),
+                                finish_reason=None,
+                            )
+                        ],
+                        usage=None,
+                    )
+                    yield types.SimpleNamespace(
+                        choices=[
+                            types.SimpleNamespace(
+                                delta=types.SimpleNamespace(content=None, tool_calls=None),
+                                finish_reason="tool_calls",
+                            )
+                        ],
+                        usage=None,
+                    )
+
+                return gen()
+
+        mock_provider = AsyncMock()
+        mock_provider.chat.completions.create.return_value = MockStream()
+        client._providers[Provider.OPENAI] = mock_provider
+
+        chunks = []
+        async for chunk in client._stream_openai([Message(role="user", content="use run")]):
+            chunks.append(chunk)
+
+        assert chunks[0].tool_calls is not None
+
+
+class TestOpenAIAdapter:
+    """Tests for OpenAI adapter helpers."""
+
+    def test_build_params_injects_dummy_thought_signature_for_gemini_3_tool_history(self):
+        params = OpenAIAdapter.build_params(
+            model="gemini-3-flash-preview",
+            msg_list=[
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "run", "arguments": '{"command":"pwd"}'},
+                        }
+                    ],
+                }
+            ],
+            tools=None,
+            temperature=0.1,
+            max_tokens=None,
+        )
+
+        tool_call = params["messages"][0]["tool_calls"][0]
+        assert tool_call["thought_signature"] == "skip_thought_signature_validator"
+        assert tool_call["function"]["thought_signature"] == "skip_thought_signature_validator"
+
+    def test_build_params_preserves_existing_thought_signature_for_gemini_3(self):
+        params = OpenAIAdapter.build_params(
+            model="gemini-3-flash-preview",
+            msg_list=[
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "thought_signature": "base64:c2ln",
+                            "function": {
+                                "name": "run",
+                                "arguments": '{"command":"pwd"}',
+                                "thought_signature": "base64:c2ln",
+                            },
+                        }
+                    ],
+                }
+            ],
+            tools=None,
+            temperature=0.1,
+            max_tokens=None,
+        )
+
+        tool_call = params["messages"][0]["tool_calls"][0]
+        assert tool_call["thought_signature"] == "base64:c2ln"
+        assert tool_call["function"]["thought_signature"] == "base64:c2ln"
 
 
 class TestModelClient:
@@ -1238,6 +1635,23 @@ class TestDirectModelClientProviderDetection:
         with patch("google.genai.Client"):
             await client.connect()
             provider = client._detect_provider("gemini-2.5-flash")
+            assert provider == Provider.GOOGLE
+
+    @pytest.mark.asyncio
+    async def test_google_openai_compatible_base_initializes_google_provider(self):
+        """Gemini OpenAI-compatible config should still prefer the native Google provider."""
+        config = ClientConfig(
+            mode=ClientMode.DIRECT,
+            openai_api_key="AIza-test-key",
+            openai_api_base="https://generativelanguage.googleapis.com/v1beta/openai",
+            model="gemini-3-flash-preview",
+        )
+        client = DirectModelClient(config)
+
+        with patch("google.genai.Client") as google_client, patch("openai.AsyncOpenAI"):
+            await client.connect()
+            google_client.assert_called_once_with(api_key="AIza-test-key")
+            provider = client._detect_provider("gemini-3-flash-preview")
             assert provider == Provider.GOOGLE
 
     @pytest.mark.asyncio

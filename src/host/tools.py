@@ -211,14 +211,14 @@ class ToolRegistry:
             metadata=metadata or {},
         )
 
-        logger.debug(f"Registered tool: {tool_name}")
+        logger.debug("Registered tool: %s", tool_name)
 
     def _extract_parameters(self, func: Callable) -> dict[str, Any]:
         """Extract JSON Schema parameters from function signature."""
         try:
             sig = inspect.signature(func)
         except (ImportError, ValueError, TypeError) as e:
-            logger.warning(f"Falling back to generic tool schema for {func}: {e}")
+            logger.warning("Falling back to generic tool schema for %s: %s", func, e)
             return {
                 "type": "object",
                 "properties": {},
@@ -601,7 +601,7 @@ class ToolRegistry:
             return result_str
 
         except Exception as e:
-            logger.error(f"Tool {name} failed: {e}", exc_info=True)
+            logger.error("Tool %s failed: %s", name, e, exc_info=True)
             return f"Error executing {name}: {type(e).__name__}: {e}"
 
 
@@ -762,7 +762,7 @@ def _create_registry(
         config = load_config(validate=False)
         tool_timeouts = config.get("tool_timeouts", {})
     except Exception as e:
-        logger.warning(f"Failed to load config for tool timeouts: {e}")
+        logger.warning("Failed to load config for tool timeouts: %s", e)
         tool_timeouts = {}
 
     failed_critical: list[tuple[str, str]] = []
@@ -781,7 +781,7 @@ def _create_registry(
             try:
                 lazy_func._load()
             except ImportError as e:
-                logger.error(f"Failed to import critical tool {tool_name}: {e}")
+                logger.error("Failed to import critical tool %s: %s", tool_name, e)
                 failed_critical.append((spec.module, str(e)))
                 continue
 

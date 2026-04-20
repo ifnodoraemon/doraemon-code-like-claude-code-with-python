@@ -201,7 +201,7 @@ class DependencyAnalyzer:
             if not ready:
                 # Circular dependency - just take the first remaining
                 ready = [next(iter(remaining))]
-                logger.warning(f"Circular dependency detected, breaking at {ready}")
+                logger.warning("Circular dependency detected, breaking at %s", ready)
 
             stage = [call_map[cid] for cid in ready]
             stages.append(stage)

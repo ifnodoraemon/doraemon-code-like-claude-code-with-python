@@ -207,7 +207,7 @@ class HookManager:
         )
 
         self._hooks[event].append(hook)
-        logger.debug(f"Registered hook for {event.value}: {command or callback}")
+        logger.debug("Registered hook for %s: %s", event.value, command or callback)
 
     def unregister(self, event: HookEvent, matcher: str | None = None):
         """Unregister hooks for an event."""
@@ -319,7 +319,7 @@ class HookManager:
                 duration=time.time() - start_time,
             )
         except Exception as e:
-            logger.error(f"Hook execution failed: {e}")
+            logger.error("Hook execution failed: %s", e)
             return HookResult(
                 success=False,
                 reason=str(e),
@@ -424,7 +424,7 @@ class HookManager:
 
             else:
                 # Non-blocking error
-                logger.warning(f"Hook command exited with code {proc.returncode}: {stderr_str}")
+                logger.warning("Hook command exited with code %s: %s", proc.returncode, stderr_str)
                 return HookResult(
                     success=False,
                     reason=stderr_str,
@@ -465,7 +465,7 @@ class HookManager:
 
         for result in results:
             if isinstance(result, Exception):
-                logger.error(f"Hook raised exception: {result}")
+                logger.error("Hook raised exception: %s", result)
                 continue
 
             if not isinstance(result, HookResult):
@@ -536,7 +536,7 @@ class HookManager:
                 try:
                     event = HookEvent(event_name)
                 except ValueError:
-                    logger.warning(f"Unknown hook event: {event_name}")
+                    logger.warning("Unknown hook event: %s", event_name)
                     continue
 
                 for matcher_config in matchers:
@@ -553,10 +553,10 @@ class HookManager:
                                 timeout=hook_def.get("timeout", 60),
                             )
 
-            logger.info(f"Loaded hooks from {path}")
+            logger.info("Loaded hooks from %s", path)
 
         except Exception as e:
-            logger.error(f"Failed to load hooks from {path}: {e}")
+            logger.error("Failed to load hooks from %s: %s", path, e)
 
     def save_to_file(self, path: str | Path):
         """Save current hooks to a JSON file."""
@@ -588,7 +588,7 @@ class HookManager:
             ]
 
         path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        logger.info(f"Saved hooks to {path}")
+        logger.info("Saved hooks to %s", path)
 
     def get_hooks_summary(self) -> dict[str, list[dict]]:
         """Get a summary of registered hooks."""

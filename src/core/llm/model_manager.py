@@ -288,14 +288,14 @@ class ModelManager:
         resolved = self.resolve_model_id(model_id_or_alias)
 
         if not resolved:
-            logger.error(f"Unknown model: {model_id_or_alias}")
+            logger.error("Unknown model: %s", model_id_or_alias)
             return False
 
         old_model = self._current_model
         self._current_model = resolved
         self._model_history.append(resolved)
 
-        logger.info(f"Switched model: {old_model} -> {resolved}")
+        logger.info("Switched model: %s -> %s", old_model, resolved)
         return True
 
     def switch_previous(self) -> bool:

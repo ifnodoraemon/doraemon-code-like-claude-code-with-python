@@ -109,6 +109,26 @@ class TestClientConfigValidation:
             config = ClientConfig.from_env()
             assert config.mode == ClientMode.DIRECT
 
+    def test_from_env_loads_protocol_and_capability_overrides(self):
+        """Test that direct provider protocol/capability settings are loaded."""
+        with patch(
+            "src.core.config.load_config",
+            return_value={
+                "model": "gpt-5.4",
+                "openai_protocol": "chat_completions",
+                "openai_capabilities": {"tools": False, "streaming": False},
+                "anthropic_protocol": "messages",
+                "anthropic_capabilities": {"tools": False, "streaming": True},
+            },
+        ):
+            config = ClientConfig.from_env()
+            assert config.openai_protocol == "chat_completions"
+            assert config.openai_capabilities.tools is False
+            assert config.openai_capabilities.streaming is False
+            assert config.anthropic_protocol == "messages"
+            assert config.anthropic_capabilities.tools is False
+            assert config.anthropic_capabilities.streaming is True
+
 
 class TestMessageSerialization:
     """Tests for Message serialization."""

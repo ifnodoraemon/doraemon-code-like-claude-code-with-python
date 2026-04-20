@@ -366,7 +366,7 @@ class LayeredMemory:
                 encoding="utf-8",
             )
         except Exception as e:
-            logger.error(f"Failed to save memory layer {layer.value}: {e}")
+            logger.error("Failed to save memory layer %s: %s", layer.value, e)
 
     def _load_layer(self, layer: MemoryLayer):
         """Load a layer from disk."""
@@ -394,7 +394,7 @@ class LayeredMemory:
                 if not entry.is_expired():
                     self._memory[layer][key] = entry
         except Exception as e:
-            logger.error(f"Failed to load memory layer {layer.value}: {e}")
+            logger.error("Failed to load memory layer %s: %s", layer.value, e)
 
     def _load_all(self):
         """Load all layers from disk."""
@@ -428,10 +428,10 @@ class LayeredMemory:
                     # Simple key-value format
                     self.set(key, value, layer=layer)
 
-            logger.info(f"Merged {len(data)} entries to {layer.value}")
+            logger.info("Merged %s entries to %s", len(data), layer.value)
 
         except Exception as e:
-            logger.error(f"Failed to merge memory file: {e}")
+            logger.error("Failed to merge memory file: %s", e)
 
     def export_layer(self, layer: MemoryLayer) -> dict:
         """Export a layer as dict."""

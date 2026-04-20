@@ -120,14 +120,15 @@ async def limit_request_body(request: Request, call_next):
     return await call_next(request)
 
 
-# Gateway API key (optional)
+# Gateway API key (required by default; set AGENT_GATEWAY_ALLOW_NO_KEY=1 to allow unauthenticated access)
 GATEWAY_API_KEY = os.getenv("AGENT_API_KEY")
+GATEWAY_ALLOW_NO_KEY = os.getenv("AGENT_GATEWAY_ALLOW_NO_KEY", "").strip() in ("1", "true", "yes")
 
 
 def verify_api_key(authorization: str | None) -> bool:
-    """Verify API key if configured."""
+    """Verify API key. Rejects requests when no key is configured unless explicitly allowed."""
     if not GATEWAY_API_KEY:
-        return True  # No key configured, allow all
+        return GATEWAY_ALLOW_NO_KEY
 
     if not authorization:
         return False
@@ -712,7 +713,7 @@ async def stream_response(
 
             yield f"data: {json.dumps(chunk.to_dict())}\n\n"
     except Exception as e:
-        logger.error(f"Stream error: {e}")
+        logger.error("Stream error: %s", e)
         error_payload = json.dumps({"error": "Internal stream error"})
         yield f"data: {error_payload}\n\n"
 

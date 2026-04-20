@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type KeyboardEvent } from 'react'
 import {
     Bot,
     Boxes,
-    Loader2,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     Network,
     Plus,
     Send,
-    Settings,
     Sparkles,
+    Square,
     Terminal,
     Wrench,
 } from 'lucide-react'
+
+import MessageBubble from './components/MessageBubble'
+import AgentTimeline, { type TimelineEntry } from './components/AgentTimeline'
 
 import {
     filterMessagesForRange,
@@ -195,7 +200,10 @@ function App() {
     const [readyTasks, setReadyTasks] = useState<TaskNode[]>([])
     const [workerAssignments, setWorkerAssignments] = useState<Record<string, WorkerAssignment>>({})
     const [tools, setTools] = useState<ToolCatalogItem[]>([])
+    const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false)
+    const [timeline, setTimeline] = useState<TimelineEntry[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
     const currentSessionIdRef = useRef<string | null>(null)
     const selectedRunIdRef = useRef<string | null>(null)
     const runViewModeRef = useRef<RunViewMode>('session')
@@ -471,6 +479,7 @@ function App() {
         setTaskGraph([])
         setReadyTasks([])
         setWorkerAssignments({})
+        setTimeline([])
     }
 
     const startStreamingRequest = async (
@@ -479,6 +488,7 @@ function App() {
         assistantMeta?: string,
     ) => {
         setUiError(null)
+        setTimeline([])
         const sessionIdForRequest = currentSessionIdRef.current
         if (currentSessionId && (runViewMode === 'run' || needsSessionHydration)) {
             const preparedWindow = await fetchSessionDetail(currentSessionId, {
@@ -574,6 +584,45 @@ function App() {
                             setRunView(run.run_id)
                         }
                         return false
+                    }
+
+                    if (data.type === 'tool_call') {
+                        setTimeline((prev) => [
+                            ...prev,
+                            {
+                                id: generateId(),
+                                type: 'tool_call' as const,
+                                label: data.name || 'tool_call',
+                                detail: data.args ? JSON.stringify(data.args) : undefined,
+                                status: 'running' as const,
+                            },
+                        ])
+                    }
+
+                    if (data.type === 'tool_result') {
+                        setTimeline((prev) => [
+                            ...prev,
+                            {
+                                id: generateId(),
+                                type: 'tool_result' as const,
+                                label: `Result: ${data.name || 'tool'}`,
+                                status: data.error ? ('failed' as const) : ('completed' as const),
+                                duration_ms: data.duration_ms,
+                            },
+                        ])
+                    }
+
+                    if (data.type === 'thinking' || data.type === 'thought') {
+                        setTimeline((prev) => [
+                            ...prev,
+                            {
+                                id: generateId(),
+                                type: 'thinking' as const,
+                                label: data.content || 'Thinking...',
+                                status: 'completed' as const,
+                                duration_ms: data.duration_ms,
+                            },
+                        ])
                     }
 
                     setMessages((prev) => {
@@ -751,6 +800,14 @@ function App() {
         })()
     }, [runViewMode, currentSessionId, selectedRunId, orchestrationRuns, isStreaming])
 
+    const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            if (!input.trim() || isStreaming) return
+            void handleSubmit(event as unknown as FormEvent)
+        }
+    }
+
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault()
         if (!input.trim() || isStreaming) return
@@ -765,6 +822,9 @@ function App() {
         }
 
         setInput('')
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'
+        }
         await startStreamingRequest(
             {
                 message: prompt,
@@ -801,30 +861,48 @@ function App() {
         )
     }
 
+    const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setInput(event.target.value)
+        const textarea = event.target
+        textarea.style.height = 'auto'
+        const computedStyle = window.getComputedStyle(textarea)
+        const lineHeight = parseFloat(computedStyle.lineHeight) || 20
+        const paddingTop = parseFloat(computedStyle.paddingTop) || 0
+        const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0
+        const maxRows = 6
+        const maxHeight = lineHeight * maxRows + paddingTop + paddingBottom
+        textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`
+    }
+
+    const examplePrompts = [
+        { text: '修复代码中的 Bug', mode: 'turn' as ExecutionMode },
+        { text: '添加新功能', mode: 'turn' as ExecutionMode },
+        { text: '拆分复杂任务并协作完成', mode: 'orchestrate' as ExecutionMode },
+    ]
+
     return (
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.12),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(249,115,22,0.12),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#0f172a_48%,_#111827_100%)] text-slate-100">
-            <div className="mx-auto flex min-h-screen max-w-[1700px] gap-4 px-4 py-4 lg:px-6">
-                <aside className="hidden w-72 shrink-0 rounded-[28px] border border-white/10 bg-slate-950/80 p-4 shadow-2xl shadow-black/30 backdrop-blur xl:flex xl:flex-col">
-                    <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-300">
-                            <Terminal size={20} />
+        <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
+            <div className="mx-auto flex min-h-screen max-w-[1700px] gap-3 px-4 py-3 lg:px-6">
+                <aside className="hidden w-60 shrink-0 rounded-2xl border border-white/[0.07] bg-slate-950/80 p-3 shadow-xl shadow-black/30 backdrop-blur xl:flex xl:flex-col">
+                    <div className="flex items-center gap-2.5 border-b border-white/[0.07] pb-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-300">
+                            <Terminal size={18} />
                         </div>
                         <div>
-                            <div className="text-xs uppercase tracking-[0.28em] text-cyan-300/70">Agent Runtime</div>
-                            <h1 className="text-lg font-semibold text-white">Doraemon Code</h1>
+                            <h1 className="text-base font-semibold text-white">Doraemon Code</h1>
                         </div>
                     </div>
 
                     <button
                         onClick={resetConversation}
-                        className="mt-4 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-slate-200 transition hover:bg-white/10"
+                        className="mt-3 flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/5 px-3 py-2.5 text-sm text-slate-200 transition hover:bg-white/10"
                     >
-                        <Plus size={16} /> New Chat
+                        <Plus size={15} /> New Chat
                     </button>
 
-                    <div className="mt-6">
-                        <div className="mb-2 text-xs uppercase tracking-[0.24em] text-slate-500">Recent Sessions</div>
-                        <div className="space-y-2">
+                    <div className="mt-4 flex-1 overflow-y-auto">
+                        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-500">Sessions</div>
+                        <div className="space-y-1">
                             {sessions.map((session) => (
                                 <button
                                     key={session.id}
@@ -838,14 +916,14 @@ function App() {
                                         setNeedsSessionHydration(true)
                                         setCurrentSessionId(session.id)
                                     }}
-                                    className={`w-full rounded-2xl border px-3 py-3 text-left text-sm transition ${
+                                    className={`w-full rounded-xl border px-3 py-2 text-left text-sm transition ${
                                         currentSessionId === session.id
-                                            ? 'border-cyan-400/40 bg-cyan-500/10 text-white'
-                                            : 'border-white/5 bg-black/10 text-slate-400 hover:border-white/10 hover:bg-white/5'
+                                            ? 'border-cyan-400/30 bg-cyan-500/10 text-white'
+                                            : 'border-transparent bg-transparent text-slate-400 hover:bg-white/5'
                                     }`}
                                 >
                                     <div className="truncate font-medium">{session.name || 'Untitled Session'}</div>
-                                    <div className="mt-1 text-xs text-slate-500">
+                                    <div className="mt-0.5 text-xs text-slate-500">
                                         {session.message_count} messages
                                     </div>
                                 </button>
@@ -853,111 +931,87 @@ function App() {
                         </div>
                     </div>
 
-                    <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
-                            <Sparkles size={16} className="text-amber-300" />
+                    <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.03] p-3">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-white">
+                            <Sparkles size={14} className="text-amber-300" />
                             Execution
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-1.5">
                             <button
                                 onClick={() => setExecutionMode('turn')}
-                                className={`rounded-2xl px-3 py-2 text-sm transition ${
+                                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                                     executionMode === 'turn'
                                         ? 'bg-cyan-500 text-slate-950'
-                                        : 'bg-slate-900/70 text-slate-300 hover:bg-slate-800'
+                                        : 'bg-slate-800/70 text-slate-400 hover:bg-slate-700/70'
                                 }`}
                             >
-                                Single Turn
+                                直接执行
                             </button>
                             <button
                                 onClick={() => setExecutionMode('orchestrate')}
-                                className={`rounded-2xl px-3 py-2 text-sm transition ${
+                                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                                     executionMode === 'orchestrate'
                                         ? 'bg-orange-400 text-slate-950'
-                                        : 'bg-slate-900/70 text-slate-300 hover:bg-slate-800'
+                                        : 'bg-slate-800/70 text-slate-400 hover:bg-slate-700/70'
                                 }`}
                             >
-                                Orchestrate
+                                拆分协作
                             </button>
                         </div>
 
-                        <label className="mt-4 block text-xs uppercase tracking-[0.2em] text-slate-500">
-                            Max Workers
-                        </label>
-                        <input
-                            type="range"
-                            min={1}
-                            max={4}
-                            value={maxWorkers}
-                            onChange={(event) => setMaxWorkers(Number(event.target.value))}
-                            disabled={executionMode !== 'orchestrate'}
-                            className="mt-2 w-full accent-orange-400 disabled:opacity-40"
-                        />
-                        <div className="mt-2 text-sm text-slate-300">
-                            {executionMode === 'orchestrate' ? `${maxWorkers} worker slots` : 'Uses direct agent turn'}
-                        </div>
-                    </div>
-
-                    <div className="mt-auto rounded-3xl border border-white/10 bg-black/20 p-4 text-sm text-slate-400">
-                        <div className="mb-2 flex items-center gap-2 text-slate-200">
-                            <Settings size={16} />
-                            Runtime Notes
-                        </div>
-                        <p>Lead/worker orchestration is agentic-first. Worker roles and tool scope are assigned at runtime, not by a fixed flow chart.</p>
+                        {executionMode === 'orchestrate' && (
+                            <div className="mt-3">
+                                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                    <span>Workers</span>
+                                    <span className="font-medium text-slate-300">{maxWorkers}</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={1}
+                                    max={4}
+                                    value={maxWorkers}
+                                    onChange={(event) => setMaxWorkers(Number(event.target.value))}
+                                    className="mt-1 w-full accent-orange-400"
+                                />
+                            </div>
+                        )}
                     </div>
                 </aside>
 
-                <main className="flex min-w-0 flex-1 flex-col gap-4">
-                    <section className="rounded-[30px] border border-white/10 bg-slate-950/70 p-4 shadow-2xl shadow-black/20 backdrop-blur">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                                <div className="text-xs uppercase tracking-[0.28em] text-cyan-300/70">Live Session</div>
-                                <h2 className="mt-2 text-2xl font-semibold text-white">Agentic Workspace</h2>
-                                <p className="mt-2 max-w-2xl text-sm text-slate-400">
-                                    Single-turn chat and orchestration now share the same runtime. Task graph state, worker assignments, and tool surface are visible while you work.
-                                </p>
-                                <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                                        Project Directory
-                                    </div>
-                                    <div className="mt-2 break-all font-mono text-sm text-slate-200">
-                                        {currentProjectDir || 'Loading...'}
-                                    </div>
-                                </div>
-                                <div className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
-                                    The Web UI runs against the directory it was started from.
-                                </div>
-                            </div>
-
-                            <div className="grid gap-3 sm:grid-cols-3">
-                                <SummaryCard
-                                    icon={<Bot size={16} />}
-                                    label="Mode"
-                                    value={executionMode === 'orchestrate' ? 'Coordinated Runtime' : 'Direct Turn'}
-                                />
-                                <SummaryCard
-                                    icon={<Boxes size={16} />}
-                                    label="Tasks"
-                                    value={String(countTasks(taskGraph))}
-                                />
-                                <SummaryCard
-                                    icon={<Network size={16} />}
-                                    label="Workers"
-                                    value={String(Object.keys(workerAssignments).length)}
-                                />
-                            </div>
+                <main className="flex min-w-0 flex-1 flex-col gap-3">
+                    <section className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-slate-950/70 px-4 py-2.5 backdrop-blur">
+                        <div className="flex items-center gap-2 text-sm text-slate-300">
+                            <span className="font-mono text-xs text-slate-500">{currentProjectDir || '...'}</span>
+                        </div>
+                        <div className="ml-auto flex items-center gap-2">
+                            <SummaryCard
+                                icon={<Bot size={13} />}
+                                label="Mode"
+                                value={executionMode === 'orchestrate' ? 'Coordinated' : 'Direct'}
+                            />
+                            <SummaryCard
+                                icon={<Boxes size={13} />}
+                                label="Tasks"
+                                value={String(countTasks(taskGraph))}
+                            />
+                            <SummaryCard
+                                icon={<Network size={13} />}
+                                label="Workers"
+                                value={String(Object.keys(workerAssignments).length)}
+                            />
                         </div>
                     </section>
 
-                    <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_420px]">
-                        <section className="flex min-h-[640px] flex-col rounded-[30px] border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20 backdrop-blur">
-                            <div className="border-b border-white/10 px-5 py-4">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div>
-                                        <div className="text-xs uppercase tracking-[0.22em] text-slate-500">Conversation</div>
-                                        <div className="mt-1 text-lg font-medium text-white">Prompt and Runtime Output</div>
-                                    </div>
+                    <div
+                        className={`grid min-h-0 flex-1 gap-3 ${
+                            isRightSidebarCollapsed ? 'xl:grid-cols-[minmax(0,1fr)_auto]' : 'xl:grid-cols-[minmax(0,1.4fr)_380px]'
+                        }`}
+                    >
+                        <section className="flex min-h-[640px] flex-col rounded-2xl border border-white/[0.07] bg-slate-950/70 shadow-xl shadow-black/20 backdrop-blur">
+                            <div className="border-b border-white/[0.07] px-4 py-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="text-sm font-medium text-white">Conversation</div>
                                     <div className="flex flex-wrap items-center gap-2">
                                         {runViewMode === 'run' && selectedMessageRun && (
                                             <button
@@ -981,7 +1035,7 @@ function App() {
                                                         })()
                                                     }
                                                 }}
-                                                className="rounded-full border border-cyan-400/30 px-3 py-1 text-xs text-cyan-200 transition hover:bg-cyan-500/10"
+                                                className="rounded-lg border border-cyan-400/30 px-2.5 py-1 text-xs text-cyan-200 transition hover:bg-cyan-500/10"
                                                 disabled={isStreaming}
                                             >
                                                 Show Session Transcript
@@ -996,13 +1050,13 @@ function App() {
                                                     setUiError(null)
                                                     setRunView(selectedRun.run_id || null)
                                                 }}
-                                                className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
+                                                className="rounded-lg border border-white/[0.07] px-2.5 py-1 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
                                                 disabled={isStreaming}
                                             >
                                                 View Selected Run
                                             </button>
                                         )}
-                                        <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-400">
+                                        <div className="rounded-lg border border-white/[0.07] px-2.5 py-1 text-xs text-slate-400">
                                             {runViewMode === 'run' && selectedMessageRun
                                                 ? `run ${selectedMessageRun.run_id || selectedMessageRun.root_task_id || ''}`
                                                 : executionMode === 'orchestrate'
@@ -1013,26 +1067,49 @@ function App() {
                                 </div>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto px-4 py-5">
+                            <div className="flex-1 overflow-y-auto px-4 py-4">
                                 {uiError && (
-                                    <div className="mx-auto mb-4 max-w-4xl rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                                    <div className="mx-auto mb-3 max-w-3xl rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-100">
                                         {uiError}
                                     </div>
                                 )}
                                 {visibleMessages.length === 0 ? (
                                     <div className="flex h-full flex-col items-center justify-center text-center">
-                                        <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-cyan-500/10 text-cyan-300">
-                                            <Terminal size={34} />
+                                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-300">
+                                            <Terminal size={28} />
                                         </div>
-                                        <h3 className="mt-6 text-2xl font-semibold text-white">Choose a direct turn or orchestrate a goal</h3>
-                                        <p className="mt-3 max-w-xl text-sm text-slate-400">
-                                            Orchestration will persist a task graph, assign execution profiles, and return a coordinator summary. Single-turn mode keeps the classic direct chat loop.
+                                        <h3 className="mt-4 text-lg font-semibold text-white">开始使用 Doraemon Code</h3>
+                                        <p className="mt-2 max-w-md text-sm text-slate-400">
+                                            直接执行单轮对话，或拆分协作来分解目标为协调的 worker 任务。
                                         </p>
+                                        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                                            {examplePrompts.map((example) => (
+                                                <button
+                                                    key={example.text}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setExecutionMode(example.mode)
+                                                        setInput(example.text)
+                                                        if (textareaRef.current) {
+                                                            textareaRef.current.focus()
+                                                        }
+                                                    }}
+                                                    className="group rounded-xl border border-white/[0.07] bg-slate-900/60 px-4 py-3 text-left transition hover:border-cyan-400/30 hover:bg-slate-800/60"
+                                                >
+                                                    <div className="text-sm font-medium text-white group-hover:text-cyan-200">
+                                                        {example.text}
+                                                    </div>
+                                                    <div className="mt-1 text-[11px] text-slate-500">
+                                                        {example.mode === 'orchestrate' ? '拆分协作' : '直接执行'}
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 ) : (
-                                    <div className="space-y-4">
+                                    <div className="space-y-3">
                                         {runViewMode === 'session' && hasMoreMessages && currentSessionId && (
-                                            <div className="mx-auto max-w-4xl">
+                                            <div className="mx-auto max-w-3xl">
                                                 <button
                                                     type="button"
                                                     onClick={() => {
@@ -1055,7 +1132,7 @@ function App() {
                                                             }
                                                         })()
                                                     }}
-                                                    className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
+                                                    className="rounded-lg border border-white/[0.07] px-2.5 py-1 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
                                                     disabled={isStreaming}
                                                 >
                                                     Load Older Messages ({messageOffset}/{messageCount})
@@ -1063,108 +1140,97 @@ function App() {
                                             </div>
                                         )}
                                         {visibleMessages.map((message) => (
-                                            <article
-                                                key={message.id}
-                                                className={`mx-auto flex max-w-4xl gap-4 ${
-                                                    message.role === 'user' ? 'justify-end' : ''
-                                                }`}
-                                            >
-                                                {message.role !== 'user' && (
-                                                    <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-300">
-                                                        <Bot size={16} />
-                                                    </div>
-                                                )}
-
-                                                <div
-                                                    className={`max-w-[85%] rounded-[26px] border px-5 py-4 ${
-                                                        message.role === 'user'
-                                                            ? 'border-cyan-400/30 bg-cyan-500/90 text-slate-950'
-                                                            : message.role === 'system'
-                                                              ? 'border-red-400/20 bg-red-500/10 text-red-100'
-                                                              : 'border-white/10 bg-slate-900/80 text-slate-100'
-                                                    }`}
-                                                >
-                                                    {message.meta && (
-                                                        <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-slate-400">
-                                                            {message.meta}
-                                                        </div>
-                                                    )}
-                                                    <div className="whitespace-pre-wrap text-sm leading-6">{message.content}</div>
-                                                    {message.tool_calls && message.tool_calls.length > 0 && (
-                                                        <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-black/30 p-3 text-xs text-cyan-200">
-                                                            Tools: {message.tool_calls.map((toolCall) => toolCall.name || 'tool').join(', ')}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {message.role === 'user' && (
-                                                    <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-700 text-xs font-semibold text-white">
-                                                        You
-                                                    </div>
-                                                )}
-                                            </article>
+                                            <MessageBubble key={message.id} message={message} />
                                         ))}
                                         <div ref={messagesEndRef} />
                                     </div>
                                 )}
                             </div>
 
-                            <div className="border-t border-white/10 px-4 py-4">
-                                <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
-                                    <div className="rounded-[28px] border border-white/10 bg-black/20 p-3">
-                                        <div className="mb-3 flex flex-wrap gap-2">
-                                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">
-                                                project dir: {currentProjectDir || 'loading'}
-                                            </span>
-                                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">
-                                                {executionMode === 'orchestrate' ? `workers: ${maxWorkers}` : 'single agent turn'}
-                                            </span>
-                                        </div>
-                                        <div className="flex gap-3">
-                                            <input
-                                                type="text"
-                                                value={input}
-                                                onChange={(event) => setInput(event.target.value)}
-                                                placeholder={
-                                                    executionMode === 'orchestrate'
-                                                        ? 'Describe the goal you want the coordinator to decompose...'
-                                                        : 'Ask Doraemon Code anything...'
-                                                }
-                                                className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-4 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/40"
-                                                disabled={isStreaming}
-                                            />
+                            <div className="border-t border-white/[0.07] px-4 py-3">
+                                <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
+                                    <div className="flex gap-2 rounded-xl border border-white/[0.07] bg-black/20 p-2">
+                                        <textarea
+                                            ref={textareaRef}
+                                            value={input}
+                                            onChange={handleTextareaChange}
+                                            onKeyDown={handleTextareaKeyDown}
+                                            placeholder={
+                                                executionMode === 'orchestrate'
+                                                    ? '描述要拆分协作的目标...'
+                                                    : '描述你的需求...'
+                                            }
+                                            rows={1}
+                                            className="min-w-0 flex-1 resize-none rounded-lg bg-transparent px-3 py-2.5 text-sm leading-relaxed text-slate-100 outline-none transition placeholder:text-slate-500 focus:ring-1 focus:ring-cyan-400/30"
+                                            disabled={isStreaming}
+                                        />
+                                        {isStreaming ? (
+                                            <button
+                                                type="button"
+                                                onClick={cancelActiveStream}
+                                                className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-600 text-white transition hover:bg-red-500"
+                                            >
+                                                <Square size={16} fill="currentColor" />
+                                            </button>
+                                        ) : (
                                             <button
                                                 type="submit"
-                                                disabled={!input.trim() || isStreaming}
-                                                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                                disabled={!input.trim()}
+                                                className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500 text-white transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
                                             >
-                                                {isStreaming ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                                                <Send size={18} />
                                             </button>
-                                        </div>
+                                        )}
                                     </div>
                                 </form>
                             </div>
                         </section>
 
-                        <aside className="grid min-h-[640px] gap-4 lg:grid-cols-2 xl:grid-cols-1">
+                        <aside
+                            className={`${
+                                isRightSidebarCollapsed
+                                    ? 'flex min-h-[640px] w-12 shrink-0 flex-col items-center rounded-2xl border border-white/[0.07] bg-slate-950/70 px-1.5 py-3 shadow-xl shadow-black/20 backdrop-blur'
+                                    : 'grid min-h-[640px] gap-3 lg:grid-cols-2 xl:grid-cols-1'
+                            }`}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setIsRightSidebarCollapsed((collapsed) => !collapsed)}
+                                className={`flex items-center gap-2 rounded-lg border border-white/[0.07] bg-black/20 px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/5 ${
+                                    isRightSidebarCollapsed ? 'justify-center px-0 py-2' : 'justify-center'
+                                }`}
+                            >
+                                {isRightSidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                                {!isRightSidebarCollapsed && <span>Collapse</span>}
+                            </button>
+                            {isRightSidebarCollapsed ? (
+                                <div className="mt-3 flex flex-1 flex-col items-center gap-3 text-slate-500">
+                                    <Terminal size={14} />
+                                    <Network size={14} />
+                                    <Boxes size={14} />
+                                    <Sparkles size={14} />
+                                    <Wrench size={14} />
+                                </div>
+                            ) : (
+                                <>
                             <Panel
-                                icon={<Terminal size={16} className="text-cyan-300" />}
+                                icon={<Terminal size={14} className="text-cyan-300" />}
                                 title="Runs"
-                                subtitle={`${orchestrationRuns.length} orchestration attempts in session`}
+                                subtitle={`${orchestrationRuns.length} in session`}
                             >
                                 {orchestrationRuns.length === 0 ? (
-                                    <EmptyState text="Run orchestration to build session-level execution history." />
+                                    <EmptyState text="No runs yet. Send a prompt to start." />
                                 ) : (
-                                    <div className="space-y-3">
+                                    <div className="space-y-1.5">
                                         {[...orchestrationRuns].reverse().map((run) => {
                                             const isSelected = run.run_id === (selectedRun?.run_id || null)
                                             return (
                                                 <div
                                                     key={run.run_id || `${run.root_task_id}-${run.summary}`}
-                                                    className={`rounded-2xl border p-3 ${
+                                                    className={`rounded-lg border p-2 ${
                                                         isSelected
-                                                            ? 'border-cyan-400/40 bg-cyan-500/10'
-                                                            : 'border-white/10 bg-black/20'
+                                                            ? 'border-cyan-400/30 bg-cyan-500/10'
+                                                            : 'border-white/[0.07] bg-black/20'
                                                     }`}
                                                 >
                                                     <button
@@ -1177,26 +1243,20 @@ function App() {
                                                         className="w-full text-left disabled:opacity-60"
                                                         disabled={isStreaming}
                                                     >
-                                                        <div className="flex items-start justify-between gap-3">
-                                                            <div>
-                                                                <div className="text-sm font-medium text-white">
-                                                                    {run.goal || run.summary || run.root_task_id || 'Run'}
-                                                                </div>
-                                                                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                                                                    {run.success ? 'completed' : 'blocked'}
-                                                                    {run.resumed_from_run_id ? ' · resumed' : ''}
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-500">
-                                                                {run.run_id || run.root_task_id}
-                                                            </div>
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className="truncate text-xs font-medium text-white">
+                                                                {run.goal || run.summary || run.root_task_id || 'Run'}
+                                                            </span>
+                                                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${run.success ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'}`}>
+                                                                {run.success ? 'done' : 'blocked'}
+                                                            </span>
                                                         </div>
                                                     </button>
                                                     {!run.success && run.run_id && currentSessionId && (
                                                         <button
                                                             onClick={() => void handleResumeRun(run)}
                                                             disabled={isStreaming}
-                                                            className="mt-3 rounded-full border border-orange-400/30 px-3 py-1 text-xs text-orange-200 transition hover:bg-orange-500/10 disabled:opacity-50"
+                                                            className="mt-1.5 rounded-md border border-orange-400/30 px-2 py-0.5 text-[11px] text-orange-200 transition hover:bg-orange-500/10 disabled:opacity-50"
                                                         >
                                                             Resume
                                                         </button>
@@ -1206,104 +1266,88 @@ function App() {
                                         })}
                                     </div>
                                 )}
+                                <AgentTimeline entries={timeline} />
                             </Panel>
 
                             <Panel
-                                icon={<Network size={16} className="text-orange-300" />}
-                                title="Task Graph"
-                                subtitle={`${countTasks(taskGraph)} tasks persisted`}
+                                icon={<Network size={14} className="text-orange-300" />}
+                                title="Tasks"
+                                subtitle={`${countTasks(taskGraph)} total · ${readyTasks.length} ready`}
                             >
-                                {taskGraph.length === 0 ? (
-                                    <EmptyState text="No tasks yet. Run orchestration to materialize a task graph." />
+                                {taskGraph.length === 0 && readyTasks.length === 0 ? (
+                                    <EmptyState text="No tasks yet. Run orchestration to plan." />
                                 ) : (
-                                    <div className="space-y-2">{renderTaskTree(taskGraph)}</div>
-                                )}
-                            </Panel>
-
-                            <Panel
-                                icon={<Boxes size={16} className="text-emerald-300" />}
-                                title="Worker Assignments"
-                                subtitle={`${Object.keys(workerAssignments).length} active mappings`}
-                            >
-                                {Object.entries(workerAssignments).length === 0 ? (
-                                    <EmptyState text="Execution-profile assignments will appear after orchestration runs." />
-                                ) : (
-                                    <div className="space-y-3">
-                                        {Object.entries(workerAssignments).map(([taskId, assignment]) => (
-                                            <div key={taskId} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <div className="text-sm font-medium text-white">{assignment.role}</div>
-                                                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{taskId}</div>
+                                    <div className="space-y-1.5">
+                                        {readyTasks.length > 0 && (
+                                            <div className="mb-1">
+                                                <div className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-emerald-400/70">
+                                                    <Sparkles size={10} /> Ready
                                                 </div>
-                                                <div className="mt-2 text-xs text-slate-400">{assignment.worker_session_id}</div>
-                                                <div className="mt-3 flex flex-wrap gap-2">
-                                                    {assignment.allowed_tool_names.map((toolName) => (
-                                                        <span
-                                                            key={`${taskId}-${toolName}`}
-                                                            className="rounded-full border border-white/10 px-2 py-1 text-[11px] text-slate-300"
-                                                        >
-                                                            {toolName}
-                                                        </span>
-                                                    ))}
-                                                </div>
+                                                {readyTasks.map((task) => (
+                                                    <div key={task.id} className="rounded-lg border border-emerald-400/15 bg-emerald-500/5 px-2 py-1.5">
+                                                        <div className="text-xs font-medium text-white">{task.title}</div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        )}
+                                        {taskGraph.length > 0 && renderTaskTree(taskGraph)}
+                                    </div>
+                                )}
+
+                                {Object.entries(workerAssignments).length > 0 && (
+                                    <div className="mt-2 border-t border-white/[0.05] pt-2">
+                                        <div className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                                            <Boxes size={10} /> Workers
+                                        </div>
+                                        <div className="space-y-1">
+                                            {Object.entries(workerAssignments).map(([taskId, assignment]) => (
+                                                <div key={taskId} className="rounded-lg border border-white/[0.07] bg-black/20 px-2 py-1.5">
+                                                    <div className="flex items-center justify-between gap-1">
+                                                        <span className="text-xs font-medium text-white">{assignment.role}</span>
+                                                        <span className="text-[10px] text-slate-500">{taskId}</span>
+                                                    </div>
+                                                    <div className="mt-1 flex flex-wrap gap-0.5">
+                                                        {assignment.allowed_tool_names.map((toolName) => (
+                                                            <span
+                                                                key={`${taskId}-${toolName}`}
+                                                                className="rounded border border-white/[0.07] px-1 py-0.5 text-[10px] text-slate-400"
+                                                            >
+                                                                {toolName}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                             </Panel>
 
-                            <Panel
-                                icon={<Sparkles size={16} className="text-cyan-300" />}
-                                title="Ready Queue"
-                                subtitle={`${readyTasks.length} dependency-ready tasks`}
-                            >
-                                {readyTasks.length === 0 ? (
-                                    <EmptyState text="No ready tasks at the moment." />
-                                ) : (
-                                    <div className="space-y-2">
-                                        {readyTasks.map((task) => (
-                                            <div key={task.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                                                <div className="text-sm font-medium text-white">{task.title}</div>
-                                                <div className="mt-1 text-xs text-slate-500">{task.id}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </Panel>
-
-                            <Panel
-                                icon={<Wrench size={16} className="text-violet-300" />}
-                                title="Tool Surface"
-                                subtitle={`${tools.length} tools visible in build mode`}
+                            <CollapsiblePanel
+                                icon={<Wrench size={14} className="text-violet-300" />}
+                                title="Tools"
+                                subtitle={`${tools.length} available`}
+                                defaultCollapsed={true}
                             >
                                 {tools.length === 0 ? (
                                     <EmptyState text="No tool catalog loaded." />
                                 ) : (
-                                    <div className="space-y-2">
+                                    <div className="space-y-1">
                                         {tools.slice(0, 12).map((tool) => (
-                                            <div key={tool.name} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div>
-                                                        <div className="text-sm font-medium text-white">{tool.name}</div>
-                                                        <div className="mt-1 text-xs text-slate-400">{tool.description}</div>
-                                                    </div>
-                                                    <div className="rounded-full border border-white/10 px-2 py-1 text-[11px] text-slate-400">
-                                                        {tool.policy.capability_group || 'uncategorized'}
-                                                    </div>
+                                            <div key={tool.name} className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.07] bg-black/20 px-2 py-1.5">
+                                                <div className="min-w-0">
+                                                    <span className="text-xs font-medium text-white">{tool.name}</span>
                                                 </div>
-                                                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                                                    <span className="rounded-full border border-white/10 px-2 py-1">
-                                                        {tool.policy.sandbox || 'workspace_read'}
-                                                    </span>
-                                                    <span className="rounded-full border border-white/10 px-2 py-1">
-                                                        {tool.policy.requires_approval ? 'approval required' : 'no approval'}
-                                                    </span>
-                                                </div>
+                                                <span className="shrink-0 rounded border border-white/[0.07] px-1 py-0.5 text-[10px] text-slate-400">
+                                                    {tool.policy.capability_group || 'general'}
+                                                </span>
                                             </div>
                                         ))}
                                     </div>
                                 )}
-                            </Panel>
+                            </CollapsiblePanel>
+                                </>
+                            )}
                         </aside>
                     </div>
                 </main>
@@ -1322,12 +1366,10 @@ function SummaryCard({
     value: string
 }) {
     return (
-        <div className="rounded-3xl border border-white/10 bg-black/20 px-4 py-3">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-slate-500">
-                {icon}
-                {label}
-            </div>
-            <div className="mt-2 text-lg font-semibold text-white">{value}</div>
+        <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-black/20 px-3 py-1.5">
+            <span className="text-slate-500">{icon}</span>
+            <span className="text-xs text-slate-400">{label}</span>
+            <span className="text-xs font-medium text-white">{value}</span>
         </div>
     )
 }
@@ -1344,14 +1386,14 @@ function Panel({
     children: ReactNode
 }) {
     return (
-        <section className="rounded-[28px] border border-white/10 bg-slate-950/70 p-4 shadow-2xl shadow-black/20 backdrop-blur">
-            <div className="mb-4 flex items-start justify-between gap-3">
+        <section className="rounded-2xl border border-white/[0.07] bg-slate-950/70 p-3 shadow-lg shadow-black/20 backdrop-blur">
+            <div className="mb-3 flex items-start justify-between gap-2">
                 <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-white">
                         {icon}
                         {title}
                     </div>
-                    <div className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">{subtitle}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">{subtitle}</div>
                 </div>
             </div>
             {children}
@@ -1360,7 +1402,40 @@ function Panel({
 }
 
 function EmptyState({ text }: { text: string }) {
-    return <div className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-500">{text}</div>
+    return <div className="rounded-lg border border-dashed border-white/[0.07] px-2 py-2 text-[11px] text-slate-500">{text}</div>
+}
+
+function CollapsiblePanel({
+    icon,
+    title,
+    subtitle,
+    defaultCollapsed = false,
+    children,
+}: {
+    icon: React.ReactNode
+    title: string
+    subtitle: string
+    defaultCollapsed?: boolean
+    children: ReactNode
+}) {
+    const [collapsed, setCollapsed] = useState(defaultCollapsed)
+    return (
+        <section className="rounded-2xl border border-white/[0.07] bg-slate-950/70 p-3 shadow-lg shadow-black/20 backdrop-blur">
+            <button
+                type="button"
+                onClick={() => setCollapsed((c) => !c)}
+                className="flex w-full items-center justify-between gap-2"
+            >
+                <div className="flex items-center gap-1.5 text-sm font-medium text-white">
+                    {icon}
+                    {title}
+                    <span className="text-[11px] font-normal text-slate-500">{subtitle}</span>
+                </div>
+                <ChevronDown size={14} className={`text-slate-500 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+            </button>
+            {!collapsed && <div className="mt-2">{children}</div>}
+        </section>
+    )
 }
 
 function renderTaskTree(nodes: TaskNode[], level = 0): React.ReactNode[] {
@@ -1377,23 +1452,16 @@ function renderTaskTree(nodes: TaskNode[], level = 0): React.ReactNode[] {
         const item = (
             <div
                 key={node.id}
-                style={{ marginLeft: `${level * 14}px` }}
-                className="rounded-2xl border border-white/10 bg-black/20 p-3"
+                style={{ marginLeft: `${level * 10}px` }}
+                className="rounded-lg border border-white/[0.07] bg-black/20 px-2 py-1.5"
             >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-white">{node.title}</div>
-                        <div className="mt-1 text-xs text-slate-500">{node.id}</div>
+                        <div className="truncate text-xs font-medium text-white">{node.title}</div>
                     </div>
-                    <span className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-[0.16em] ${badgeColor}`}>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${badgeColor}`}>
                         {node.status}
                     </span>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                    {node.ready && <span className="rounded-full border border-white/10 px-2 py-1">ready</span>}
-                    {node.assigned_agent && (
-                        <span className="rounded-full border border-white/10 px-2 py-1">{node.assigned_agent}</span>
-                    )}
                 </div>
             </div>
         )

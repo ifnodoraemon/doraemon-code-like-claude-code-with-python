@@ -153,7 +153,7 @@ async def chat_endpoint(request: ChatRequest):
                 yield "data: [DONE]\n\n"
 
             except Exception as e:
-                logger.error(f"Streaming error: {e}")
+                logger.error("Streaming error: %s", e)
                 if request.execution_mode == "orchestrate":
                     error_summary = f"Orchestration failed: {e}"
                     err_data = {
@@ -188,5 +188,5 @@ async def chat_endpoint(request: ChatRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Chat error: {type(e).__name__}: {e}")
+        logger.error("Chat error: %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=500, detail="Internal server error") from e

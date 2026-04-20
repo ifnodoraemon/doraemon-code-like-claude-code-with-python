@@ -165,8 +165,12 @@ class ReActAgent(BaseAgent):
                 timeout=llm_timeout,
             )
 
+            provider_thought = response.get("thought") or response.get("reasoning", "")
+            if not isinstance(provider_thought, str):
+                provider_thought = ""
             return Thought(
-                reasoning=response.get("reasoning", ""),
+                reasoning=provider_thought,
+                provider_items=response.get("provider_items", []) or [],
                 tool_calls=response.get("tool_calls", []),
                 response=response.get("content"),
                 is_finished=response.get("is_finished", False),
@@ -184,7 +188,7 @@ class ReActAgent(BaseAgent):
                     },
                 )
             raise TimeoutError(f"LLM call timed out after {llm_timeout:.0f}s") from None
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError, TypeError, KeyError, AttributeError) as e:
             raise RuntimeError(f"Error in thinking: {e}") from e
 
     async def act(self, thought: Thought) -> Action:
@@ -281,6 +285,7 @@ class ReActAgent(BaseAgent):
                 if len(thought.tool_calls) > 1:
                     self.state.add_assistant_message(
                         content=thought.response,
+                        provider_items=thought.provider_items,
                         tool_calls=thought.tool_calls,
                         thought=thought.reasoning,
                     )
@@ -317,6 +322,7 @@ class ReActAgent(BaseAgent):
                     elif action.type == ActionType.TOOL_CALL:
                         self.state.add_assistant_message(
                             content=thought.response,
+                            provider_items=thought.provider_items,
                             tool_calls=thought.tool_calls,
                             thought=thought.reasoning,
                         )
@@ -345,7 +351,7 @@ class ReActAgent(BaseAgent):
 
             return self._build_result()
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError, TypeError, KeyError, AttributeError) as e:
             self.state.mark_error(str(e))
             return self._build_result(error=str(e))
 
@@ -438,13 +444,17 @@ class ReActAgent(BaseAgent):
                     yield {"type": "response", "content": thought.response}
                     break
 
+                current_tool_calls = thought.tool_calls
+
                 self.state.add_assistant_message(
                     content=thought.response,
-                    tool_calls=thought.tool_calls,
+                    provider_items=thought.provider_items,
+                    tool_calls=current_tool_calls,
                     thought=thought.reasoning,
                 )
 
-                for tool_call_data in thought.tool_calls:
+                tool_call_infos = []
+                for tool_call_data in current_tool_calls:
                     name = tool_call_data.get("name") or tool_call_data.get("function", {}).get(
                         "name", ""
                     )
@@ -458,13 +468,20 @@ class ReActAgent(BaseAgent):
                         except (json.JSONDecodeError, TypeError):
                             args = {}
 
+                    call_id = tool_call_data.get("id") or str(uuid.uuid4())
+                    tool_call_infos.append((call_id, name, args))
+
                     yield {"type": "tool_call", "name": name, "args": args}
 
-                    result, error = await self._execute_tool_with_permission(name, args)
+                results = await asyncio.gather(
+                    *(
+                        self._execute_tool_with_permission(name, args)
+                        for _, name, args in tool_call_infos
+                    )
+                )
 
-                    yield {"type": "tool_result", "result": result, "error": error}
-
-                    call_id = tool_call_data.get("id") or str(uuid.uuid4())
+                for (call_id, name, args), (result, error) in zip(tool_call_infos, results):
+                    yield {"type": "tool_result", "name": name, "result": result, "error": error}
                     self.state.add_tool_call(
                         ToolCall(
                             id=call_id,
@@ -478,7 +495,7 @@ class ReActAgent(BaseAgent):
 
             yield {"type": "done", "result": self._build_result().to_dict()}
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError, TypeError, KeyError, AttributeError) as e:
             self.state.mark_error(str(e))
             yield {"type": "error", "error": str(e)}
 
@@ -528,7 +545,15 @@ class ReActAgent(BaseAgent):
 
             return parsed
 
-        except Exception as e:
+        except (
+            RuntimeError,
+            ValueError,
+            OSError,
+            TypeError,
+            KeyError,
+            AttributeError,
+            json.JSONDecodeError,
+        ) as e:
             duration = time.time() - start_time
             if self._trace:
                 self._trace.event(
@@ -607,6 +632,8 @@ class ReActAgent(BaseAgent):
 
             return {
                 "content": content,
+                "provider_items": getattr(response, "provider_items", None),
+                "thought": getattr(response, "thought", None),
                 "tool_calls": parsed_calls,
                 "is_finished": not parsed_calls,
             }
@@ -643,6 +670,8 @@ class ReActAgent(BaseAgent):
                 )
             return {
                 "content": response.get("content"),
+                "provider_items": response.get("provider_items"),
+                "thought": response.get("thought"),
                 "tool_calls": parsed_calls,
                 "is_finished": not parsed_calls,
             }
@@ -660,25 +689,17 @@ class ReActAgent(BaseAgent):
             }
         )
 
-        recent_messages = self.state.get_recent_messages(20)
-        if recent_messages:
-            start_idx = 0
-            while start_idx < len(recent_messages):
-                role = recent_messages[start_idx].role
-                if role in {"user", "tool"}:
-                    break
-                start_idx += 1
-            recent_messages = (
-                recent_messages[start_idx:] if start_idx < len(recent_messages) else []
-            )
-
-        for msg in recent_messages:
+        for msg in self.state.messages:
             messages.append(msg.to_api_format())
 
         return messages
 
     def _get_system_prompt(self) -> str:
-        """Get system prompt based on mode."""
+        """Get system prompt based on mode. Checks config for custom prompt first."""
+        custom_prompt = getattr(self, "_custom_system_prompt", None)
+        if custom_prompt:
+            return custom_prompt
+
         if self.state.mode == "plan":
             return """You are a planning agent. Analyze the task and produce a concrete implementation strategy.
 Do not execute anything; inspect the codebase and return an actionable plan grounded in repository state.
@@ -729,8 +750,8 @@ When the task is complete, provide a summary of what was done."""
                 *recent_messages,
             ]
             self.state._update_token_estimate()
-        except Exception as e:
-            logger.error(f"Semantic compression failed: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            logger.error("Semantic compression failed: %s", e)
 
     async def _summarize_messages(self, messages: list[Message]) -> str:
         """Deprecated: Integrated into _compress_context for better semantic control."""

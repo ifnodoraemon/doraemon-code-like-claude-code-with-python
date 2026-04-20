@@ -230,7 +230,7 @@ class SkillLoader:
                     if metadata:
                         skills_metadata.append(metadata)
 
-        logger.info(f"Discovered {len(skills_metadata)} skills")
+        logger.info("Discovered %s skills", len(skills_metadata))
         return skills_metadata
 
     def load_skill(self, skill_dir: Path) -> Skill | None:
@@ -238,7 +238,7 @@ class SkillLoader:
         skill_file = skill_dir / self.SKILL_FILE
 
         if not skill_file.exists():
-            logger.warning(f"No SKILL.md found in {skill_dir}")
+            logger.warning("No SKILL.md found in %s", skill_dir)
             return None
 
         try:
@@ -261,14 +261,14 @@ class SkillLoader:
                     try:
                         skill.additional_content[filename] = file_path.read_text(encoding="utf-8")
                     except Exception as e:
-                        logger.warning(f"Failed to load {filename}: {e}")
+                        logger.warning("Failed to load %s: %s", filename, e)
 
             self._skills[metadata.name] = skill
-            logger.info(f"Loaded skill: {metadata.name}")
+            logger.info("Loaded skill: %s", metadata.name)
             return skill
 
         except Exception as e:
-            logger.error(f"Failed to load skill from {skill_dir}: {e}")
+            logger.error("Failed to load skill from %s: %s", skill_dir, e)
             return None
 
     def get_relevant_skills(
@@ -325,7 +325,7 @@ class SkillLoader:
             metadata, _ = self._parse_skill_file(content)
             return metadata
         except Exception as e:
-            logger.warning(f"Failed to load metadata from {skill_dir}: {e}")
+            logger.warning("Failed to load metadata from %s: %s", skill_dir, e)
             return None
 
     def _parse_skill_file(self, content: str) -> tuple[SkillMetadata | None, str]:
@@ -350,7 +350,7 @@ class SkillLoader:
             metadata = SkillMetadata.from_dict(data or {})
             return metadata, body
         except Exception as e:
-            logger.warning(f"Invalid YAML frontmatter: {e}")
+            logger.warning("Invalid YAML frontmatter: %s", e)
             return SkillMetadata(name="Unknown", description=""), content
 
 
@@ -489,7 +489,7 @@ files: []
     skill_file = skill_dir / "SKILL.md"
     skill_file.write_text(template, encoding="utf-8")
 
-    logger.info(f"Created skill template: {skill_file}")
+    logger.info("Created skill template: %s", skill_file)
     return skill_file
 
 

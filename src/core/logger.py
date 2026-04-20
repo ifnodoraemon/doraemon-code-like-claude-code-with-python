@@ -131,7 +131,7 @@ class TraceLogger:
 
         # Also log to standard logger
         payload = json.dumps(data, ensure_ascii=False, default=str)
-        self.logger.debug(f"Trace: {type} - {name} ({duration_ms}ms) | data={payload}")
+        self.logger.debug("Trace: %s - %s (%sms) | data=%s", type, name, duration_ms, payload)
 
     def export(self) -> list[dict]:
         return [asdict(e) for e in self.events]

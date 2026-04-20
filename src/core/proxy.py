@@ -145,7 +145,7 @@ class ProxyManager:
         """
         name = config.name or f"{config.host}:{config.port}"
         self._proxies[name] = config
-        logger.info(f"Added proxy: {name}")
+        logger.info("Added proxy: %s", name)
         return name
 
     def remove_proxy(self, name: str):
@@ -156,7 +156,7 @@ class ProxyManager:
     def set_default(self, name: str | None):
         """Set the default proxy."""
         if name and name not in self._proxies:
-            logger.warning(f"Unknown proxy: {name}")
+            logger.warning("Unknown proxy: %s", name)
             return
         self._default_proxy = name
 
@@ -179,14 +179,14 @@ class ProxyManager:
         if http_proxy:
             config = ProxyConfig.from_url(http_proxy, name="env_http")
             self.add_proxy(config)
-            logger.info(f"Detected HTTP proxy from environment: {config.host}")
+            logger.info("Detected HTTP proxy from environment: %s", config.host)
 
         # HTTPS proxy
         https_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
         if https_proxy:
             config = ProxyConfig.from_url(https_proxy, name="env_https")
             self.add_proxy(config)
-            logger.info(f"Detected HTTPS proxy from environment: {config.host}")
+            logger.info("Detected HTTPS proxy from environment: %s", config.host)
 
         # All proxy
         all_proxy = os.getenv("ALL_PROXY") or os.getenv("all_proxy")
@@ -194,14 +194,14 @@ class ProxyManager:
             config = ProxyConfig.from_url(all_proxy, name="env_all")
             self.add_proxy(config)
             self._default_proxy = "env_all"
-            logger.info(f"Detected ALL_PROXY from environment: {config.host}")
+            logger.info("Detected ALL_PROXY from environment: %s", config.host)
 
         # No proxy
         no_proxy = os.getenv("NO_PROXY") or os.getenv("no_proxy")
         if no_proxy:
             patterns = [p.strip() for p in no_proxy.split(",")]
             self._bypass_list.extend(patterns)
-            logger.info(f"Detected NO_PROXY patterns: {len(patterns)}")
+            logger.info("Detected NO_PROXY patterns: %s", len(patterns))
 
     def should_bypass(self, hostname: str) -> bool:
         """
@@ -398,7 +398,7 @@ class ProxyManager:
             return True
 
         except Exception as e:
-            logger.warning(f"Proxy test failed for {name}: {e}")
+            logger.warning("Proxy test failed for %s: %s", name, e)
             return False
 
     def list_proxies(self) -> list[dict]:

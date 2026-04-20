@@ -93,17 +93,17 @@ class WorkspaceManager:
         dir_path = Path(path).resolve()
 
         if not dir_path.exists():
-            logger.error(f"Directory does not exist: {dir_path}")
+            logger.error("Directory does not exist: %s", dir_path)
             return False
 
         if not dir_path.is_dir():
-            logger.error(f"Path is not a directory: {dir_path}")
+            logger.error("Path is not a directory: %s", dir_path)
             return False
 
         # Check if already added
         for d in self._directories:
             if d.path == dir_path:
-                logger.warning(f"Directory already in workspace: {dir_path}")
+                logger.warning("Directory already in workspace: %s", dir_path)
                 return False
 
         # If setting as primary, unset existing primary
@@ -119,7 +119,7 @@ class WorkspaceManager:
         )
 
         self._directories.append(workspace_dir)
-        logger.info(f"Added directory to workspace: {dir_path}" + (f" ({alias})" if alias else ""))
+        logger.info("Added directory to workspace: %s%s", dir_path, f" ({alias})" if alias else "")
         return True
 
     def remove_directory(self, path_or_alias: str) -> bool:
@@ -138,10 +138,10 @@ class WorkspaceManager:
                     logger.error("Cannot remove primary directory")
                     return False
                 del self._directories[i]
-                logger.info(f"Removed directory from workspace: {d.path}")
+                logger.info("Removed directory from workspace: %s", d.path)
                 return True
 
-        logger.warning(f"Directory not found in workspace: {path_or_alias}")
+        logger.warning("Directory not found in workspace: %s", path_or_alias)
         return False
 
     def list_directories(self) -> list[WorkspaceDirectory]:

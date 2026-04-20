@@ -44,7 +44,7 @@ def _cacheable_text_read(path: Path) -> str | None:
     try:
         content = path.read_text(encoding="utf-8")
     except Exception as e:
-        logger.error(f"Failed to read {path}: {e}")
+        logger.error("Failed to read %s: %s", path, e)
         return None
 
     _TEXT_CACHE[cache_key] = (signature, content)
@@ -132,7 +132,7 @@ def load_project_rules(project_dir: Path | None = None) -> str | None:
     if combined:
         logger.info("Loaded project rules and instructions")
     else:
-        logger.debug(f"No project {RULES_FILENAME} found")
+        logger.debug("No project %s found", RULES_FILENAME)
     return combined
 
 
@@ -162,7 +162,7 @@ def load_instruction_file(file_path: str, base_dir: Path | None = None) -> str |
         matching_files = list(parent.glob(pattern))
 
         if not matching_files:
-            logger.debug(f"No files matched pattern: {file_path}")
+            logger.debug("No files matched pattern: %s", file_path)
             return None
 
         contents = []
@@ -171,7 +171,7 @@ def load_instruction_file(file_path: str, base_dir: Path | None = None) -> str |
             if content is None:
                 continue
             contents.append(f"## From {file.name}\n\n{content}")
-            logger.info(f"Loaded instruction file: {file}")
+            logger.info("Loaded instruction file: %s", file)
 
         return "\n\n".join(contents) if contents else None
 
@@ -181,13 +181,13 @@ def load_instruction_file(file_path: str, base_dir: Path | None = None) -> str |
             content = _cacheable_text_read(path)
             if content is None:
                 return None
-            logger.info(f"Loaded instruction file: {path}")
+            logger.info("Loaded instruction file: %s", path)
             return content
         except Exception as e:
-            logger.error(f"Failed to read {path}: {e}")
+            logger.error("Failed to read %s: %s", path, e)
             return None
 
-    logger.debug(f"Instruction file not found: {file_path}")
+    logger.debug("Instruction file not found: %s", file_path)
     return None
 
 
@@ -252,7 +252,7 @@ def load_all_instructions(config: dict, project_dir: Path | None = None) -> str:
 
     # 2. Additional instruction files from config
     if instruction_files:
-        logger.info(f"Loading {len(instruction_files)} additional instruction files")
+        logger.info("Loading %s additional instruction files", len(instruction_files))
 
         for file_path in instruction_files:
             content = load_instruction_file(file_path, project_dir)
@@ -305,7 +305,7 @@ This file contains project-specific rules and conventions for the agent.
 """
 
     rules_file.write_text(default_content, encoding="utf-8")
-    logger.info(f"Created default {RULES_FILENAME}: {rules_file}")
+    logger.info("Created default %s: %s", RULES_FILENAME, rules_file)
 
     return rules_file
 
@@ -346,10 +346,10 @@ def load_project_memory(project_dir: Path | None = None) -> str | None:
             content = _cacheable_text_read(memory_file)
             if content is None:
                 return None
-            logger.info(f"Loaded project memory: {memory_file}")
+            logger.info("Loaded project memory: %s", memory_file)
             return content
         except Exception as e:
-            logger.error(f"Failed to read {MEMORY_FILENAME}: {e}")
+            logger.error("Failed to read %s: %s", MEMORY_FILENAME, e)
     return None
 
 

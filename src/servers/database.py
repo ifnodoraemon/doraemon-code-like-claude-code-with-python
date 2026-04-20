@@ -69,7 +69,7 @@ def db_read_query(query: str, db_path: str, params: list | None = None) -> str:
         return json.dumps(results, indent=2, default=str)
 
     except Exception as e:
-        logger.error(f"Database error: {e}")
+        logger.error("Database error: %s", e)
         return f"Database error: {str(e)}"
     finally:
         if conn:
@@ -113,7 +113,7 @@ def db_write_query(query: str, db_path: str, params: list | None = None) -> str:
         return f"Query executed successfully. Rows affected: {row_count}"
 
     except Exception as e:
-        logger.error(f"Database error: {e}")
+        logger.error("Database error: %s", e)
         return f"Database error: {str(e)}"
     finally:
         if conn:

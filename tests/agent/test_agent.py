@@ -15,6 +15,7 @@ from src.agent import (
     AgentResult,
     AgentState,
     DoraemonAgent,
+    Message,
     Observation,
     ReActAgent,
     Thought,
@@ -61,6 +62,17 @@ class TestAgentState:
         assert len(state.messages) == 1
         assert state.messages[0].role == "assistant"
         assert state.messages[0].content == "Hi there"
+
+    def test_add_assistant_message_with_provider_items(self):
+        """Should preserve provider_items on assistant messages."""
+        state = AgentState()
+        state.add_assistant_message(
+            content="Using tool",
+            provider_items=[{"type": "reasoning", "id": "rs_1"}],
+            tool_calls=[{"name": "test", "arguments": {}}],
+        )
+
+        assert state.messages[0].provider_items == [{"type": "reasoning", "id": "rs_1"}]
 
     def test_add_tool_result(self):
         """Should add tool result correctly."""
@@ -325,6 +337,32 @@ class TestReActAgent:
 
         assert parsed["tool_calls"][0]["thought_signature"] == "sig_123"
 
+    def test_build_messages_keeps_assistant_tool_call_before_tool_result(self, agent):
+        """Tool results must retain their immediately preceding assistant function-call turn."""
+        for index in range(19):
+            agent.state.add_user_message(f"user-{index}")
+
+        agent.state.add_assistant_message(
+            content=None,
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "read", "arguments": '{"path":"README.md"}'},
+                }
+            ],
+        )
+        agent.state.add_tool_result("call_1", "read", "contents")
+
+        messages = agent._build_messages(Observation(user_input="next"))
+
+        tool_index = next(
+            index for index, message in enumerate(messages) if message["role"] == "tool"
+        )
+        assert tool_index > 0
+        assert messages[tool_index - 1]["role"] == "assistant"
+        assert messages[tool_index - 1]["tool_calls"][0]["function"]["name"] == "read"
+
     @pytest.mark.asyncio
     async def test_act_respond(self, agent):
         """Should act with respond when no tool calls."""
@@ -472,6 +510,29 @@ class TestReActAgent:
         assert events[-1]["result"]["success"] is False
         assert "timeout" in events[-1]["result"]["error"]
         assert events[-1]["result"]["metadata"]["status"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_stream_run_executes_all_tool_calls_per_turn(self, agent, mock_llm):
+        """Streaming path should process all tool calls in parallel per turn."""
+        mock_llm.chat.side_effect = [
+            MagicMock(
+                content=None,
+                tool_calls=[
+                    MagicMock(id="1", function=MagicMock(name="read", arguments='{"path": "a"}')),
+                    MagicMock(id="2", function=MagicMock(name="read", arguments='{"path": "b"}')),
+                ],
+            ),
+            MagicMock(content="Done", tool_calls=None),
+        ]
+
+        events = []
+        async for event in agent.run_stream("Test"):
+            events.append(event)
+
+        tool_events = [event for event in events if event["type"] == "tool_call"]
+        assert len(tool_events) == 2
+        assert tool_events[0]["args"] == {"path": "a"}
+        assert tool_events[1]["args"] == {"path": "b"}
 
     def test_reset(self, agent):
         """Should reset agent state."""
@@ -671,6 +732,77 @@ class TestAgentStateSerialization:
         assert state.mode == "build"
         assert state.turn_count == 3
         assert state.is_finished is True
+
+
+class TestMessageToApiFormat:
+    """Tests for Message.to_api_format."""
+
+    def test_includes_thought_when_present(self):
+        msg = Message(role="assistant", content="hi", thought="reasoning step")
+        api = msg.to_api_format()
+        assert api["thought"] == "reasoning step"
+
+    def test_preserves_empty_string_content(self):
+        msg = Message(role="assistant", content="")
+        api = msg.to_api_format()
+        assert api.get("content") == ""
+
+    def test_includes_provider_items(self):
+        msg = Message(
+            role="assistant",
+            content="result",
+            provider_items=[{"type": "reasoning", "id": "rs_1"}],
+        )
+        api = msg.to_api_format()
+        assert api["provider_items"] == [{"type": "reasoning", "id": "rs_1"}]
+
+
+class TestProviderItemsRoundTrip:
+    """Tests for provider_items surviving session persistence."""
+
+    @pytest.mark.asyncio
+    async def test_provider_items_round_trip_via_session_data(self):
+        from src.agent.adapter import _message_from_session_data, _message_to_session_data
+
+        original = Message(
+            role="assistant",
+            content="result",
+            provider_items=[{"type": "reasoning", "id": "rs_1"}],
+            tool_calls=[
+                {"id": "c1", "type": "function", "function": {"name": "read", "arguments": "{}"}}
+            ],
+        )
+        data = _message_to_session_data(original)
+        restored = _message_from_session_data(data)
+
+        assert restored.provider_items == original.provider_items
+        assert restored.tool_calls == original.tool_calls
+        assert restored.content == original.content
+
+
+class TestThoughtSurfacing:
+    """Tests for ChatResponse.thought propagation into Thought.reasoning."""
+
+    @pytest.mark.asyncio
+    async def test_think_surfaces_provider_thought(self):
+        llm = AsyncMock()
+        llm.chat = AsyncMock(
+            return_value=MagicMock(
+                content="Done!",
+                thought="I should respond directly.",
+                tool_calls=None,
+                provider_items=None,
+            )
+        )
+        agent = ReActAgent(
+            llm_client=llm,
+            tools=[],
+            max_turns=10,
+        )
+        agent.state.add_user_message("Hello")
+        thought = await agent.think(Observation(user_input="Hello"))
+
+        assert thought.reasoning == "I should respond directly."
 
 
 class TestAgentResult:
@@ -1151,7 +1283,9 @@ class TestAgentAdapter:
         assert "run" in {tool.name for tool in session._agent.tools}
 
     @pytest.mark.asyncio
-    async def test_agent_session_persists_and_restores_messages(self, mock_llm, mock_registry, tmp_path):
+    async def test_agent_session_persists_and_restores_messages(
+        self, mock_llm, mock_registry, tmp_path
+    ):
         """Should persist session messages and restore them by session ID."""
         from src.agent.adapter import AgentSession
 
@@ -1185,7 +1319,9 @@ class TestAgentAdapter:
         assert resumed._state.messages[1].content == "Response"
 
     @pytest.mark.asyncio
-    async def test_spawn_worker_session_reuses_initialized_runtime(self, mock_llm, mock_registry, tmp_path):
+    async def test_spawn_worker_session_reuses_initialized_runtime(
+        self, mock_llm, mock_registry, tmp_path
+    ):
         """Should spawn worker sessions even after the parent session is initialized."""
         from src.agent.adapter import AgentSession
         from src.core.session import SessionManager
