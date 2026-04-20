@@ -1207,6 +1207,37 @@ class TestSessionManager:
         recent = session_manager.get_recent_sessions(limit=3)
         assert len(recent) == 3
 
+    def test_from_dict_orchestration_run_id_fallback(self):
+        """Test line 115: active_orchestration_run_id fallback from orchestration_state."""
+        data = {
+            "metadata": {"id": "orch_test"},
+            "orchestration_state": {"run_id": "run-fallback"},
+            "orchestration_runs": None,
+        }
+        session = SessionData.from_dict(data)
+        assert session.active_orchestration_run_id == "run-fallback"
+
+    def test_from_dict_orchestration_runs_none_fallback(self):
+        """Test line 111: orchestration_runs None fallback."""
+        data = {
+            "metadata": {"id": "runs_none_test"},
+            "orchestration_state": {},
+            "orchestration_runs": None,
+        }
+        session = SessionData.from_dict(data)
+        assert session.orchestration_runs == []
+
+    def test_from_dict_orchestration_runs_none_with_state(self):
+        """Test line 111 with non-empty orchestration_state when runs is None."""
+        data = {
+            "metadata": {"id": "runs_state_test"},
+            "orchestration_state": {"run_id": "r1"},
+            "orchestration_runs": None,
+        }
+        session = SessionData.from_dict(data)
+        assert len(session.orchestration_runs) == 1
+        assert session.orchestration_runs[0]["run_id"] == "r1"
+
     def test_get_recent_sessions_default_limit(self, session_manager):
         """Test that get_recent_sessions uses default limit of 5."""
         for i in range(10):

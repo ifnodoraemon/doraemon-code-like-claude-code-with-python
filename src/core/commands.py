@@ -279,7 +279,7 @@ class CommandExecutor:
         import time
 
         start_time = time.time()
-        result = CommandResult(command_name=command.name)
+        result = CommandResult(command_name=command.name, success=True)
 
         validation_error = self._validate_arguments(command, arguments)
         if validation_error:

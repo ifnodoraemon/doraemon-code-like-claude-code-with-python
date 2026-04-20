@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 
@@ -410,6 +411,155 @@ async def test_lead_runtime_blocks_root_when_planner_raises(tmp_path):
     assert len(tasks) == 1
     assert tasks[0].status == TaskStatus.BLOCKED
     assert tasks[0].assigned_agent is None
+
+
+@pytest.mark.asyncio
+async def test_lead_execution_result_to_dict():
+    from src.runtime.lead import LeadExecutionResult
+
+    result = LeadExecutionResult(
+        root_task_id="root-1",
+        plan_id="plan-1",
+        executed_task_ids=["t1"],
+        completed_task_ids=["t1"],
+        failed_task_ids=[],
+        blocked_task_id=None,
+        success=True,
+        summary="done",
+        task_summaries={"t1": "ok"},
+        worker_assignments={"t1": {"role": "inspect"}},
+    )
+    d = result.to_dict()
+    assert d["root_task_id"] == "root-1"
+    assert d["plan_id"] == "plan-1"
+    assert d["success"] is True
+    assert d["worker_assignments"]["t1"]["role"] == "inspect"
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_resumes_completed_root_raises(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(
+        task_manager=task_manager,
+        results_by_input={
+            "Inspect auth flow": StubTurnResult(success=True, response="ok"),
+            "Implement backend changes": StubTurnResult(success=True, response="ok"),
+            "Run integration verification": StubTurnResult(success=True, response="ok"),
+        },
+        barrier_inputs={"Inspect auth flow", "Implement backend changes"},
+    )
+
+    runtime = LeadAgentRuntime(session, planner=StubPlanner(build_parallel_plan()), max_workers=2)
+    first = await runtime.execute("Implement authentication")
+
+    with pytest.raises(ValueError, match="not resumable"):
+        await runtime.resume(first.root_task_id, prior_state={"plan_id": first.plan_id})
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_resume_no_resumable_subtasks(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    runtime = LeadAgentRuntime(
+        StubSession(task_manager=task_manager, results_by_input={}),
+        planner=StubPlanner(build_parallel_plan()),
+        max_workers=1,
+    )
+    root = task_manager.create_task(title="goal", description="goal", priority=100)
+    task_manager.update_task(root.id, status=TaskStatus.BLOCKED, assigned_agent=None)
+    child = task_manager.create_task(title="child", description="child", parent_id=root.id, priority=50)
+    task_manager.update_task(child.id, status=TaskStatus.COMPLETED, assigned_agent=None)
+
+    with pytest.raises(ValueError, match="no blocked or pending subtasks"):
+        await runtime.resume(root.id, prior_state={"plan_id": "p1"})
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_resume_unknown_root(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    runtime = LeadAgentRuntime(
+        StubSession(task_manager=task_manager, results_by_input={}),
+        max_workers=1,
+    )
+    with pytest.raises(ValueError, match="unknown orchestration root"):
+        await runtime.resume("nonexistent", prior_state={})
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_trim_title(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(task_manager=task_manager, results_by_input={})
+    runtime = LeadAgentRuntime(session, max_workers=1)
+
+    short = runtime._trim_title("short goal")
+    assert short == "short goal"
+
+    long = runtime._trim_title("x" * 100)
+    assert len(long) <= 80
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_priority_value(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(task_manager=task_manager, results_by_input={})
+    runtime = LeadAgentRuntime(session, max_workers=1)
+
+    assert runtime._priority_value("critical") == 100
+    assert runtime._priority_value("high") == 75
+    assert runtime._priority_value("medium") == 50
+    assert runtime._priority_value("low") == 25
+    assert runtime._priority_value("unknown") == 0
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_select_worker_profile_validate(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(task_manager=task_manager, results_by_input={})
+    runtime = LeadAgentRuntime(session, max_workers=1)
+
+    task = SimpleNamespace(title="Verify the integration test", description="run tests")
+    profile = runtime._select_worker_profile(task)
+    assert profile.role == "validate"
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_select_worker_profile_inspect(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(task_manager=task_manager, results_by_input={})
+    runtime = LeadAgentRuntime(session, max_workers=1)
+
+    task = SimpleNamespace(title="Analyze the auth flow", description="inspect code")
+    profile = runtime._select_worker_profile(task)
+    assert profile.role == "inspect"
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_select_worker_profile_change(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(task_manager=task_manager, results_by_input={})
+    runtime = LeadAgentRuntime(session, max_workers=1)
+
+    task = SimpleNamespace(title="Implement the feature", description="write code")
+    profile = runtime._select_worker_profile(task)
+    assert profile.role == "change"
+
+
+@pytest.mark.asyncio
+async def test_lead_runtime_build_worker_input(tmp_path):
+    task_manager = TaskManager(storage_path=tmp_path / "tasks.json")
+    session = StubSession(task_manager=task_manager, results_by_input={})
+    runtime = LeadAgentRuntime(session, max_workers=1)
+
+    from src.runtime.lead import WorkerProfile
+    profile = WorkerProfile(
+        role="inspect",
+        capability_groups=["read"],
+        allowed_tool_names=["read"],
+        instruction="Inspect only",
+    )
+    task = SimpleNamespace(title="Check auth", description="Read auth.py")
+    result = runtime._build_worker_input(task, profile)
+    assert "inspect" in result.lower()
+    assert "Read auth.py" in result
 
 
 @pytest.mark.asyncio

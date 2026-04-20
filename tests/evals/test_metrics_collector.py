@@ -15,7 +15,7 @@ import tempfile
 from typing import Any
 
 import pytest
-from metrics_collector import MetricsCollector
+from tests.evals.metrics_collector import MetricsCollector
 
 # ============================================================================
 # Fixtures

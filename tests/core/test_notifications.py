@@ -709,3 +709,99 @@ class TestNotificationIntegration:
         assert notif.metadata == metadata
         data = notif.to_dict()
         assert data["metadata"] == metadata
+
+
+class TestDesktopNotifierSendMethods:
+    """Tests for DesktopNotifier._send_macos, _send_linux, _send_windows (lines 157-224)."""
+
+    @patch("subprocess.run")
+    @patch.object(DesktopNotifier, "_check_availability", return_value=True)
+    @patch("platform.system", return_value="Darwin")
+    def test_send_macos_with_sound(self, mock_system, mock_check, mock_run):
+        """Test macOS notification with sound."""
+        notifier = DesktopNotifier()
+        notif = Notification(title="Title", message="Msg", sound="Glass")
+        result = notifier._send_macos(notif)
+        assert result is True
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert "Glass" in args[-1]
+
+    @patch("subprocess.run")
+    @patch.object(DesktopNotifier, "_check_availability", return_value=True)
+    @patch("platform.system", return_value="Linux")
+    def test_send_linux_without_icon(self, mock_system, mock_check, mock_run):
+        """Test Linux notification without icon."""
+        notifier = DesktopNotifier()
+        notif = Notification(title="T", message="M", level=NotificationLevel.CRITICAL)
+        result = notifier._send_linux(notif)
+        assert result is True
+        args = mock_run.call_args[0][0]
+        assert "--urgency" in args
+        assert "critical" in args
+
+    @patch("subprocess.run")
+    @patch.object(DesktopNotifier, "_check_availability", return_value=True)
+    @patch("platform.system", return_value="Windows")
+    def test_send_windows_fallback(self, mock_system, mock_check, mock_run):
+        """Test Windows notification via PowerShell fallback."""
+        notifier = DesktopNotifier()
+        notif = Notification(title="T", message="M")
+        result = notifier._send_windows(notif)
+        assert result is True
+
+
+class TestNotificationManagerChannels:
+    """Tests for additional channel behaviors (lines 341, 364-386, 405)."""
+
+    @patch("platform.system", return_value="Darwin")
+    @patch("subprocess.run")
+    def test_send_sound_channel_macos(self, mock_run, mock_system):
+        """Test sound channel on macOS."""
+        config = NotificationConfig(sound_enabled=True)
+        manager = NotificationManager(config)
+        notif = Notification(title="T", message="M", sound="Glass")
+        result = manager._send_sound(notif)
+        assert result is True
+
+    @patch("platform.system", return_value="Linux")
+    @patch("subprocess.run")
+    def test_send_sound_channel_linux(self, mock_run, mock_system):
+        """Test sound channel on Linux."""
+        config = NotificationConfig(sound_enabled=True)
+        manager = NotificationManager(config)
+        notif = Notification(title="T", message="M")
+        result = manager._send_sound(notif)
+        assert result is True
+
+    @patch("platform.system", return_value="Unknown")
+    def test_send_sound_unsupported_platform(self, mock_system):
+        """Test sound channel on unsupported platform falls through."""
+        config = NotificationConfig(sound_enabled=True)
+        manager = NotificationManager(config)
+        notif = Notification(title="T", message="M")
+        result = manager._send_sound(notif)
+        assert isinstance(result, bool)
+
+    def test_send_webhook_no_url(self):
+        """Test webhook channel without URL configured."""
+        manager = NotificationManager()
+        notif = Notification(title="T", message="M")
+        result = manager._send_webhook(notif)
+        assert result is False
+
+    def test_send_channel_sound_disabled(self):
+        """Test sound channel when sound is disabled."""
+        config = NotificationConfig(sound_enabled=False)
+        manager = NotificationManager(config)
+        notif = Notification(title="T", message="M")
+        result = manager._send_channel(NotificationChannel.SOUND, notif)
+        assert result is False
+
+    def test_send_channel_desktop_disabled(self):
+        """Test desktop channel when desktop is disabled."""
+        config = NotificationConfig(desktop_enabled=False)
+        manager = NotificationManager(config)
+        notif = Notification(title="T", message="M")
+        result = manager._send_channel(NotificationChannel.DESKTOP, notif)
+        assert result is False

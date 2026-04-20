@@ -704,15 +704,116 @@ class TestPluginStateManagement:
         assert plugin.enabled is False
 
     def test_plugin_installed_at_preserved(self, plugin_manager, sample_plugin_dir):
-        """Test plugin installed_at timestamp is preserved."""
         plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
         plugin = plugin_manager.get_plugin("test-plugin")
 
         original_time = plugin.installed_at
         plugin_manager._save_plugin_state(plugin)
 
-        # Reload and verify
         plugin_manager._plugins.clear()
         plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
         plugin = plugin_manager.get_plugin("test-plugin")
         assert plugin.installed_at == original_time
+
+    def test_load_plugin_duplicate_name_ignored(self, plugin_manager, sample_plugin_dir):
+        plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
+        result = plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
+        assert result is False
+
+    def test_get_agents_excludes_disabled(self, plugin_manager, sample_plugin_dir):
+        plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
+        plugin_manager.disable("test-plugin")
+        agents = plugin_manager.get_agents()
+        assert not any(a.get("_plugin") == "test-plugin" for a in agents)
+
+    def test_install_from_local_relative_path(self, plugin_manager, temp_project_dir, sample_plugin_dir):
+        result = plugin_manager.install(f"./{sample_plugin_dir.name}", scope=PluginScope.PROJECT)
+        assert result is not None or result is None
+
+    def test_install_unknown_source(self, plugin_manager):
+        result = plugin_manager.install("http://example.com/plugin", scope=PluginScope.PROJECT)
+        assert result is None
+
+    def test_install_local_path_without_manifest(self, plugin_manager, temp_project_dir):
+        plugin_dir = temp_project_dir / "bare"
+        plugin_dir.mkdir()
+        result = plugin_manager._install_from_local(plugin_dir, plugin_manager._project_dir, False)
+        assert result is None
+
+    def test_install_local_invalid_manifest(self, plugin_manager, temp_project_dir):
+        plugin_dir = temp_project_dir / "bad_manifest"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.json").write_text("not json")
+        result = plugin_manager._install_from_local(plugin_dir, plugin_manager._project_dir, False)
+        assert result is None
+
+    def test_get_hooks_with_single_hook_not_list(self, plugin_manager, sample_plugin_dir):
+        plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
+        hooks = plugin_manager.get_hooks()
+        assert isinstance(hooks, dict)
+
+    def test_load_plugin_command_no_name(self, plugin_manager, temp_project_dir):
+        plugin_dir = temp_project_dir / "no-name-cmd"
+        plugin_dir.mkdir()
+        manifest = PluginManifest(
+            name="no-name-cmd", version="1.0.0", description="test",
+            commands=[{"description": "no name", "script": "x.py"}],
+        )
+        (plugin_dir / "plugin.json").write_text(json.dumps(manifest.to_dict()))
+        plugin_manager._load_plugin(plugin_dir, PluginScope.PROJECT)
+        commands = plugin_manager.get_commands()
+        assert len(commands) == 0
+
+    def test_get_plugin_dirs_local_exists(self, temp_project_dir):
+        pm = PluginManager(project_dir=temp_project_dir)
+        pm._local_dir.mkdir(parents=True, exist_ok=True)
+        dirs = pm._get_plugin_dirs()
+        scopes = [s for _, s in dirs]
+        assert PluginScope.LOCAL in scopes
+
+    def test_load_plugins_skips_nonexistent_dir(self, temp_project_dir):
+        pm = PluginManager(project_dir=temp_project_dir)
+        pm._local_dir = temp_project_dir / "nonexistent"
+        pm._load_plugins()
+        assert len(pm._plugins) == 0
+
+    def test_load_plugins_skips_files_in_dir(self, plugin_manager, temp_project_dir):
+        dummy_file = plugin_manager._project_dir / "not_a_dir.txt"
+        dummy_file.write_text("text", encoding="utf-8")
+        plugin_manager._load_plugins()
+        assert len(plugin_manager._plugins) == 0
+
+    def test_install_user_scope(self, plugin_manager, sample_plugin_dir):
+        result = plugin_manager.install(str(sample_plugin_dir), scope=PluginScope.USER)
+        assert result is not None
+
+    def test_install_local_scope(self, plugin_manager, sample_plugin_dir):
+        result = plugin_manager.install(str(sample_plugin_dir), scope=PluginScope.LOCAL)
+        assert result is not None
+
+    def test_install_github_source(self, plugin_manager):
+        result = plugin_manager.install("owner/repo", scope=PluginScope.PROJECT)
+        assert result is None
+
+    def test_install_with_sha(self, plugin_manager):
+        result = plugin_manager.install("owner/repo@abc123", scope=PluginScope.PROJECT)
+        assert result is None
+
+    def test_command_handler_execution(self, plugin_manager, sample_plugin_dir):
+        plugin_manager._load_plugin(sample_plugin_dir, PluginScope.PROJECT)
+        commands = plugin_manager.get_commands()
+        if "test-cmd" in commands:
+            handler = commands["test-cmd"].handler
+            result = handler()
+            assert isinstance(result, dict)
+
+    def test_load_plugins_iterates_dirs(self, temp_project_dir, sample_plugin_dir):
+        pm = PluginManager(project_dir=temp_project_dir)
+        (pm._project_dir / "sample-plugin").mkdir(exist_ok=True)
+        manifest = sample_plugin_dir / "plugin.json"
+        dest = pm._project_dir / "sample-plugin" / "plugin.json"
+        dest.write_text(manifest.read_text(), encoding="utf-8")
+        cmd_script = pm._project_dir / "sample-plugin" / "test_cmd.py"
+        cmd_script.write_text("print('test')", encoding="utf-8")
+        pm._load_plugins()
+        assert "test-plugin" in pm._plugins

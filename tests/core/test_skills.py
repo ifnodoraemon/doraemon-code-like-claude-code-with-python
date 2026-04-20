@@ -7,6 +7,8 @@ from src.core.skills import (
     SkillLoader,
     SkillManager,
     SkillMetadata,
+    _parse_simple_frontmatter,
+    _safe_load_frontmatter,
     create_skill_template,
     format_skills_for_prompt,
 )
@@ -501,7 +503,6 @@ class TestUtilityFunctions:
         assert "Content" in result
 
     def test_format_skills_for_prompt_multiple_skills(self):
-        """Test formatting multiple skills."""
         skill1 = Skill(
             metadata=SkillMetadata(name="Skill1", description="First"),
             content="Content1",
@@ -517,3 +518,117 @@ class TestUtilityFunctions:
         assert "Skill2" in result
         assert "Content1" in result
         assert "Content2" in result
+
+
+class TestParseSimpleFrontmatter:
+    def test_empty_frontmatter(self):
+        result = _parse_simple_frontmatter("")
+        assert result == {}
+
+    def test_comment_lines_ignored(self):
+        result = _parse_simple_frontmatter("# comment\nkey: val")
+        assert result == {"key": "val"}
+
+    def test_list_items(self):
+        result = _parse_simple_frontmatter("triggers:\n  - python\n  - pytest")
+        assert result["triggers"] == ["python", "pytest"]
+
+    def test_line_without_colon(self):
+        result = _parse_simple_frontmatter("orphan_line\nkey: val")
+        assert result == {"key": "val"}
+
+    def test_empty_value_sets_list(self):
+        result = _parse_simple_frontmatter("triggers:\n  - python")
+        assert isinstance(result["triggers"], list)
+        assert result["triggers"] == ["python"]
+
+    def test_nested_yaml_value_raises(self):
+        import pytest
+        with pytest.raises(ValueError, match="Unsupported nested"):
+            _parse_simple_frontmatter("key: val: nested")
+
+    def test_boolean_values(self):
+        result = _parse_simple_frontmatter("flag: true\nother: false")
+        assert result["flag"] is True
+        assert result["other"] is False
+
+    def test_integer_values(self):
+        result = _parse_simple_frontmatter("priority: 10")
+        assert result["priority"] == 10
+
+
+class TestSafeLoadFrontmatter:
+    def test_safe_load_with_yaml_available(self):
+        result = _safe_load_frontmatter("name: Test")
+        assert result["name"] == "Test"
+
+    def test_safe_load_empty(self):
+        result = _safe_load_frontmatter("")
+        assert result == {}
+
+
+class TestSkillLoaderEdgeCases:
+    def test_load_skill_missing_metadata(self, tmp_path):
+        skill_dir = tmp_path / "empty-skill"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text("---\n---\nJust content")
+        loader = SkillLoader()
+        skill = loader.load_skill(skill_dir)
+        assert skill is not None
+        assert skill.metadata.name == "Unnamed Skill"
+
+    def test_load_skill_with_unloadable_additional_file(self, tmp_path):
+        skill_dir = tmp_path / "bad-files-skill"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text(
+            "---\nname: Bad Files Skill\ndescription: Has bad files\nfiles:\n  - nonexistent.md\n---\n\nContent"
+        )
+        loader = SkillLoader()
+        skill = loader.load_skill(skill_dir)
+        assert skill is not None
+        assert "nonexistent.md" not in skill.additional_content
+
+    def test_discover_skills_skips_files(self, tmp_path):
+        skills_dir = tmp_path / ".agent" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "not-a-dir.txt").write_text("ignore me")
+        loader = SkillLoader(project_dir=tmp_path)
+        result = loader.discover_skills()
+        assert result == []
+
+    def test_load_skill_exception_handling(self, tmp_path):
+        skill_dir = tmp_path / "broken-skill"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text("---\nname: Broken\ndescription: test\n---\nContent")
+        skill_file.chmod(0o000)
+        try:
+            loader = SkillLoader()
+            result = loader.load_skill(skill_dir)
+            assert result is None
+        finally:
+            skill_file.chmod(0o644)
+
+    def test_load_skill_metadata_exception(self, tmp_path):
+        skill_dir = tmp_path / "bad-meta"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text("---\nname: Bad\n---\nContent")
+        loader = SkillLoader()
+        result = loader._load_skill_metadata(skill_dir)
+        assert result is not None
+
+
+class TestSkillManagerTruncation:
+    def test_get_skills_for_context_truncates_long_content(self, tmp_path):
+        skills_dir = tmp_path / ".agent" / "skills" / "big-skill"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "SKILL.md").write_text(
+            "---\nname: Big Skill\ndescription: Huge content\ntriggers:\n  - python\n---\n\n" + "x" * 20000
+        )
+        manager = SkillManager(project_dir=tmp_path, max_skill_tokens=100)
+        result = manager.get_skills_for_context("python")
+        if result:
+            assert "Big Skill" in result

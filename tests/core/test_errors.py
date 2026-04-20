@@ -4,12 +4,14 @@ Unit tests for Error Handling and Retry Mechanisms.
 Tests error categorization, retry policies, and circuit breaker pattern.
 """
 
+import asyncio
 import time
 
 import pytest
 
 from src.core.errors import (
     AgentError,
+    AuthenticationError,
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerOpenError,
@@ -17,10 +19,14 @@ from src.core.errors import (
     ConfigurationError,
     ErrorCategory,
     ErrorHandler,
+    FileAccessError,
+    NetworkError,
     RateLimitError,
     RetryConfig,
     RetryPolicy,
+    ToolExecutionError,
     TransientError,
+    ValidationError,
     get_error_handler,
     retry,
 )
@@ -385,3 +391,170 @@ class TestErrorHandler:
         handler = get_error_handler()
 
         assert isinstance(handler, ErrorHandler)
+
+
+class TestAdditionalErrorTypes:
+    """Tests for ToolExecutionError, FileAccessError, NetworkError, AuthenticationError, ValidationError."""
+
+    def test_tool_execution_error(self):
+        exc = ToolExecutionError("read_file", "permission denied")
+        assert "read_file" in str(exc)
+        assert exc.category == ErrorCategory.TRANSIENT
+        assert exc.tool_name == "read_file"
+
+    def test_file_access_error(self):
+        exc = FileAccessError("/etc/shadow", "no access")
+        assert "/etc/shadow" in str(exc)
+        assert exc.category == ErrorCategory.PERMANENT
+        assert exc.path == "/etc/shadow"
+
+    def test_network_error(self):
+        exc = NetworkError("connection refused")
+        assert exc.category == ErrorCategory.NETWORK
+
+    def test_authentication_error(self):
+        exc = AuthenticationError("invalid token")
+        assert exc.category == ErrorCategory.AUTHENTICATION
+
+    def test_validation_error(self):
+        exc = ValidationError("bad input")
+        assert exc.category == ErrorCategory.PERMANENT
+
+
+class TestRetryPolicyAsync:
+    """Tests for async retry policy edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_async_max_attempts_exceeded(self):
+        config = RetryConfig(max_attempts=2, initial_delay=0.01, retryable_exceptions=(TransientError,))
+        policy = RetryPolicy(config)
+        call_count = 0
+
+        async def always_fail():
+            nonlocal call_count
+            call_count += 1
+            raise TransientError("fail")
+
+        with pytest.raises(TransientError):
+            await policy.execute_async(always_fail)
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_async_non_retryable_raises_immediately(self):
+        config = RetryConfig(max_attempts=3, initial_delay=0.01, retryable_exceptions=(TransientError,))
+        policy = RetryPolicy(config)
+
+        async def raise_value_error():
+            raise ValueError("not retryable")
+
+        with pytest.raises(ValueError):
+            await policy.execute_async(raise_value_error)
+
+    @pytest.mark.asyncio
+    async def test_async_retry_then_succeed(self):
+        config = RetryConfig(max_attempts=3, initial_delay=0.01, retryable_exceptions=(TransientError,))
+        policy = RetryPolicy(config)
+        call_count = 0
+
+        async def fail_then_succeed():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise TransientError("temp")
+            return "ok"
+
+        result = await policy.execute_async(fail_then_succeed)
+        assert result == "ok"
+
+
+class TestCircuitBreakerAsync:
+    """Tests for async circuit breaker."""
+
+    @pytest.mark.asyncio
+    async def test_async_successful_call(self):
+        breaker = CircuitBreaker()
+
+        async def success():
+            return "async_ok"
+
+        result = await breaker.call_async(success)
+        assert result == "async_ok"
+
+    @pytest.mark.asyncio
+    async def test_async_opens_after_threshold(self):
+        config = CircuitBreakerConfig(failure_threshold=2)
+        breaker = CircuitBreaker(config)
+
+        async def fail():
+            raise RuntimeError("fail")
+
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                await breaker.call_async(fail)
+        assert breaker.state == CircuitState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_async_rejects_when_open(self):
+        config = CircuitBreakerConfig(failure_threshold=1, timeout=100.0)
+        breaker = CircuitBreaker(config)
+
+        async def fail():
+            raise RuntimeError("fail")
+
+        with pytest.raises(RuntimeError):
+            await breaker.call_async(fail)
+
+        with pytest.raises(CircuitBreakerOpenError):
+            await breaker.call_async(fail)
+
+    @pytest.mark.asyncio
+    async def test_async_half_open_after_timeout(self):
+        config = CircuitBreakerConfig(failure_threshold=1, success_threshold=1, timeout=0.01)
+        breaker = CircuitBreaker(config)
+
+        async def fail():
+            raise RuntimeError("fail")
+
+        with pytest.raises(RuntimeError):
+            await breaker.call_async(fail)
+        assert breaker.state == CircuitState.OPEN
+
+        await asyncio.sleep(0.02)
+
+        async def success():
+            return "recovered"
+
+        result = await breaker.call_async(success)
+        assert result == "recovered"
+        assert breaker.state == CircuitState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_async_protected_decorator(self):
+        breaker = CircuitBreaker()
+
+        @breaker.protected
+        async def protected_func():
+            return "protected"
+
+        result = await protected_func()
+        assert result == "protected"
+
+
+class TestRetryPolicyCalculateDelay:
+    """Tests for _calculate_delay with jitter and retry_after."""
+
+    def test_jitter_modifies_delay(self):
+        config = RetryConfig(initial_delay=10.0, jitter=True, max_delay=1000.0)
+        policy = RetryPolicy(config)
+        delays = set()
+        for _ in range(20):
+            d = policy._calculate_delay(0, Exception())
+            delays.add(d)
+        assert len(delays) > 1
+
+    def test_retry_after_from_rate_limit_error(self):
+        config = RetryConfig(initial_delay=1.0, max_delay=100.0, jitter=False)
+        policy = RetryPolicy(config)
+        exc = RateLimitError("limited", retry_after=30.0)
+        delay = policy._calculate_delay(0, exc)
+        assert delay == 30.0

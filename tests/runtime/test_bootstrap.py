@@ -720,3 +720,138 @@ async def test_runtime_bootstrap_only_closes_owned_registry_clients():
     await owned_runtime.aclose()
 
     assert closed == ["owned"]
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_runtime_with_model_name(monkeypatch, tmp_path):
+    registry = DummyRegistry()
+
+    class DummyCheckpointManager:
+        def __init__(self, project: str):
+            pass
+
+    class DummySkillManager:
+        def __init__(self, project_dir: Path):
+            pass
+
+    class DummyHookManager:
+        def __init__(self, project_dir: Path):
+            pass
+
+    class DummyTaskManager:
+        def __init__(self, storage_path=None, *, project_dir: Path | None = None):
+            self.project_dir = project_dir
+
+    config_instances = []
+
+    class FakeClientConfig:
+        def __init__(self):
+            config_instances.append(self)
+            self.model = None
+
+        @classmethod
+        def from_env(cls):
+            return cls()
+
+    fake_model = object()
+
+    async def fake_model_create(config=None):
+        return fake_model
+
+    import src.core.checkpoint as checkpoint_mod
+    import src.core.hooks as hooks_mod
+    import src.core.skills as skills_mod
+    import src.core.tasks as tasks_mod
+    import src.host.mcp_registry as mcp_registry_mod
+
+    monkeypatch.setattr(checkpoint_mod, "CheckpointManager", DummyCheckpointManager)
+    monkeypatch.setattr(skills_mod, "SkillManager", DummySkillManager)
+    monkeypatch.setattr(hooks_mod, "HookManager", DummyHookManager)
+    monkeypatch.setattr(tasks_mod, "TaskManager", DummyTaskManager)
+    monkeypatch.setattr(mcp_registry_mod, "create_tool_registry", lambda **kw: registry)
+
+    import src.core.llm.model_client as model_client_mod
+    monkeypatch.setattr(model_client_mod.ModelClient, "create", staticmethod(fake_model_create))
+    monkeypatch.setattr(model_client_mod, "ClientConfig", FakeClientConfig)
+
+    runtime = await bootstrap_runtime(
+        mode="build",
+        project="demo",
+        project_dir=tmp_path,
+        model_name="gemini-2.5-flash",
+        registry=registry,
+    )
+
+    assert runtime.model_client is fake_model
+    assert runtime.owns_model_client is True
+    if config_instances:
+        assert config_instances[0].model == "gemini-2.5-flash"
+
+
+@pytest.mark.asyncio
+async def test_runtime_bootstrap_closes_owned_model_client():
+    closed = []
+
+    class CloseableModelClient:
+        async def close(self):
+            closed.append("model")
+
+    runtime = RuntimeBootstrap(
+        context=ProjectContext(
+            project="demo",
+            mode="build",
+            project_dir=Path.cwd(),
+            config_path=None,
+            capability_groups=["read"],
+            tool_names=["read"],
+            active_mcp_extensions=[],
+        ),
+        model_client=CloseableModelClient(),
+        registry=DummyRegistry(),
+        hooks=None,
+        checkpoints=None,
+        skills=None,
+        task_manager=None,
+        owns_model_client=True,
+        owns_registry=False,
+    )
+
+    await runtime.aclose()
+    assert closed == ["model"]
+
+
+@pytest.mark.asyncio
+async def test_get_tool_catalog(monkeypatch, tmp_path):
+    from src.runtime.bootstrap import get_tool_catalog
+
+    class FakeToolDef:
+        def __init__(self, name):
+            self.name = name
+            self.description = f"desc for {name}"
+            self.parameters = {}
+            self.source = "built_in"
+            self.sensitive = False
+            self.metadata = {}
+
+    class FakeRegistry:
+        _tools = {"read": FakeToolDef("read"), "write": FakeToolDef("write")}
+        _mcp_clients = []
+        _active_mcp_extensions = []
+
+        def get_tool_names(self):
+            return list(self._tools.keys())
+
+        def get_tool_policy(self, name, **kw):
+            return {"visible": True, "requires_approval": False}
+
+    fake_registry = FakeRegistry()
+
+    async def fake_create_registry(**kw):
+        return fake_registry
+
+    monkeypatch.setattr("src.host.mcp_registry.create_tool_registry", fake_create_registry)
+
+    catalog = await get_tool_catalog(mode="build")
+    assert len(catalog) == 2
+    assert catalog[0]["name"] == "read"
+    assert catalog[1]["name"] == "write"

@@ -1,8 +1,19 @@
 """Comprehensive tests for hooks.py"""
 
+import asyncio
+import json
 import time
 
-from src.core.hooks import HookContext, HookDecision, HookDefinition, HookEvent, HookResult
+import pytest
+
+from src.core.hooks import (
+    HookContext,
+    HookDecision,
+    HookDefinition,
+    HookEvent,
+    HookManager,
+    HookResult,
+)
 
 
 class TestHookEvent:
@@ -285,3 +296,179 @@ class TestHookIntegration:
 
         assert result.modified_input != ctx.tool_input
         assert result.modified_input == modified_input
+
+
+class TestHookContextToDict:
+    def test_to_dict_includes_tool_fields(self):
+        ctx = HookContext(
+            event=HookEvent.PRE_TOOL_USE,
+            session_id="s1",
+            project_dir="/p",
+            permission_mode="allow",
+            tool_name="Bash",
+            tool_input={"cmd": "ls"},
+            tool_output="output",
+            user_prompt="prompt",
+            message_count=5,
+            stop_reason="end_turn",
+        )
+        d = ctx.to_dict()
+        assert d["tool_name"] == "Bash"
+        assert d["tool_input"] == {"cmd": "ls"}
+        assert d["tool_output"] == "output"
+        assert d["prompt"] == "prompt"
+        assert d["message_count"] == 5
+        assert d["stop_reason"] == "end_turn"
+
+
+class TestHookManager:
+    def test_register_requires_command_or_callback(self):
+        mgr = HookManager()
+        with pytest.raises(ValueError):
+            mgr.register(HookEvent.SESSION_START)
+
+    def test_unregister_specific_matcher(self):
+        mgr = HookManager()
+        mgr.register(HookEvent.PRE_TOOL_USE, command="validate.sh", matcher="Bash")
+        mgr.register(HookEvent.PRE_TOOL_USE, command="other.sh", matcher="Write")
+        mgr.unregister(HookEvent.PRE_TOOL_USE, matcher="Bash")
+        assert len(mgr._hooks[HookEvent.PRE_TOOL_USE]) == 1
+
+    def test_unregister_all(self):
+        mgr = HookManager()
+        mgr.register(HookEvent.PRE_TOOL_USE, command="a.sh", matcher="Bash")
+        mgr.unregister(HookEvent.PRE_TOOL_USE)
+        assert len(mgr._hooks[HookEvent.PRE_TOOL_USE]) == 0
+
+    @pytest.mark.asyncio
+    async def test_trigger_no_hooks_returns_allow(self):
+        mgr = HookManager()
+        result = await mgr.trigger(HookEvent.SESSION_START)
+        assert result.success is True
+        assert result.decision == HookDecision.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_trigger_callback_returns_bool(self):
+        mgr = HookManager()
+
+        def deny_all(ctx):
+            return False
+
+        mgr.register(HookEvent.PRE_TOOL_USE, callback=deny_all, matcher="Bash")
+        result = await mgr.trigger(HookEvent.PRE_TOOL_USE, tool_name="Bash")
+        assert result.decision == HookDecision.DENY
+
+    @pytest.mark.asyncio
+    async def test_trigger_callback_returns_dict(self):
+        mgr = HookManager()
+
+        def modify_hook(ctx):
+            return {
+                "success": True,
+                "decision": "modify",
+                "modified_input": {"cmd": "sanitized"},
+                "reason": "Sanitized",
+            }
+
+        mgr.register(HookEvent.PRE_TOOL_USE, callback=modify_hook, matcher="Bash")
+        result = await mgr.trigger(HookEvent.PRE_TOOL_USE, tool_name="Bash", tool_input={"cmd": "rm -rf"})
+        assert result.modified_input == {"cmd": "sanitized"}
+
+    @pytest.mark.asyncio
+    async def test_trigger_async_callback(self):
+        mgr = HookManager()
+
+        async def async_hook(ctx):
+            return HookResult(success=True, output="async_result")
+
+        mgr.register(HookEvent.POST_TOOL_USE, callback=async_hook, matcher="Write")
+        result = await mgr.trigger(HookEvent.POST_TOOL_USE, tool_name="Write")
+        assert result.success is True
+        assert "async_result" in result.output
+
+    @pytest.mark.asyncio
+    async def test_trigger_callback_exception(self):
+        mgr = HookManager()
+
+        def bad_hook(ctx):
+            raise RuntimeError("Hook crashed")
+
+        mgr.register(HookEvent.SESSION_START, callback=bad_hook)
+        result = await mgr.trigger(HookEvent.SESSION_START)
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_trigger_disabled_hook_skipped(self):
+        mgr = HookManager()
+        call_count = 0
+
+        def counting_hook(ctx):
+            nonlocal call_count
+            call_count += 1
+            return True
+
+        mgr.register(HookEvent.SESSION_START, callback=counting_hook)
+        mgr._hooks[HookEvent.SESSION_START][0].enabled = False
+        await mgr.trigger(HookEvent.SESSION_START)
+        assert call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_trigger_matcher_no_tool_name_skips(self):
+        mgr = HookManager()
+
+        def hook(ctx):
+            return True
+
+        mgr.register(HookEvent.PRE_TOOL_USE, callback=hook, matcher="Bash")
+        result = await mgr.trigger(HookEvent.PRE_TOOL_USE, tool_name=None)
+        assert result.success is True
+        assert result.decision == HookDecision.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_trigger_invalid_regex_falls_back_to_exact(self):
+        mgr = HookManager()
+
+        def hook(ctx):
+            return HookResult(success=True, decision=HookDecision.DENY)
+
+        mgr.register(HookEvent.PRE_TOOL_USE, callback=hook, matcher="[invalid")
+        result = await mgr.trigger(HookEvent.PRE_TOOL_USE, tool_name="[invalid")
+        assert result.decision == HookDecision.DENY
+
+    def test_save_and_load_hooks(self, tmp_path):
+        mgr = HookManager()
+        mgr.register(HookEvent.PRE_TOOL_USE, command="validate.sh", matcher="Bash")
+        hooks_file = tmp_path / "hooks.json"
+        mgr.save_to_file(hooks_file)
+        assert hooks_file.exists()
+
+        mgr2 = HookManager()
+        mgr2.load_from_file(hooks_file)
+        assert len(mgr2._hooks[HookEvent.PRE_TOOL_USE]) == 1
+
+    def test_load_from_nonexistent_file(self, tmp_path):
+        mgr = HookManager()
+        mgr.load_from_file(tmp_path / "nope.json")
+
+    def test_load_from_file_invalid_event(self, tmp_path):
+        hooks_file = tmp_path / "hooks.json"
+        hooks_file.write_text(json.dumps({"hooks": {"UnknownEvent": []}}))
+        mgr = HookManager()
+        mgr.load_from_file(hooks_file)
+
+    @pytest.mark.asyncio
+    async def test_run_hook_no_handler(self):
+        mgr = HookManager()
+        hook = HookDefinition(event=HookEvent.SESSION_START, command=None, callback=None, matcher=None)
+        hook.command = None
+        hook.callback = None
+        result = await mgr._run_hook(hook, HookContext(
+            event=HookEvent.SESSION_START, session_id="s", project_dir="/p", permission_mode="allow"
+        ))
+        assert result.success is False
+
+    def test_get_hooks_summary(self):
+        mgr = HookManager()
+        mgr.register(HookEvent.SESSION_START, command="echo hi")
+        summary = mgr.get_hooks_summary()
+        assert "SessionStart" in summary

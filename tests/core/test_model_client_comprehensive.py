@@ -1682,6 +1682,38 @@ class TestEdgeCasesAndIntegration:
         with pytest.raises(TypeError):
             BaseModelClient()
 
+    @pytest.mark.asyncio
+    async def test_base_model_client_concrete_subclass(self):
+        from src.core.llm.model_utils import ChatResponse, StreamChunk
+
+        class ConcreteClient(BaseModelClient):
+            async def chat(self, messages, tools=None, **kwargs):
+                return ChatResponse(content="test")
+
+            def chat_stream(self, messages, tools=None, **kwargs):
+                async def gen():
+                    yield StreamChunk(content="x")
+                return gen()
+
+            async def list_models(self):
+                return [{"id": "m1"}]
+
+            async def connect(self):
+                pass
+
+            async def close(self):
+                pass
+
+        client = ConcreteClient()
+        result = await client.chat([])
+        assert result.content == "test"
+        stream = client.chat_stream([])
+        assert hasattr(stream, "__aiter__")
+        models = await client.list_models()
+        assert len(models) == 1
+        await client.connect()
+        await client.close()
+
     def test_tool_call_round_trip(self):
         """Test ToolCall can be converted to dict and back."""
         original = ToolCall(id="call_123", name="test_tool", arguments={"param": "value"})

@@ -445,3 +445,20 @@ async def test_get_project_context_returns_startup_directory():
 
 async def _noop_async():
     return None
+
+
+@pytest.mark.asyncio
+async def test_list_tools_route():
+    from src.webui.routes.tools import list_tools
+    from unittest.mock import AsyncMock, patch
+
+    mock_catalog = [
+        {"name": "read", "description": "Read files", "policy": {"visible": True}},
+        {"name": "write", "description": "Write files", "policy": {"visible": True}},
+    ]
+    with patch("src.webui.routes.tools.get_tool_catalog", new_callable=AsyncMock, return_value=mock_catalog):
+        result = await list_tools(mode="build")
+        assert len(result["tools"]) == 2
+        assert result["tools"][0]["name"] == "read"
+        assert result["tools"][0]["description"] == "Read files"
+        assert result["tools"][0]["policy"] == {"visible": True}

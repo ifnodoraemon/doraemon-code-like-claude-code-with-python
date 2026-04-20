@@ -287,5 +287,333 @@ class TestDirectoryTree:
         assert "Project Tree" in result
 
 
+class TestNotebookRead:
+    def test_read_notebook(self, tmp_path):
+        import json
+
+        from src.servers.filesystem import notebook_read
+
+        nb = {
+            "cells": [
+                {
+                    "cell_type": "code",
+                    "source": ["print('hello')\n"],
+                    "outputs": [{"output_type": "stream", "text": ["hello\n"]}],
+                },
+                {"cell_type": "markdown", "source": ["# Title\n"]},
+            ],
+            "metadata": {},
+            "nbformat": 4,
+        }
+        nb_path = tmp_path / "test.ipynb"
+        nb_path.write_text(json.dumps(nb), encoding="utf-8")
+
+        os.chdir(tmp_path)
+        result = notebook_read("test.ipynb")
+        assert "Cell 0 (code)" in result
+        assert "Cell 1 (markdown)" in result
+
+    def test_read_notebook_not_found(self, tmp_path):
+        from src.servers.filesystem import notebook_read
+
+        os.chdir(tmp_path)
+        result = notebook_read("missing.ipynb")
+        assert "not found" in result.lower()
+
+    def test_read_non_notebook(self, tmp_path):
+        from src.servers.filesystem import notebook_read
+
+        (tmp_path / "test.txt").write_text("hi")
+        os.chdir(tmp_path)
+        result = notebook_read("test.txt")
+        assert "must be a Jupyter notebook" in result
+
+    def test_read_notebook_with_error_output(self, tmp_path):
+        import json
+
+        from src.servers.filesystem import notebook_read
+
+        nb = {
+            "cells": [
+                {
+                    "cell_type": "code",
+                    "source": ["1/0"],
+                    "outputs": [
+                        {
+                            "output_type": "error",
+                            "ename": "ZeroDivisionError",
+                            "evalue": "division by zero",
+                        }
+                    ],
+                }
+            ],
+            "metadata": {},
+            "nbformat": 4,
+        }
+        nb_path = tmp_path / "err.ipynb"
+        nb_path.write_text(json.dumps(nb), encoding="utf-8")
+
+        os.chdir(tmp_path)
+        result = notebook_read("err.ipynb")
+        assert "ZeroDivisionError" in result
+
+
+class TestNotebookEdit:
+    def test_replace_cell(self, tmp_path):
+        import json
+
+        from src.servers.filesystem import notebook_edit
+
+        nb = {
+            "cells": [{"cell_type": "code", "source": ["old"], "outputs": []}],
+            "metadata": {},
+            "nbformat": 4,
+        }
+        nb_path = tmp_path / "edit.ipynb"
+        nb_path.write_text(json.dumps(nb), encoding="utf-8")
+
+        os.chdir(tmp_path)
+        result = notebook_edit("edit.ipynb", cell_index=0, new_source="new code")
+        assert "Successfully" in result
+
+    def test_insert_cell(self, tmp_path):
+        import json
+
+        from src.servers.filesystem import notebook_edit
+
+        nb = {"cells": [], "metadata": {}, "nbformat": 4}
+        nb_path = tmp_path / "insert.ipynb"
+        nb_path.write_text(json.dumps(nb), encoding="utf-8")
+
+        os.chdir(tmp_path)
+        result = notebook_edit("insert.ipynb", cell_index=0, new_source="x=1", operation="insert")
+        assert "Successfully" in result
+
+    def test_delete_cell(self, tmp_path):
+        import json
+
+        from src.servers.filesystem import notebook_edit
+
+        nb = {"cells": [{"cell_type": "code", "source": ["x"]}], "metadata": {}, "nbformat": 4}
+        nb_path = tmp_path / "del.ipynb"
+        nb_path.write_text(json.dumps(nb), encoding="utf-8")
+
+        os.chdir(tmp_path)
+        result = notebook_edit("del.ipynb", cell_index=0, new_source="", operation="delete")
+        assert "Successfully" in result
+
+    def test_invalid_operation(self, tmp_path):
+        import json
+
+        from src.servers.filesystem import notebook_edit
+
+        nb = {"cells": [{"cell_type": "code", "source": ["x"]}], "metadata": {}, "nbformat": 4}
+        nb_path = tmp_path / "inv.ipynb"
+        nb_path.write_text(json.dumps(nb), encoding="utf-8")
+
+        os.chdir(tmp_path)
+        result = notebook_edit("inv.ipynb", cell_index=0, new_source="", operation="invalid")
+        assert "Invalid operation" in result
+
+
+class TestMultiEdit:
+    def test_multi_edit_success(self, tmp_path):
+        from src.servers.filesystem import multi_edit
+
+        f = tmp_path / "me.txt"
+        f.write_text("alpha beta gamma")
+
+        os.chdir(tmp_path)
+        result = multi_edit(
+            "me.txt",
+            [
+                {"old_string": "alpha", "new_string": "ALPHA"},
+                {"old_string": "beta", "new_string": "BETA"},
+            ],
+        )
+        assert "Successfully applied 2 edits" in result
+
+    def test_multi_edit_duplicate_old_string(self, tmp_path):
+        from src.servers.filesystem import multi_edit
+
+        f = tmp_path / "dup.txt"
+        f.write_text("x x y")
+
+        os.chdir(tmp_path)
+        result = multi_edit("dup.txt", [{"old_string": "x", "new_string": "z"}])
+        assert "appears 2 times" in result
+
+    def test_multi_edit_missing_old_string(self, tmp_path):
+        from src.servers.filesystem import multi_edit
+
+        f = tmp_path / "m.txt"
+        f.write_text("hello")
+
+        os.chdir(tmp_path)
+        result = multi_edit("m.txt", [{"old_string": "", "new_string": "x"}])
+        assert "Error" in result
+
+
+class TestReadPathSpecialFormats:
+    def test_read_pdf(self, tmp_path, monkeypatch):
+        from src.servers.filesystem import _read_path_content
+        from src.servers._services import document
+
+        (tmp_path / "test.pdf").write_bytes(b"%PDF-1.4")
+        os.chdir(tmp_path)
+        monkeypatch.setattr(document, "parse_pdf", lambda p: "PDF content")
+        result = _read_path_content("test.pdf")
+        assert result == "PDF content"
+
+    def test_read_docx(self, tmp_path, monkeypatch):
+        from src.servers.filesystem import _read_path_content
+        from src.servers._services import document
+
+        (tmp_path / "test.docx").write_bytes(b"PK")
+        os.chdir(tmp_path)
+        monkeypatch.setattr(document, "parse_docx", lambda p: "DOCX content")
+        result = _read_path_content("test.docx")
+        assert result == "DOCX content"
+
+    def test_read_pptx(self, tmp_path, monkeypatch):
+        from src.servers.filesystem import _read_path_content
+        from src.servers._services import document
+
+        (tmp_path / "test.pptx").write_bytes(b"PK")
+        os.chdir(tmp_path)
+        monkeypatch.setattr(document, "parse_pptx", lambda p: "PPTX content")
+        result = _read_path_content("test.pptx")
+        assert result == "PPTX content"
+
+    def test_read_xlsx(self, tmp_path, monkeypatch):
+        from src.servers.filesystem import _read_path_content
+        from src.servers._services import document
+
+        (tmp_path / "test.xlsx").write_bytes(b"PK")
+        os.chdir(tmp_path)
+        monkeypatch.setattr(document, "parse_xlsx", lambda p: "XLSX content")
+        result = _read_path_content("test.xlsx")
+        assert result == "XLSX content"
+
+    def test_read_image(self, tmp_path, monkeypatch):
+        from src.servers.filesystem import _read_path_content
+        from src.servers._services import vision
+
+        (tmp_path / "test.png").write_bytes(b"\x89PNG")
+        os.chdir(tmp_path)
+        monkeypatch.setattr(vision, "process_image", lambda p: "Image: test.png")
+        result = _read_path_content("test.png")
+        assert result == "Image: test.png"
+
+
+class TestReadPathOffsetAndLimit:
+    def test_read_with_limit(self, temp_dir):
+        os.chdir(temp_dir)
+        result = _read_path_content("test.txt", offset=0, limit=2)
+        assert "Line 1" in result
+        assert "Line 2" in result
+
+    def test_read_with_high_offset(self, temp_dir):
+        os.chdir(temp_dir)
+        result = _read_path_content("test.txt", offset=100, limit=5)
+        assert "No lines found" in result
+
+    def test_read_with_limit_zero(self, temp_dir):
+        os.chdir(temp_dir)
+        result = _read_path_content("test.txt", offset=0, limit=0)
+        assert "Line 1" in result
+
+
+class TestReadPathOutlineInvalid:
+    def test_outline_invalid_path(self, tmp_path, monkeypatch):
+        from src.servers.filesystem import _read_path_outline
+
+        os.chdir(tmp_path)
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+        result = _read_path_outline("../../../etc/passwd")
+        assert "Error" in result
+
+
+class TestGlobFilesSecurity:
+    def test_glob_absolute_path(self, tmp_path):
+        os.chdir(tmp_path)
+        result = glob_files("/etc/passwd")
+        assert "Error" in result
+
+    def test_glob_traversal(self, tmp_path):
+        os.chdir(tmp_path)
+        result = glob_files("..")
+        assert "Error" in result
+
+
+class TestGlobFilesExclude:
+    def test_glob_with_exclude(self, temp_dir):
+        os.chdir(temp_dir)
+        with open(os.path.join(temp_dir, "test.py"), "w") as f:
+            f.write("x")
+        result = glob_files("*.py", exclude=["test.py"])
+        assert "test.py" not in result or "No files" in result
+
+
+class TestGrepSearchWithMaxResults:
+    def test_grep_max_results(self, temp_dir):
+        os.chdir(temp_dir)
+        with open(os.path.join(temp_dir, "many.txt"), "w") as handle:
+            handle.write("".join(f"match {i}\n" for i in range(200)))
+        result = grep_search("match", include="*.txt", max_results=5)
+        lines = [l for l in result.strip().split("\n") if l.strip()]
+        assert len(lines) <= 5
+
+
+class TestHumanSize:
+    def test_bytes(self):
+        from src.servers.filesystem import _human_size
+        assert _human_size(500) == "500.0B"
+
+    def test_kilobytes(self):
+        from src.servers.filesystem import _human_size
+        assert "KB" in _human_size(2048)
+
+    def test_megabytes(self):
+        from src.servers.filesystem import _human_size
+        assert "MB" in _human_size(5 * 1024 * 1024)
+
+
+class TestListPathEntriesNonDetailed:
+    def test_non_detailed(self, temp_dir):
+        os.chdir(temp_dir)
+        result = _list_path_entries(".", detailed=False)
+        assert "test.txt" in result
+
+
+class TestListPathEntriesEmpty:
+    def test_empty_dir(self, tmp_path):
+        empty = tmp_path / "empty_dir"
+        empty.mkdir()
+        os.chdir(tmp_path)
+        result = _list_path_entries("empty_dir")
+        assert "empty" in result.lower() or result.strip() == ""
+
+
+class TestListPathTreeEmpty:
+    def test_empty_tree(self, tmp_path):
+        empty = tmp_path / "empty_tree"
+        empty.mkdir()
+        os.chdir(tmp_path)
+        result = _list_path_tree("empty_tree")
+        assert "Empty" in result or result.strip() == ""
+
+
+class TestFindSymbol:
+    def test_find_symbol(self, temp_dir, monkeypatch):
+        from src.servers.filesystem import find_symbol
+        from src.servers._services import code_nav
+
+        os.chdir(temp_dir)
+        monkeypatch.setattr(code_nav, "find_definition", lambda p, s: f"Found: {s}")
+        result = find_symbol("TestClass", ".")
+        assert "Found: TestClass" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

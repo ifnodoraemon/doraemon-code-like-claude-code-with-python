@@ -1,6 +1,8 @@
 import json
 
-from src.core.tasks import Task, TaskManager, TaskStatus
+import pytest
+
+from src.core.tasks import Task, TaskClaimError, TaskManager, TaskStatus
 from src.servers.task import reset_task_manager, set_task_manager, task
 
 
@@ -23,6 +25,18 @@ class TestTask:
     def test_legacy_status_mapping(self):
         loaded = Task.from_dict({"id": "task_1", "title": "Legacy", "status": "todo"})
         assert loaded.status == TaskStatus.PENDING
+
+    def test_from_dict_done_status(self):
+        loaded = Task.from_dict({"id": "t1", "title": "Done", "status": "done"})
+        assert loaded.status == TaskStatus.COMPLETED
+
+    def test_from_dict_invalid_status_raises(self):
+        with pytest.raises(ValueError):
+            Task.from_dict({"id": "t1", "title": "Bad", "status": "invalid"})
+
+    def test_from_dict_dependencies_dedup(self):
+        loaded = Task.from_dict({"id": "t1", "title": "Dedup", "status": "pending", "dependencies": ["a", "a", "b"]})
+        assert loaded.dependencies == ["a", "b"]
 
 
 class TestTaskManager:
@@ -87,6 +101,10 @@ class TestTaskManager:
         assert tree[0]["title"] == "Root One"
         assert tree[0]["id"] != root_two.id
 
+    def test_get_task_tree_nonexistent_root(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        assert manager.get_task_tree("nonexistent") == []
+
     def test_delete_orphans_children_by_default(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
         parent = manager.create_task("Parent")
@@ -106,6 +124,18 @@ class TestTaskManager:
 
         assert manager.get_task(parent.id) is None
         assert manager.get_task(child.id) is None
+
+    def test_delete_removes_dependency_refs(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        dep = manager.create_task("Dep")
+        dependent = manager.create_task("Dependent", dependencies=[dep.id])
+        manager.delete_task(dep.id)
+        reloaded = manager.get_task(dependent.id)
+        assert dep.id not in reloaded.dependencies
+
+    def test_delete_nonexistent_task(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        assert manager.delete_task("nonexistent") is False
 
     def test_clear_all_tasks(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
@@ -130,40 +160,30 @@ class TestTaskManager:
         ready_ids = [task.id for task in manager.list_ready_tasks()]
         assert ready_ids[0] == blocked.id
 
-    def test_claim_and_release_task(self, tmp_path):
+    def test_claim_non_pending_task(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
-        created = manager.create_task("Claim me")
+        t = manager.create_task("Done")
+        manager.update_task_status(t.id, TaskStatus.COMPLETED)
+        with pytest.raises(TaskClaimError, match="not pending"):
+            manager.claim_task(t.id, "agent-a")
 
-        claimed = manager.claim_task(created.id, "agent-alpha")
-        assert claimed.assigned_agent == "agent-alpha"
-        assert claimed.status == TaskStatus.IN_PROGRESS
-
-        released = manager.release_task(created.id, agent_id="agent-alpha")
-        assert released.assigned_agent is None
-        assert released.status == TaskStatus.PENDING
-
-    def test_claim_is_idempotent_for_same_agent(self, tmp_path):
+    def test_release_nonexistent_task(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
-        created = manager.create_task("Claim me")
+        with pytest.raises(TaskClaimError, match="task not found"):
+            manager.release_task("nonexistent")
 
-        first = manager.claim_task(created.id, "agent-alpha")
-        second = manager.claim_task(created.id, "agent-alpha")
-
-        assert first.id == second.id
-        assert second.assigned_agent == "agent-alpha"
-        assert second.status == TaskStatus.IN_PROGRESS
-
-    def test_claim_requires_dependencies(self, tmp_path):
+    def test_release_unclaimed_task(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
-        dep = manager.create_task("Dependency")
-        created = manager.create_task("Blocked", dependencies=[dep.id])
+        t = manager.create_task("Unclaimed")
+        with pytest.raises(TaskClaimError, match="not claimed"):
+            manager.release_task(t.id)
 
-        try:
-            manager.claim_task(created.id, "agent-alpha")
-        except ValueError as exc:
-            assert "unresolved dependencies" in str(exc)
-        else:
-            raise AssertionError("Expected claim_task to reject unresolved dependencies")
+    def test_release_wrong_agent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Claimed")
+        manager.claim_task(t.id, "agent-a")
+        with pytest.raises(TaskClaimError, match="claimed by"):
+            manager.release_task(t.id, agent_id="agent-b")
 
     def test_update_rejects_dependency_cycles(self, tmp_path):
         manager = TaskManager(storage_path=tmp_path / "tasks.json")
@@ -176,6 +196,104 @@ class TestTaskManager:
             assert "dependency cycle detected" in str(exc)
         else:
             raise AssertionError("Expected update_task to reject dependency cycles")
+
+    def test_update_task_nonexistent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        assert manager.update_task("nonexistent") is None
+
+    def test_update_task_with_workspace_id(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Task")
+        updated = manager.update_task(t.id, workspace_id="custom-ws")
+        assert updated.workspace_id == "custom-ws"
+
+    def test_update_task_completed_clears_agent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Task")
+        manager.claim_task(t.id, "agent-a")
+        updated = manager.update_task(t.id, status=TaskStatus.COMPLETED)
+        assert updated.assigned_agent is None
+        assert updated.claimed_at is None
+
+    def test_update_task_cancelled_clears_agent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Task")
+        manager.claim_task(t.id, "agent-a")
+        updated = manager.update_task(t.id, status=TaskStatus.CANCELLED)
+        assert updated.assigned_agent is None
+
+    def test_update_task_with_assigned_agent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Task")
+        updated = manager.update_task(t.id, assigned_agent="agent-b")
+        assert updated.assigned_agent == "agent-b"
+        assert updated.claimed_at is not None
+
+    def test_update_task_clear_agent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Task")
+        manager.claim_task(t.id, "agent-a")
+        updated = manager.update_task(t.id, assigned_agent=None)
+        assert updated.assigned_agent is None
+        assert updated.claimed_at is None
+
+    def test_create_task_with_invalid_dependency(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        with pytest.raises(ValueError, match="unknown dependency"):
+            manager.create_task("Bad", dependencies=["nonexistent"])
+
+    def test_create_task_with_self_dependency(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        with pytest.raises(ValueError):
+            manager.create_task("Self", dependencies=["self-id"])
+
+    def test_create_task_with_empty_dependency(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Empty dep", dependencies=[""])
+        assert t.dependencies == []
+
+    def test_create_task_with_invalid_parent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        t = manager.create_task("Orphan parent", parent_id="nonexistent")
+        assert t.parent_id is None
+
+    def test_load_corrupt_storage(self, tmp_path):
+        storage = tmp_path / "tasks.json"
+        storage.write_text("not json")
+        manager = TaskManager(storage_path=storage)
+        assert manager.list_tasks() == []
+
+    def test_load_invalid_format_storage(self, tmp_path):
+        storage = tmp_path / "tasks.json"
+        storage.write_text("42")
+        manager = TaskManager(storage_path=storage)
+        assert manager.list_tasks() == []
+
+    def test_load_invalid_task_entry(self, tmp_path):
+        storage = tmp_path / "tasks.json"
+        storage.write_text(json.dumps({"bad": {"id": "x", "title": "T", "status": "invalid_status"}}))
+        manager = TaskManager(storage_path=storage)
+        assert manager.list_tasks() == []
+
+    def test_are_dependencies_satisfied_nonexistent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        assert manager.are_dependencies_satisfied("nonexistent") is False
+
+    def test_normalize_dependencies_dedup(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        a = manager.create_task("A")
+        result = manager._normalize_dependencies([a.id, a.id], task_id="new")
+        assert result == [a.id]
+
+    def test_save_failure_handled(self, tmp_path):
+        storage = tmp_path / "readonly" / "tasks.json"
+        storage.parent.mkdir(parents=True)
+        manager = TaskManager(storage_path=storage)
+        manager.create_task("Task")
+
+    def test_update_task_status_nonexistent(self, tmp_path):
+        manager = TaskManager(storage_path=tmp_path / "tasks.json")
+        assert manager.update_task_status("nonexistent", TaskStatus.COMPLETED) is False
 
 
 class TestTaskTool:

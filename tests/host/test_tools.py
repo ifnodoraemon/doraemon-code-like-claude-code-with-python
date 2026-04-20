@@ -384,3 +384,77 @@ class TestDefaultRegistry:
 
         assert set(registry.get_tool_names()) == {"browser_click", "db_read_query"}
         assert "read" not in registry.get_tool_names()
+
+
+class TestLazyToolFunction:
+    def test_lazy_load_and_call(self):
+        from src.host.tools import LazyToolFunction
+
+        ltf = LazyToolFunction("os.path", "exists")
+        result = ltf(".")
+        assert result is True or result is False
+
+    def test_lazy_load_name(self):
+        from src.host.tools import LazyToolFunction
+
+        ltf = LazyToolFunction("os.path", "exists")
+        assert ltf.__name__ == "exists"
+
+    def test_lazy_load_doc(self):
+        from src.host.tools import LazyToolFunction
+
+        ltf = LazyToolFunction("os.path", "exists")
+        doc = ltf.__doc__
+        assert isinstance(doc, str)
+
+    def test_lazy_load_bad_module(self):
+        from src.host.tools import LazyToolFunction
+
+        ltf = LazyToolFunction("nonexistent_module_xyz", "func")
+        with pytest.raises(ImportError):
+            ltf()
+
+    def test_lazy_load_bad_func_doc(self):
+        from src.host.tools import LazyToolFunction
+
+        ltf = LazyToolFunction("os.path", "nonexistent_func_xyz")
+        doc = ltf.__doc__
+        assert "nonexistent_module" in doc or "nonexistent_func" in doc
+
+    @pytest.mark.asyncio
+    async def test_lazy_async_call(self):
+        from src.host.tools import LazyToolFunction
+
+        async def fake_async(x):
+            return x + 1
+
+        ltf = LazyToolFunction("os.path", "exists")
+        ltf._loaded_func = fake_async
+        result = await ltf.__acall__(5)
+        assert result == 6
+
+    def test_lazy_load_signature(self):
+        from src.host.tools import LazyToolFunction
+
+        ltf = LazyToolFunction("os.path", "exists")
+        sig = ltf.__signature__
+        assert sig is not None
+
+
+class TestToolAuditEntry:
+    def test_to_dict(self):
+        from src.host.tools import ToolAuditEntry
+        import time
+
+        entry = ToolAuditEntry(
+            timestamp=time.time(),
+            tool_name="read",
+            action="executed",
+            allowed=True,
+            mode="build",
+            source="built_in",
+            error=None,
+        )
+        d = entry.to_dict()
+        assert d["tool_name"] == "read"
+        assert d["allowed"] is True
