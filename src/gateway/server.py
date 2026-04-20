@@ -11,10 +11,12 @@ Usage:
     uvicorn src.gateway.server:app --host 0.0.0.0 --port 8000
 """
 
+import hashlib
 import json
 import logging
 import os
 import secrets
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -93,6 +95,69 @@ app.add_middleware(
 
 # Request body size limit (default 10 MB)
 MAX_REQUEST_BODY_BYTES = int(os.getenv("AGENT_MAX_REQUEST_BYTES", str(10 * 1024 * 1024)))
+
+RATE_LIMIT_REQUESTS = int(os.getenv("AGENT_RATE_LIMIT_REQUESTS", "60"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("AGENT_RATE_LIMIT_WINDOW", "60"))
+
+
+class _InMemoryRateLimiter:
+    """Token-bucket style rate limiter, keyed by client identifier."""
+
+    def __init__(self, max_requests: int, window_seconds: int):
+        self._max = max_requests
+        self._window = window_seconds
+        self._counts: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            timestamps = self._counts.get(key, [])
+            cutoff = now - self._window
+            timestamps = [t for t in timestamps if t > cutoff]
+            if len(timestamps) >= self._max:
+                self._counts[key] = timestamps
+                return False
+            timestamps.append(now)
+            self._counts[key] = timestamps
+            return True
+
+    def cleanup(self):
+        now = time.monotonic()
+        cutoff = now - self._window * 2
+        with self._lock:
+            for key in list(self._counts):
+                self._counts[key] = [t for t in self._counts[key] if t > cutoff]
+                if not self._counts[key]:
+                    del self._counts[key]
+
+
+_rate_limiter = _InMemoryRateLimiter(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS)
+
+
+def _rate_limit_key(request: Request) -> str:
+    auth = request.headers.get("authorization", "")
+    if auth:
+        return f"auth:{hashlib.sha256(auth.encode()).hexdigest()[:16]}"
+    x_key = request.headers.get("x-api-key", "")
+    if x_key:
+        return f"key:{hashlib.sha256(x_key.encode()).hexdigest()[:16]}"
+    return f"ip:{request.client.host if request.client else 'unknown'}"
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if request.url.path.startswith("/v1/"):
+        key = _rate_limit_key(request)
+        if not _rate_limiter.is_allowed(key):
+            response = JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please retry later."},
+            )
+            _add_security_headers(response)
+            response.headers["Retry-After"] = str(RATE_LIMIT_WINDOW_SECONDS)
+            return response
+    return await call_next(request)
 
 
 @app.middleware("http")

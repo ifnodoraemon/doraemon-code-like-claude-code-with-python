@@ -88,7 +88,8 @@ class ModelRouter:
         try:
             return await adapter.chat(request)
         except Exception as e:
-            return ErrorResponse(error=str(e), code="provider_error")
+            logger.error("Provider error for %s: %s: %s", request.model, type(e).__name__, e)
+            return ErrorResponse(error="Provider request failed", code="provider_error")
 
     async def chat_stream(
         self,
@@ -103,8 +104,8 @@ class ModelRouter:
             async for chunk in adapter.chat_stream(request):
                 yield chunk
         except Exception as e:
-            logger.error("Stream error for %s: %s", request.model, type(e).__name__)
-            yield ErrorResponse(error=str(e), code="provider_error")
+            logger.error("Stream error for %s: %s: %s", request.model, type(e).__name__, e)
+            yield ErrorResponse(error="Provider request failed", code="provider_error")
 
     def list_models(self, provider: str | None = None) -> list[ModelInfo]:
         models = []

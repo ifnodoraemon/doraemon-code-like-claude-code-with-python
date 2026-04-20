@@ -106,7 +106,7 @@ class TestModelRouter:
         req = ChatRequest(model="gpt-4o", messages=[ChatMessage(role=Role.USER, content="hi")])
         result = await router.chat(req)
         assert hasattr(result, "error")
-        assert "API down" in result.error
+        assert "Provider request failed" in result.error
 
     @pytest.mark.asyncio
     async def test_chat_stream_model_not_found(self):

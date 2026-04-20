@@ -91,6 +91,11 @@ def db_write_query(query: str, db_path: str, params: list | None = None) -> str:
     Returns:
         Success message or error
     """
+    try:
+        validate_path(db_path)
+    except (PermissionError, ValueError) as e:
+        return f"Error: {e}"
+
     conn = None
     try:
         first_keyword = query.strip().split()[0].upper() if query.strip() else ""

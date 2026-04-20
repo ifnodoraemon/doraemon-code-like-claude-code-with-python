@@ -732,7 +732,7 @@ EXTENSION_TOOL_SPECS: list[ToolSpec] = [
     ToolSpec("src.servers.browser", "take_screenshot",    sensitive=False, timeout=60.0),
     ToolSpec("src.servers.browser", "browser_click",      sensitive=False, timeout=30.0),
     ToolSpec("src.servers.browser", "browser_fill",       sensitive=False, timeout=30.0),
-    ToolSpec("src.servers.browser", "browser_evaluate",   sensitive=False, timeout=30.0),
+    ToolSpec("src.servers.browser", "browser_evaluate",   sensitive=True, timeout=30.0),
     ToolSpec("src.servers.browser", "browser_wait",       sensitive=False, timeout=60.0),
     ToolSpec("src.servers.browser", "browser_pdf",        sensitive=False, timeout=30.0),
     ToolSpec("src.servers.browser", "browser_get_html",   sensitive=False, timeout=30.0),

@@ -181,7 +181,7 @@ async def chat_endpoint(request: ChatRequest):
                         "task_graph": [],
                     }
                 else:
-                    err_data = {"error": str(e), "session_id": session.session_id}
+                    err_data = {"error": "An internal error occurred", "session_id": session.session_id}
                 yield f"data: {json.dumps(err_data)}\n\n"
                 yield "data: [DONE]\n\n"
             finally:

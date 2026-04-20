@@ -4,9 +4,12 @@ Doraemon Code Web UI Server
 Main FastAPI application for the Web UI.
 """
 
+import hashlib
 import logging
 import os
 import secrets
+import threading
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
@@ -91,6 +94,34 @@ def _verify_webui_api_key(authorization: str | None) -> bool:
     return secrets.compare_digest(key, WEBUI_API_KEY)
 
 
+WEBUI_RATE_LIMIT = int(os.getenv("AGENT_WEBUI_RATE_LIMIT", "60"))
+WEBUI_RATE_WINDOW = int(os.getenv("AGENT_WEBUI_RATE_WINDOW", "60"))
+
+
+class _WebUIRateLimiter:
+    def __init__(self, max_requests: int, window_seconds: int):
+        self._max = max_requests
+        self._window = window_seconds
+        self._counts: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            timestamps = self._counts.get(key, [])
+            cutoff = now - self._window
+            timestamps = [t for t in timestamps if t > cutoff]
+            if len(timestamps) >= self._max:
+                self._counts[key] = timestamps
+                return False
+            timestamps.append(now)
+            self._counts[key] = timestamps
+            return True
+
+
+_webui_rate_limiter = _WebUIRateLimiter(WEBUI_RATE_LIMIT, WEBUI_RATE_WINDOW)
+
+
 app = FastAPI(
     title="Doraemon Code API",
     description="Backend API for Doraemon Code Web UI",
@@ -110,6 +141,22 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api/"):
+        client_id = request.client.host if request.client else "unknown"
+        auth = request.headers.get("authorization", "")
+        if auth:
+            client_id = f"auth:{hashlib.sha256(auth.encode()).hexdigest()[:16]}"
+        if not _webui_rate_limiter.is_allowed(client_id):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please retry later."},
+                headers={"Retry-After": str(WEBUI_RATE_WINDOW)},
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
