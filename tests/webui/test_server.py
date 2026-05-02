@@ -1,13 +1,39 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi import Response
 
 from src.webui.server import (
     _extract_asset_paths,
+    _is_loopback_request,
+    _is_rate_limited_path,
     _load_dashboard_router,
+    _load_webui_api_key,
     _verify_webui_api_key,
     app,
     resolve_static_bundle,
 )
+
+
+async def _call_enforce_api_key(path: str, headers: dict[str, str] | None = None):
+    import src.webui.server as mod
+
+    request = SimpleNamespace(
+        url=SimpleNamespace(path=path),
+        headers=headers or {},
+        client=SimpleNamespace(host="203.0.113.10"),
+    )
+    called = False
+
+    async def call_next(_request):
+        nonlocal called
+        called = True
+        return Response(status_code=204)
+
+    response = await mod.enforce_api_key(request, call_next)
+    return response, called
 
 
 def test_resolve_static_bundle_accepts_valid_bundle(tmp_path: Path):
@@ -90,6 +116,11 @@ class TestLoadDashboardRouter:
 
 
 class TestVerifyWebuiApiKey:
+    def test_empty_env_key_is_treated_as_unset(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WEBUI_API_KEY", "")
+
+        assert _load_webui_api_key() is None
+
     def test_no_key_configured(self, monkeypatch):
         import src.webui.server as mod
 
@@ -119,6 +150,31 @@ class TestVerifyWebuiApiKey:
 
         monkeypatch.setattr(mod, "WEBUI_API_KEY", "secret")
         assert _verify_webui_api_key(None) is False
+
+
+class TestLoopbackRequest:
+    def test_loopback_client(self):
+        request = MagicMock()
+        request.client.host = "127.0.0.1"
+        assert _is_loopback_request(request) is True
+
+    def test_non_loopback_client(self):
+        request = MagicMock()
+        request.client.host = "203.0.113.10"
+        assert _is_loopback_request(request) is False
+
+
+class TestRateLimitPath:
+    def test_api_paths_are_rate_limited(self):
+        assert _is_rate_limited_path("/api/sessions") is True
+
+    def test_dashboard_api_paths_are_rate_limited(self):
+        assert _is_rate_limited_path("/dashboard/api/evaluate") is True
+
+    def test_page_and_static_paths_are_not_rate_limited(self):
+        assert _is_rate_limited_path("/") is False
+        assert _is_rate_limited_path("/dashboard") is False
+        assert _is_rate_limited_path("/dashboard/static/dashboard.js") is False
 
 
 class TestAppRoutes:
@@ -155,45 +211,88 @@ class TestAppRoutes:
 
 
 class TestEnforceApiKey:
-    def test_exempt_paths(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_api_health_exempt_with_api_key(self, monkeypatch):
         import src.webui.server as mod
 
         monkeypatch.setattr(mod, "WEBUI_API_KEY", "secret")
-        from fastapi.testclient import TestClient
 
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get("/")
+        resp, called = await _call_enforce_api_key("/api/health")
         assert resp.status_code != 401
+        assert called is True
 
-    def test_exempt_assets_prefix(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_health_exempt_with_api_key(self, monkeypatch):
         import src.webui.server as mod
 
         monkeypatch.setattr(mod, "WEBUI_API_KEY", "secret")
-        from fastapi.testclient import TestClient
 
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get("/assets/missing.js")
+        resp, called = await _call_enforce_api_key("/health")
         assert resp.status_code != 401
+        assert called is True
 
-    def test_unauthenticated_request_rejected(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_dashboard_page_exempt_with_api_key(self, monkeypatch):
         import src.webui.server as mod
 
         monkeypatch.setattr(mod, "WEBUI_API_KEY", "secret")
-        from fastapi.testclient import TestClient
 
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get("/api/sessions")
+        resp, called = await _call_enforce_api_key("/dashboard")
+        assert resp.status_code != 401
+        assert called is True
+
+    @pytest.mark.asyncio
+    async def test_dashboard_api_requires_api_key(self, monkeypatch):
+        import src.webui.server as mod
+
+        monkeypatch.setattr(mod, "WEBUI_API_KEY", "secret")
+
+        resp, called = await _call_enforce_api_key("/dashboard/api/models/compare")
         assert resp.status_code == 401
+        assert called is False
 
-    def test_authenticated_request_allowed(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_non_loopback_without_api_key_rejected(self, monkeypatch):
+        import src.webui.server as mod
+
+        monkeypatch.setattr(mod, "WEBUI_API_KEY", None)
+
+        resp, called = await _call_enforce_api_key("/api/sessions")
+        assert resp.status_code == 503
+        assert called is False
+
+    @pytest.mark.asyncio
+    async def test_non_loopback_empty_api_key_rejected(self, monkeypatch):
+        import src.webui.server as mod
+
+        monkeypatch.setattr(mod, "WEBUI_API_KEY", None)
+
+        resp, called = await _call_enforce_api_key("/dashboard/api/models/compare")
+        assert resp.status_code == 503
+        assert called is False
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_request_rejected(self, monkeypatch):
         import src.webui.server as mod
 
         monkeypatch.setattr(mod, "WEBUI_API_KEY", "secret")
-        from fastapi.testclient import TestClient
 
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get("/api/sessions", headers={"Authorization": "Bearer secret"})
+        resp, called = await _call_enforce_api_key("/api/sessions")
+        assert resp.status_code == 401
+        assert called is False
+
+    @pytest.mark.asyncio
+    async def test_authenticated_request_allowed(self, monkeypatch):
+        import src.webui.server as mod
+
+        monkeypatch.setattr(mod, "WEBUI_API_KEY", "secret")
+
+        resp, called = await _call_enforce_api_key(
+            "/api/sessions",
+            headers={"Authorization": "Bearer secret"},
+        )
         assert resp.status_code != 401
+        assert called is True
 
 
 class TestServerCoverageGaps:

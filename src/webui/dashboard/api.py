@@ -8,7 +8,9 @@ Provides access to evaluation results, trends, and task statistics.
 import asyncio
 import json
 import logging
+import os
 import re
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,6 +33,38 @@ templates.env.autoescape = True
 
 # Default eval results directory
 EVAL_RESULTS_DIR = Path(__file__).parent.parent.parent.parent / "eval_results"
+
+
+def _empty_trends() -> dict[str, Any]:
+    return {
+        "success_rate_trend": [],
+        "latency_trend": [],
+        "task_count_trend": [],
+    }
+
+
+def _empty_task_statistics() -> dict[str, Any]:
+    return {
+        "total_evaluations": 0,
+        "total_tasks": 0,
+        "total_success": 0,
+        "overall_success_rate": 0,
+        "by_category": {},
+        "by_difficulty": {},
+    }
+
+
+def _dashboard_page_requires_client_auth(request: Request) -> bool:
+    api_key = os.getenv("AGENT_WEBUI_API_KEY") or None
+    if not api_key:
+        return False
+
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        return True
+
+    submitted_key = authorization[7:] if authorization.startswith("Bearer ") else authorization
+    return not secrets.compare_digest(submitted_key, api_key)
 
 
 class EvaluationRequest(BaseModel):
@@ -412,18 +446,27 @@ async def dashboard_index(request: Request):
     """
     Render the dashboard index page.
     """
-    evaluations = list_evaluation_files()
-    trends = calculate_trends()
-    task_stats = calculate_task_statistics()
+    requires_auth = _dashboard_page_requires_client_auth(request)
+    if requires_auth:
+        evaluations = []
+        trends = _empty_trends()
+        task_stats = _empty_task_statistics()
+        running_evaluations = []
+    else:
+        evaluations = list_evaluation_files()
+        trends = calculate_trends()
+        task_stats = calculate_task_statistics()
+        running_evaluations = list(_running_evaluations.values())
 
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "evaluations": evaluations[:10],  # Latest 10
             "trends": trends,
             "task_stats": task_stats,
-            "running_evaluations": list(_running_evaluations.values()),
+            "running_evaluations": running_evaluations,
+            "requires_auth": requires_auth,
         },
     )
 

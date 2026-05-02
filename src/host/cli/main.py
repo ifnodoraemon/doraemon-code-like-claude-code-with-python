@@ -10,6 +10,7 @@ Storage:
 
 import asyncio
 import logging
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,11 +25,13 @@ from rich.prompt import Prompt
 from src.agent import (
     AgentSession,
 )
+from src.core.commands import CommandDefinition, CommandManager, CommandResult
 from src.core.config.config import load_config
 from src.core.home import (
     set_project_dir,
 )
 from src.core.logger import configure_root_logger
+from src.core.session import SessionManager
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -40,6 +43,24 @@ for stream in [sys.stdin, sys.stdout, sys.stderr]:
 load_dotenv()
 
 app = typer.Typer()
+
+_TOP_LEVEL_COMMANDS = {"start", "version"}
+_TOP_LEVEL_OPTIONS = {"--help", "--install-completion", "--show-completion"}
+
+
+def _argv_with_default_start(argv: list[str]) -> list[str]:
+    """Route `doraemon --prompt ...` and bare `doraemon` to the start command."""
+    if len(argv) <= 1:
+        return [argv[0], "start"]
+
+    first_arg = argv[1]
+    if first_arg in _TOP_LEVEL_COMMANDS or first_arg in _TOP_LEVEL_OPTIONS:
+        return argv
+
+    if first_arg.startswith("-"):
+        return [argv[0], "start", *argv[1:]]
+
+    return argv
 
 
 def _parse_orchestrate_args(args: list[str]) -> tuple[int, str] | None:
@@ -123,6 +144,300 @@ def _parse_resume_args(args: list[str]) -> tuple[str, int] | None:
     return run_id, max_workers
 
 
+def _session_project_dir(session: Any) -> Path:
+    """Return the project directory associated with a session-like object."""
+    project_dir = getattr(session, "project_dir", None)
+    if project_dir is None:
+        return Path.cwd()
+    return Path(project_dir)
+
+
+def _parse_custom_command_args(
+    command: CommandDefinition,
+    args: list[str],
+) -> dict[str, str] | None:
+    """Map slash command args to command variables.
+
+    Supports positional args in declaration order plus KEY=value, --KEY value,
+    and --KEY=value forms.
+    """
+    parsed: dict[str, str] = {}
+    positionals: list[str] = []
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if token.startswith("--") and "=" in token:
+            key, value = token[2:].split("=", 1)
+            if not key:
+                return None
+            parsed[key] = value
+        elif token.startswith("--"):
+            key = token[2:]
+            if not key or i + 1 >= len(args):
+                return None
+            parsed[key] = args[i + 1]
+            i += 1
+        elif "=" in token:
+            key, value = token.split("=", 1)
+            if not key:
+                return None
+            parsed[key] = value
+        else:
+            positionals.append(token)
+        i += 1
+
+    positional_index = 0
+    for argument in command.arguments:
+        if argument.name in parsed:
+            continue
+        if argument.name == "ARGUMENTS":
+            parsed[argument.name] = " ".join(positionals[positional_index:])
+            positional_index = len(positionals)
+            continue
+        if positional_index < len(positionals):
+            parsed[argument.name] = positionals[positional_index]
+            positional_index += 1
+
+    if not command.arguments and positionals:
+        parsed["ARGUMENTS"] = " ".join(positionals)
+        positional_index = len(positionals)
+
+    if positional_index < len(positionals):
+        return None
+    return parsed
+
+
+def _print_command_result(result: CommandResult) -> None:
+    color = "green" if result.success else "red"
+    status = "completed" if result.success else "failed"
+    console.print(f"[{color}]Command {status}:[/{color}] /{result.command_name}")
+    for output in result.outputs:
+        if output:
+            console.print(output)
+    for error in result.errors:
+        if error:
+            console.print(f"[red]{error}[/red]")
+
+
+def _print_cli_help() -> None:
+    console.print("""
+[bold]Commands:[/bold]
+  /help, /h, /?     Show this help
+  /mode <mode>      Switch mode (plan/build)
+  /commands         List project custom commands
+  /commands help X  Show help for a custom command
+  /orchestrate ...  Run lead/worker orchestration
+  /runs             List orchestration runs in this session
+  /resume <run_id>  Resume a blocked orchestration run
+  /tasks ...        Show runtime task graph
+  /clear            Clear conversation
+  /reset            Reset agent state
+  /trace            Show trace info
+  /session          Show session ID
+  /exit, /quit      Exit the CLI
+
+[bold]Tips:[/bold]
+  Start with ! to run bash commands: !ls -la
+  Create custom commands in .agent/commands/*.md
+  Example: /orchestrate --workers 3 implement auth flow
+""")
+
+
+def _print_custom_commands(project_dir: Path, args: list[str]) -> None:
+    manager = CommandManager(project_dir)
+    if args[:1] == ["help"] and len(args) == 2:
+        help_text = manager.get_command_help(args[1])
+        if help_text:
+            console.print(help_text)
+        else:
+            console.print(f"[yellow]Command not found: /{args[1]}[/yellow]")
+        return
+    if args:
+        console.print("Usage: /commands | /commands help <name>")
+        return
+
+    commands = manager.list_commands()
+    if not commands:
+        console.print("[yellow]No custom commands found in .agent/commands[/yellow]")
+        return
+    console.print("[cyan]Custom commands:[/cyan]")
+    for item in commands:
+        args_text = " ".join(f"${name}" for name in item.get("arguments", []))
+        suffix = f" {args_text}" if args_text else ""
+        description = item.get("description") or ""
+        console.print(f"  /{item['name']}{suffix}  {description}".rstrip())
+
+
+def _session_manager_for_project(project_dir: Path) -> SessionManager:
+    return SessionManager(base_dir=project_dir / ".agent" / "sessions")
+
+
+def _print_session_list(project_dir: Path, project: str, limit: int = 20) -> None:
+    manager = _session_manager_for_project(project_dir)
+    sessions = manager.list_sessions(project=project, limit=limit)
+    if not sessions:
+        console.print(f"[yellow]No sessions found for project: {project}[/yellow]")
+        return
+
+    console.print(f"[cyan]Recent sessions for {project}:[/cyan]")
+    for session in sessions:
+        name = session.name or "Untitled Session"
+        console.print(
+            f"  {session.id}  {name}  "
+            f"({session.message_count} messages, mode={session.mode})"
+        )
+
+
+def _resolve_resume_session_id(
+    project_dir: Path,
+    project: str,
+    *,
+    resume: str | None,
+    continue_last: bool,
+) -> str | None:
+    manager = _session_manager_for_project(project_dir)
+
+    if continue_last:
+        sessions = manager.list_sessions(project=project, limit=1)
+        if not sessions:
+            console.print(f"[yellow]No sessions found for project: {project}[/yellow]")
+            return None
+        latest = sessions[0]
+        console.print(f"[cyan]Resuming latest session:[/cyan] {latest.id}")
+        return latest.id
+
+    if not resume:
+        return None
+
+    session = manager.load_session(resume)
+    if session is None:
+        matching = [meta for meta in manager.search_sessions(resume, project=project) if meta.name == resume]
+        matching.sort(key=lambda meta: meta.updated_at, reverse=True)
+        if matching:
+            session = manager.load_session(matching[0].id)
+    if session is None:
+        console.print(f"[red]Session not found:[/red] {resume}")
+        return None
+    console.print(f"[cyan]Resuming session:[/cyan] {session.metadata.id}")
+    return session.metadata.id
+
+
+async def _handle_project_command(
+    name: str,
+    args: list[str],
+    session: Any,
+) -> bool:
+    """Execute a project-local custom slash command if it exists."""
+    manager = CommandManager(_session_project_dir(session))
+    command = manager.loader.get_command(name)
+    if command is None:
+        return False
+
+    parsed_args = _parse_custom_command_args(command, args)
+    if parsed_args is None:
+        console.print(f"Usage: {manager.get_command_help(name) or f'/{name}'}")
+        return True
+
+    if not command.steps and command.prompt:
+        prompt, error = manager.render_command_prompt(command, parsed_args)
+        if error:
+            console.print(f"Usage: {manager.get_command_help(name) or f'/{name}'}")
+            return True
+        if not prompt:
+            console.print(f"[yellow]Command has no prompt content: /{name}[/yellow]")
+            return True
+        result = await session.turn(prompt)
+        if getattr(result, "response", None):
+            console.print(
+                Panel(
+                    Markdown(result.response),
+                    border_style="green" if getattr(result, "success", True) else "red",
+                    expand=False,
+                )
+            )
+        if getattr(result, "error", None):
+            console.print(f"[red]Error: {result.error}[/red]")
+        return True
+
+    result = await manager.run_command(name, parsed_args)
+    _print_command_result(result)
+    return True
+
+
+async def _handle_bang_command(user_input: str, project_dir: Path) -> None:
+    """Run a shell command from the interactive CLI `!cmd` shortcut."""
+    command = user_input[1:].strip()
+    if not command:
+        console.print("Usage: !<shell command>")
+        return
+
+    from src.servers.run import run
+
+    output = await asyncio.to_thread(
+        run,
+        command,
+        mode="shell",
+        working_dir=str(project_dir),
+    )
+    console.print(output)
+
+
+async def _handle_pre_session_initial_prompt(
+    initial_prompt: str,
+    project_dir: Path,
+) -> bool:
+    """Handle one-shot local commands before model/MCP session initialization."""
+    if initial_prompt.startswith("!"):
+        await _handle_bang_command(initial_prompt, project_dir)
+        return True
+
+    if not initial_prompt.startswith("/"):
+        return False
+
+    try:
+        parts = shlex.split(initial_prompt[1:])
+    except ValueError as exc:
+        console.print(f"[red]Invalid command syntax:[/red] {exc}")
+        return True
+
+    command = parts[0].lower() if parts else ""
+    args = parts[1:] if len(parts) > 1 else []
+
+    if command in {"help", "h", "?"}:
+        _print_cli_help()
+        return True
+
+    if command in {"commands", "cmds"}:
+        _print_custom_commands(project_dir, args)
+        return True
+
+    if command in {"exit", "quit"}:
+        return True
+
+    return False
+
+
+async def _handle_initial_prompt(
+    initial_prompt: str,
+    session: AgentSession,
+    project_dir: Path,
+) -> str | None:
+    """Route print-mode input through the same command paths as interactive input."""
+    if initial_prompt.startswith("/"):
+        return await handle_command(initial_prompt, session)
+
+    if initial_prompt.startswith("!"):
+        await _handle_bang_command(initial_prompt, project_dir)
+        return None
+
+    result = await session.turn(initial_prompt)
+    if result.response:
+        console.print(Markdown(result.response))
+    if result.error:
+        console.print(f"[red]Error: {result.error}[/red]")
+    return None
+
+
 async def run_chat_loop(
     project: str,
     mode: str,
@@ -130,10 +445,30 @@ async def run_chat_loop(
     headless: bool,
     initial_prompt: str | None,
     enable_trace: bool,
+    resume: str | None = None,
+    continue_last: bool = False,
+    list_sessions: bool = False,
 ):
     """Main chat loop using Agent architecture."""
     project_dir = Path.cwd()
     set_project_dir(project_dir)
+
+    if list_sessions:
+        _print_session_list(project_dir, project)
+        return
+
+    resume_session_id = _resolve_resume_session_id(
+        project_dir,
+        project,
+        resume=resume,
+        continue_last=continue_last,
+    )
+    if (resume or continue_last) and resume_session_id is None:
+        return
+
+    if headless and initial_prompt:
+        if await _handle_pre_session_initial_prompt(initial_prompt, project_dir):
+            return
 
     session = AgentSession(
         model_client=None,
@@ -143,6 +478,7 @@ async def run_chat_loop(
         max_turns=max_turns,
         project_dir=project_dir,
         enable_trace=enable_trace,
+        session_id=resume_session_id,
     )
     await session.initialize()
 
@@ -150,9 +486,7 @@ async def run_chat_loop(
     console.print()
 
     if initial_prompt:
-        result = await session.turn(initial_prompt)
-        if result.response:
-            console.print(Markdown(result.response))
+        await _handle_initial_prompt(initial_prompt, session, project_dir)
     if headless:
         trace_path = await session.aclose()
         if trace_path:
@@ -186,6 +520,10 @@ async def run_chat_loop(
                     break
                 continue
 
+            if user_input.startswith("!"):
+                await _handle_bang_command(user_input, project_dir)
+                continue
+
             console.print()
             result = await session.turn(user_input)
 
@@ -214,29 +552,20 @@ async def run_chat_loop(
 
 async def handle_command(cmd: str, session: AgentSession) -> str | None:
     """Handle slash commands."""
-    parts = cmd[1:].split()
+    try:
+        parts = shlex.split(cmd[1:])
+    except ValueError as exc:
+        console.print(f"[red]Invalid command syntax:[/red] {exc}")
+        return None
+
     command = parts[0].lower() if parts else ""
     args = parts[1:] if len(parts) > 1 else []
 
     if command in {"help", "h", "?"}:
-        console.print("""
-[bold]Commands:[/bold]
-  /help, /h, /?     Show this help
-  /mode <mode>      Switch mode (plan/build)
-  /orchestrate ...  Run lead/worker orchestration
-  /runs             List orchestration runs in this session
-  /resume <run_id>  Resume a blocked orchestration run
-  /tasks ...        Show runtime task graph
-  /clear            Clear conversation
-  /reset            Reset agent state
-  /trace            Show trace info
-  /session          Show session ID
-  /exit, /quit      Exit the CLI
+        _print_cli_help()
 
-[bold]Tips:[/bold]
-  Start with ! to run bash commands: !ls -la
-  Example: /orchestrate --workers 3 implement auth flow
-""")
+    elif command in {"commands", "cmds"}:
+        _print_custom_commands(_session_project_dir(session), args)
 
     elif command == "mode":
         if args and args[0] in {"plan", "build"}:
@@ -378,6 +707,8 @@ async def handle_command(cmd: str, session: AgentSession) -> str | None:
         return "exit"
 
     else:
+        if await _handle_project_command(command, args, session):
+            return None
         console.print(f"[red]Unknown command: /{command}[/red]")
 
     return None
@@ -390,6 +721,9 @@ def start(
     prompt: str = typer.Option(None, "--prompt", "-P", help="Initial prompt"),
     print_mode: bool = typer.Option(False, "--print", help="Print mode (non-interactive)"),
     max_turns: int = typer.Option(100, "--max-turns", help="Max turns per conversation"),
+    resume: str | None = typer.Option(None, "--resume", "-r", help="Resume session by ID or name"),
+    continue_last: bool = typer.Option(False, "--continue", help="Resume the latest session"),
+    list_sessions: bool = typer.Option(False, "--list-sessions", help="List recent sessions and exit"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging"),
     no_trace: bool = typer.Option(False, "--no-trace", help="Disable trace recording"),
 ):
@@ -416,6 +750,9 @@ def start(
                 headless=headless,
                 initial_prompt=prompt,
                 enable_trace=not no_trace,
+                resume=resume,
+                continue_last=continue_last,
+                list_sessions=list_sessions,
             )
         )
     except KeyboardInterrupt:
@@ -430,8 +767,9 @@ def version():
 
 def entry_point():
     """Entry point for package script."""
+    sys.argv = _argv_with_default_start(sys.argv)
     app()
 
 
 if __name__ == "__main__":
-    app()
+    entry_point()

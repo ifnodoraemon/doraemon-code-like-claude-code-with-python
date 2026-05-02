@@ -95,7 +95,7 @@ async def get_session(
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
     mgr = SessionManager(base_dir=Path.cwd() / ".agent" / "sessions")
-    session = mgr.resume_session(session_id)
+    session = mgr.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -145,7 +145,7 @@ async def get_session_run(session_id: str, run_id: str):
         raise HTTPException(status_code=400, detail="Invalid run ID format")
 
     mgr = SessionManager(base_dir=Path.cwd() / ".agent" / "sessions")
-    session = mgr.resume_session(session_id)
+    session = mgr.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -172,7 +172,7 @@ async def get_session_diff(
     from src.core.checkpoint import CheckpointManager
 
     mgr = SessionManager(base_dir=Path.cwd() / ".agent" / "sessions")
-    session = mgr.resume_session(session_id)
+    session = mgr.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -188,6 +188,7 @@ async def get_session_diff(
             cp.id for cp in cp_mgr.checkpoints if getattr(cp, "created_at", 0) or 0 >= created_at
         ]
 
+    project_root = Path.cwd().resolve()
     for cp_id in target_ids:
         cp = cp_mgr.get_checkpoint(cp_id) if hasattr(cp_mgr, "get_checkpoint") else None
         if cp is None:
@@ -208,6 +209,10 @@ async def get_session_diff(
                     continue
                 resolved = os.path.realpath(snap_path)
                 current = Path(resolved)
+                try:
+                    current.relative_to(project_root)
+                except ValueError:
+                    continue
                 if current.exists():
                     after["exists"] = True
                     after["mtime"] = current.stat().st_mtime
@@ -258,7 +263,7 @@ async def undo_session(session_id: str, request: UndoRequest):
     from src.core.checkpoint import CheckpointManager
 
     mgr = SessionManager(base_dir=Path.cwd() / ".agent" / "sessions")
-    session = mgr.resume_session(session_id)
+    session = mgr.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 

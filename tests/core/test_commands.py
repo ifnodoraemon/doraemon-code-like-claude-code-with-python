@@ -1,5 +1,8 @@
 """Tests for src/core/commands.py"""
 
+import asyncio
+from pathlib import Path
+
 import pytest
 
 from src.core.commands import (
@@ -125,12 +128,30 @@ class TestCommandLoader:
         assert steps[2]["type"] == "async"
         assert steps[3]["type"] == "condition"
 
+    def test_parse_prompt_keeps_non_directive_markdown(self):
+        loader = CommandLoader()
+        prompt = loader._parse_prompt("# Review\n\nRUN echo ignored\nPlease inspect $ARGUMENTS")
+
+        assert prompt == "# Review\n\nPlease inspect $ARGUMENTS"
+
+    def test_load_prompt_only_command(self, tmp_path):
+        cmd_dir = tmp_path / ".agent" / "commands"
+        cmd_dir.mkdir(parents=True)
+        (cmd_dir / "review.md").write_text(
+            "---\nname: Review\ndescription: Review files\n---\nReview $ARGUMENTS",
+            encoding="utf-8",
+        )
+
+        command = CommandLoader(tmp_path).load_command("review")
+
+        assert command is not None
+        assert command.steps == []
+        assert command.prompt == "Review $ARGUMENTS"
+
     def test_parse_steps_dict_args(self):
         loader = CommandLoader()
         content = "---\nname: x\narguments:\n  - name: FOO\n    required: false\n    default: bar\n---\nRUN echo $FOO"
-        cmd = loader._parse_command_file(
-            content, tmp_path_file := __import__("pathlib").Path("x.md")
-        )
+        cmd = loader._parse_command_file(content, Path("x.md"))
         assert cmd.arguments[0].name == "FOO"
         assert cmd.arguments[0].required is False
         assert cmd.arguments[0].default == "bar"
@@ -197,6 +218,20 @@ class TestCommandExecutor:
         result = executor._substitute("echo $NAME in ${DIR}", {"NAME": "world", "DIR": "/tmp"})
         assert result == "echo world in /tmp"
 
+    def test_render_prompt_uses_unquoted_arguments(self, tmp_path):
+        executor = CommandExecutor(project_dir=tmp_path)
+        command = CommandDefinition(
+            name="review",
+            description="",
+            arguments=[CommandArgument("ARGUMENTS", required=False)],
+            prompt="Review $ARGUMENTS in $PROJECT_DIR",
+        )
+
+        prompt, error = executor.render_prompt(command, {"ARGUMENTS": "src/app.py tests"})
+
+        assert error is None
+        assert prompt == f"Review src/app.py tests in {tmp_path}"
+
     @pytest.mark.asyncio
     async def test_execute_missing_required_arg(self, tmp_path):
         executor = CommandExecutor(project_dir=tmp_path)
@@ -258,6 +293,18 @@ class TestCommandExecutor:
         step = {"type": "async", "command": "echo async"}
         result = await executor._execute_async(step, {})
         assert result["success"] is True
+        executor.terminate_background_processes()
+
+    @pytest.mark.asyncio
+    async def test_async_step_tracks_and_terminates_background_processes(self, tmp_path):
+        executor = CommandExecutor(project_dir=tmp_path)
+        step = {"type": "async", "command": "sleep 10"}
+        result = await executor._execute_async(step, {})
+        assert result["success"] is True
+        assert len(executor._background_processes) == 1
+
+        executor.terminate_background_processes()
+        assert executor._background_processes == []
 
     @pytest.mark.asyncio
     async def test_unknown_step(self, tmp_path):
@@ -285,6 +332,22 @@ class TestCommandManager:
         assert len(cmds) >= 1
         assert cmds[0]["name"] == "hi"
         assert "NAME" in cmds[0]["arguments"]
+
+    def test_list_commands_uses_file_stem_as_invocation_name(self, tmp_path):
+        cmd_dir = tmp_path / ".agent" / "commands"
+        cmd_dir.mkdir(parents=True)
+        (cmd_dir / "fetch-issue.md").write_text(
+            "---\nname: Fetch Issue Context\ndescription: fetch\n---\nRUN echo ok",
+            encoding="utf-8",
+        )
+        mgr = CommandManager(tmp_path)
+
+        cmds = mgr.list_commands()
+        help_text = mgr.get_command_help("fetch-issue")
+
+        assert cmds[0]["name"] == "fetch-issue"
+        assert cmds[0]["title"] == "Fetch Issue Context"
+        assert help_text.startswith("/fetch-issue")
 
     @pytest.mark.asyncio
     async def test_run_command_missing(self, tmp_path):
@@ -360,6 +423,19 @@ class TestCommandManager:
         result = await executor._execute_run(step, {}, False)
         assert result["success"] is False
         assert "timed out" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_execute_run_step_timeout_terminates_process_group(self, tmp_path):
+        executor = CommandExecutor(project_dir=tmp_path, timeout=0.05)
+        step = {
+            "type": "run",
+            "command": "sh -c 'sleep 0.3; echo late > late.txt'",
+        }
+        result = await executor._execute_run(step, {}, False)
+        await asyncio.sleep(0.5)
+
+        assert result["success"] is False
+        assert not (tmp_path / "late.txt").exists()
 
     @pytest.mark.asyncio
     async def test_execute_run_step_exception(self, tmp_path):

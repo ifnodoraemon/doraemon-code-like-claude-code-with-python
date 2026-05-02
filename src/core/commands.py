@@ -31,9 +31,12 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import logging
+import os
 import re
 import shlex
+import signal
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -61,6 +64,7 @@ class CommandDefinition:
     description: str
     arguments: list[CommandArgument] = field(default_factory=list)
     steps: list[dict[str, Any]] = field(default_factory=list)
+    prompt: str = ""
     path: Path | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -72,6 +76,7 @@ class CommandDefinition:
                 for arg in self.arguments
             ],
             "steps": self.steps,
+            "prompt": self.prompt,
         }
 
 
@@ -166,12 +171,14 @@ class CommandLoader:
                 )
 
         steps = self._parse_steps(body)
+        prompt = self._parse_prompt(body)
 
         return CommandDefinition(
             name=name,
             description=description,
             arguments=arguments,
             steps=steps,
+            prompt=prompt,
             path=path,
         )
 
@@ -235,6 +242,19 @@ class CommandLoader:
 
         return steps
 
+    def _parse_prompt(self, body: str) -> str:
+        """Return Markdown prompt content from non-directive command body lines."""
+        prompt_lines = []
+        directive_prefixes = ("RUN ", "READ ", "ASYNC ", "IF ")
+
+        for line in body.splitlines():
+            stripped = line.strip()
+            if any(stripped.startswith(prefix) for prefix in directive_prefixes):
+                continue
+            prompt_lines.append(line)
+
+        return "\n".join(prompt_lines).strip()
+
     def get_command(self, name: str) -> CommandDefinition | None:
         """Get a loaded command by name."""
         if not self._loaded:
@@ -259,6 +279,7 @@ class CommandExecutor:
         self.project_dir = project_dir or Path.cwd()
         self.timeout = timeout
         self._cache: dict[str, str] = {}
+        self._background_processes: list[asyncio.subprocess.Process] = []
 
     async def execute(
         self,
@@ -393,6 +414,18 @@ class CommandExecutor:
 
         return result
 
+    def render_prompt(
+        self,
+        command: CommandDefinition,
+        arguments: dict[str, str],
+    ) -> tuple[str | None, str | None]:
+        """Render a prompt-only command template without shell quoting."""
+        validation_error = self._validate_arguments(command, arguments)
+        if validation_error:
+            return None, validation_error
+        args = self._prepare_arguments(command, arguments)
+        return self._substitute_path(command.prompt, args), None
+
     _BLOCKED_RUN_COMMANDS = frozenset({
         "rm -rf /", "rm -rf /*", "mkfs", "dd if=/dev/zero",
         "chmod -R 777 /", "chown -R", "> /dev/sda",
@@ -425,12 +458,14 @@ class CommandExecutor:
         if use_cache and cache_key in self._cache:
             return {"success": True, "output": self._cache[cache_key], "cached": True}
 
+        proc: asyncio.subprocess.Process | None = None
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.project_dir,
+                start_new_session=os.name != "nt",
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -453,6 +488,10 @@ class CommandExecutor:
                 }
 
         except asyncio.TimeoutError:
+            if proc is not None:
+                self._terminate_process(proc)
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(proc.communicate(), timeout=1)
             return {"success": False, "error": f"Command timed out after {self.timeout}s"}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -494,17 +533,40 @@ class CommandExecutor:
         command = self._substitute(raw_command, args)
 
         try:
-            await asyncio.create_subprocess_shell(
+            process = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
                 cwd=self.project_dir,
+                start_new_session=os.name != "nt",
             )
+            self._background_processes.append(process)
+            self._reap_background_processes()
 
             return {"success": True, "output": "Started async process"}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _reap_background_processes(self) -> None:
+        self._background_processes = [
+            process for process in self._background_processes if process.returncode is None
+        ]
+
+    def _terminate_process(self, process: asyncio.subprocess.Process) -> None:
+        if process.returncode is not None:
+            return
+        if os.name != "nt":
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGTERM)
+            return
+        process.terminate()
+
+    def terminate_background_processes(self) -> None:
+        """Terminate still-running ASYNC command processes."""
+        for process in self._background_processes:
+            self._terminate_process(process)
+        self._background_processes.clear()
 
     async def _execute_condition(
         self,
@@ -541,7 +603,8 @@ class CommandManager:
         commands = self.loader.list_commands()
         return [
             {
-                "name": cmd.name,
+                "name": cmd.path.stem if cmd.path else cmd.name,
+                "title": cmd.name,
                 "description": cmd.description,
                 "arguments": [arg.name for arg in cmd.arguments],
             }
@@ -571,7 +634,8 @@ class CommandManager:
         if not command:
             return None
 
-        lines = [f"/{name}", f"  {command.description}"]
+        invocation_name = command.path.stem if command.path else name
+        lines = [f"/{invocation_name}", f"  {command.description}"]
 
         if command.arguments:
             lines.append("  Arguments:")
@@ -581,6 +645,14 @@ class CommandManager:
                 lines.append(f"    ${arg.name} - {required}{default}")
 
         return "\n".join(lines)
+
+    def render_command_prompt(
+        self,
+        command: CommandDefinition,
+        arguments: dict[str, str] | None = None,
+    ) -> tuple[str | None, str | None]:
+        """Render a prompt-only command template."""
+        return self.executor.render_prompt(command, arguments or {})
 
     def create_command_template(
         self,

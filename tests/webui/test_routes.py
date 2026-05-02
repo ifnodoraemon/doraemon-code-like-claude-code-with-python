@@ -312,7 +312,7 @@ async def test_get_session_returns_orchestration_state(monkeypatch):
         def __init__(self, *args, **kwargs):
             return None
 
-        def resume_session(self, session_id: str):
+        def load_session(self, session_id: str):
             assert session_id == "session-123"
             return SimpleNamespace(
                 metadata=SimpleNamespace(id="session-123", name="Demo"),
@@ -368,7 +368,7 @@ async def test_get_session_supports_message_window(monkeypatch):
         def __init__(self, *args, **kwargs):
             return None
 
-        def resume_session(self, session_id: str):
+        def load_session(self, session_id: str):
             assert session_id == "session-123"
             return SimpleNamespace(
                 metadata=SimpleNamespace(id="session-123", name="Demo"),
@@ -398,7 +398,7 @@ async def test_get_session_run_returns_full_run_details(monkeypatch):
         def __init__(self, *args, **kwargs):
             return None
 
-        def resume_session(self, session_id: str):
+        def load_session(self, session_id: str):
             assert session_id == "session-123"
             return SimpleNamespace(
                 metadata=SimpleNamespace(id="session-123", name="Demo"),
@@ -439,7 +439,7 @@ def test_root_api_routes_accept_paths_without_trailing_slash(monkeypatch):
 async def test_get_project_context_returns_startup_directory():
     payload = await get_project_context()
 
-    assert "project_dir" not in payload
+    assert payload["project_dir"]
     assert payload["project_name"]
 
 
@@ -449,8 +449,9 @@ async def _noop_async():
 
 @pytest.mark.asyncio
 async def test_list_tools_route():
-    from src.webui.routes.tools import list_tools
     from unittest.mock import AsyncMock, patch
+
+    from src.webui.routes.tools import list_tools
 
     mock_catalog = [
         {"name": "read", "description": "Read files", "policy": {"visible": True}},

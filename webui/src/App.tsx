@@ -5,6 +5,7 @@ import {
     ChevronDown,
     ChevronLeft,
     ChevronRight,
+    KeyRound,
     Menu,
     Network,
     Plus,
@@ -27,6 +28,13 @@ import {
     getNextSessionIndex,
     isMessageRangeLoaded,
 } from './lib/sessionWindow'
+import {
+    AUTH_REQUIRED_EVENT,
+    clearStoredApiKey,
+    getStoredApiKey,
+    setStoredApiKey,
+    type AuthRequiredDetail,
+} from './apiAuth'
 
 const generateId = () => Math.random().toString(36).slice(2, 11)
 
@@ -209,6 +217,8 @@ function App() {
     const [sessionSearch, setSessionSearch] = useState('')
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
     const [timeline, setTimeline] = useState<TimelineEntry[]>([])
+    const [apiKeyPromptOpen, setApiKeyPromptOpen] = useState(false)
+    const [apiKeyDraft, setApiKeyDraft] = useState(() => getStoredApiKey())
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const currentSessionIdRef = useRef<string | null>(null)
@@ -249,11 +259,25 @@ function App() {
     }, [messageOffset])
 
     useEffect(() => {
-        void Promise.all([fetchTools(), fetchProjectContext()])
+        void fetchTools()
+        void (async () => {
+            const projectDir = await fetchProjectContext()
+            await fetchSessions(projectDir || 'default')
+        })()
     }, [])
 
     useEffect(() => {
-        void fetchSessions()
+        const handleAuthRequired = (event: Event) => {
+            const detail = (event as CustomEvent<AuthRequiredDetail>).detail
+            setApiKeyDraft(getStoredApiKey())
+            setApiKeyPromptOpen(true)
+            if (detail?.status === 503) {
+                setUiError('Web UI API key is required for this network address.')
+            }
+        }
+
+        window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired)
+        return () => window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired)
     }, [])
 
     useEffect(() => {
@@ -272,20 +296,25 @@ function App() {
         setWorkerAssignments(selectedRun?.worker_assignments || {})
     }, [orchestrationRuns, selectedRunId, runViewMode])
 
-    const fetchProjectContext = async () => {
+    const fetchProjectContext = async (): Promise<string | null> => {
         try {
             const res = await fetch('/api/projects')
-            if (!res.ok) return
+            if (!res.ok) return null
             const data: ProjectContextResponse = await res.json()
-            setCurrentProjectDir(data.project_dir)
+            const projectDir = data.project_dir || data.project_name || ''
+            setCurrentProjectDir(projectDir)
+            return projectDir || null
         } catch (err) {
             console.error('Failed to fetch project context', err)
+            return null
         }
     }
 
-    const fetchSessions = async () => {
+    const fetchSessions = async (project = currentProjectDir || 'default') => {
         try {
-            const res = await fetch('/api/sessions')
+            const params = new URLSearchParams()
+            params.set('project', project)
+            const res = await fetch(`/api/sessions?${params.toString()}`)
             if (!res.ok) return
             const data = await res.json()
             setSessions(data)
@@ -303,6 +332,29 @@ function App() {
         } catch (err) {
             console.error('Failed to fetch tools', err)
         }
+    }
+
+    const refreshApiData = () => {
+        void (async () => {
+            const projectDir = await fetchProjectContext()
+            await Promise.all([fetchTools(), fetchSessions(projectDir || currentProjectDir || 'default')])
+        })()
+    }
+
+    const handleApiKeySubmit = (event: FormEvent) => {
+        event.preventDefault()
+        setStoredApiKey(apiKeyDraft)
+        setApiKeyPromptOpen(false)
+        setUiError(null)
+        refreshApiData()
+    }
+
+    const handleApiKeyClear = () => {
+        clearStoredApiKey()
+        setApiKeyDraft('')
+        setApiKeyPromptOpen(false)
+        setUiError(null)
+        refreshApiData()
     }
 
     const invalidateSessionDetailRequests = (sessionId: string | null = currentSessionIdRef.current) => {
@@ -1413,6 +1465,54 @@ function App() {
                     open={mobileDrawerOpen}
                 />
             </div>
+            {apiKeyPromptOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+                    <form
+                        onSubmit={handleApiKeySubmit}
+                        className="w-full max-w-sm rounded-2xl border border-white/[0.1] bg-slate-950 p-4 shadow-2xl shadow-black/50"
+                    >
+                        <div className="mb-4 flex items-center gap-2 text-sm font-medium text-white">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-300">
+                                <KeyRound size={15} />
+                            </span>
+                            API key required
+                        </div>
+                        <input
+                            type="password"
+                            value={apiKeyDraft}
+                            onChange={(event) => setApiKeyDraft(event.target.value)}
+                            placeholder="AGENT_WEBUI_API_KEY"
+                            autoFocus
+                            className="w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-400/40"
+                        />
+                        <div className="mt-4 flex justify-end gap-2">
+                            {getStoredApiKey() && (
+                                <button
+                                    type="button"
+                                    onClick={handleApiKeyClear}
+                                    className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-slate-300 transition hover:bg-white/5"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => setApiKeyPromptOpen(false)}
+                                className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-slate-300 transition hover:bg-white/5"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={!apiKeyDraft.trim()}
+                                className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-medium text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
         </div>
     )
 }

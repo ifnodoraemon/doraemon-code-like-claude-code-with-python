@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from src.webui.dashboard.api import (
     EvaluationProgress,
@@ -12,7 +12,6 @@ from src.webui.dashboard.api import (
     get_eval_results_dir,
     list_evaluation_files,
     load_evaluation_details,
-    router,
 )
 
 
@@ -90,7 +89,7 @@ class TestListEvaluationFiles:
         assert result == []
 
 
-class TestLoadEvaluationDetails:
+class TestLoadEvaluationDetailsInvalid:
     def test_invalid_id_format(self, tmp_path, monkeypatch):
         monkeypatch.setattr("src.webui.dashboard.api.EVAL_RESULTS_DIR", tmp_path)
         with pytest.raises(ValueError, match="Invalid evaluation ID"):
@@ -109,7 +108,7 @@ class TestLoadEvaluationDetails:
             load_evaluation_details("cat1_20250101_000000")
 
 
-class TestCalculateTrends:
+class TestCalculateTrendsEmpty:
     def test_empty_returns_empty(self, tmp_path, monkeypatch):
         monkeypatch.setattr("src.webui.dashboard.api.EVAL_RESULTS_DIR", tmp_path)
         trends = calculate_trends()
@@ -307,7 +306,7 @@ class TestGetEvaluationDetailsEndpoint:
 
         from src.webui.dashboard.api import get_evaluation_details
 
-        with pytest.raises(Exception):
+        with pytest.raises(HTTPException):
             await get_evaluation_details(eval_id="missing_20250101_000000")
 
 
@@ -469,7 +468,7 @@ class TestGetEvaluationProgressEndpoint:
     async def test_unknown_eval_id(self):
         from src.webui.dashboard.api import get_evaluation_progress
 
-        with pytest.raises(Exception):
+        with pytest.raises(HTTPException):
             await get_evaluation_progress(eval_id="nonexistent")
 
 

@@ -5,6 +5,7 @@ Main FastAPI application for the Web UI.
 """
 
 import hashlib
+import ipaddress
 import logging
 import os
 import secrets
@@ -80,8 +81,12 @@ def _load_dashboard_router():
 # ---------------------------------------------------------------------------
 # API key authentication
 # ---------------------------------------------------------------------------
-WEBUI_API_KEY = os.getenv("AGENT_WEBUI_API_KEY")
-_AUTH_EXEMPT_PATHS = {"/", "/health", "/api/health"}
+def _load_webui_api_key() -> str | None:
+    return os.getenv("AGENT_WEBUI_API_KEY") or None
+
+
+WEBUI_API_KEY = _load_webui_api_key()
+_AUTH_EXEMPT_PATHS = {"/", "/health", "/api/health", "/dashboard", "/dashboard/"}
 _AUTH_EXEMPT_PREFIXES = ("/assets/", "/dashboard/static/")
 
 
@@ -92,6 +97,15 @@ def _verify_webui_api_key(authorization: str | None) -> bool:
         return False
     key = authorization[7:] if authorization.startswith("Bearer ") else authorization
     return secrets.compare_digest(key, WEBUI_API_KEY)
+
+
+def _is_loopback_request(request: Request) -> bool:
+    if request.client is None:
+        return False
+    try:
+        return ipaddress.ip_address(request.client.host).is_loopback
+    except ValueError:
+        return request.client.host in {"localhost", "localhost.localdomain"}
 
 
 WEBUI_RATE_LIMIT = int(os.getenv("AGENT_WEBUI_RATE_LIMIT", "60"))
@@ -122,6 +136,10 @@ class _WebUIRateLimiter:
 _webui_rate_limiter = _WebUIRateLimiter(WEBUI_RATE_LIMIT, WEBUI_RATE_WINDOW)
 
 
+def _is_rate_limited_path(path: str) -> bool:
+    return path.startswith("/api/") or path == "/dashboard/api" or path.startswith("/dashboard/api/")
+
+
 app = FastAPI(
     title="Doraemon Code API",
     description="Backend API for Doraemon Code Web UI",
@@ -145,7 +163,7 @@ app.add_middleware(
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    if request.url.path.startswith("/api/"):
+    if _is_rate_limited_path(request.url.path):
         client_id = request.client.host if request.client else "unknown"
         auth = request.headers.get("authorization", "")
         if auth:
@@ -173,7 +191,12 @@ async def add_security_headers(request: Request, call_next):
 async def enforce_api_key(request: Request, call_next):
     """Reject requests without a valid API key when AGENT_WEBUI_API_KEY is set."""
     if WEBUI_API_KEY is None:
-        return await call_next(request)
+        if _is_loopback_request(request):
+            return await call_next(request)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "AGENT_WEBUI_API_KEY must be set for non-loopback access"},
+        )
 
     path = request.url.path
     if path in _AUTH_EXEMPT_PATHS or any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
@@ -184,6 +207,12 @@ async def enforce_api_key(request: Request, call_next):
         return await call_next(request)
 
     return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+
+
+@app.get("/health")
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
 
 
 # Include routers

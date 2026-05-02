@@ -12,14 +12,100 @@ let successRateChart = null;
 let latencyChart = null;
 let difficultyChart = null;
 
+const API_KEY_STORAGE_KEY = 'doraemon.webui.apiKey';
+let apiKeyPromptPromise = null;
+
+function getStoredApiKey() {
+    try {
+        return window.localStorage.getItem(API_KEY_STORAGE_KEY) || '';
+    } catch (error) {
+        return '';
+    }
+}
+
+function setStoredApiKey(apiKey) {
+    try {
+        const normalizedKey = apiKey.trim();
+        if (normalizedKey) {
+            window.localStorage.setItem(API_KEY_STORAGE_KEY, normalizedKey);
+        } else {
+            window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+        }
+    } catch (error) {
+        // Storage can be disabled; auth failures will still be surfaced by the API.
+    }
+}
+
+function isProtectedApiRequest(input) {
+    try {
+        const url = new URL(typeof input === 'string' ? input : input.url, window.location.origin);
+        return url.origin === window.location.origin
+            && (url.pathname === '/dashboard/api'
+                || url.pathname.startsWith('/dashboard/api/')
+                || url.pathname === '/api'
+                || url.pathname.startsWith('/api/'));
+    } catch (error) {
+        return false;
+    }
+}
+
+function withDashboardAuth(input, init = {}) {
+    if (!isProtectedApiRequest(input)) {
+        return init;
+    }
+
+    const apiKey = getStoredApiKey();
+    if (!apiKey) {
+        return init;
+    }
+
+    const headers = new Headers(init.headers || {});
+    if (!headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${apiKey}`);
+    }
+    return { ...init, headers };
+}
+
+async function dashboardFetch(input, init) {
+    let response = await fetch(input, withDashboardAuth(input, init));
+    if (!isProtectedApiRequest(input) || ![401, 503].includes(response.status)) {
+        return response;
+    }
+
+    const apiKey = await promptForApiKey();
+    if (apiKey === null) {
+        return response;
+    }
+
+    setStoredApiKey(apiKey);
+    response = await fetch(input, withDashboardAuth(input, init));
+    return response;
+}
+
+async function promptForApiKey() {
+    if (!apiKeyPromptPromise) {
+        apiKeyPromptPromise = Promise.resolve()
+            .then(() => window.prompt('API key required'))
+            .finally(() => {
+                apiKeyPromptPromise = null;
+            });
+    }
+    return apiKeyPromptPromise;
+}
+
 /**
  * Initialize all charts on page load.
  */
 function initializeCharts() {
+    [successRateChart, latencyChart, difficultyChart].forEach(chart => {
+        if (chart) {
+            chart.destroy();
+        }
+    });
+
     initSuccessRateChart();
     initLatencyChart();
     initDifficultyChart();
-    loadModelComparison();
 }
 
 /**
@@ -210,7 +296,7 @@ function initDifficultyChart() {
  */
 async function loadModelComparison() {
     try {
-        const response = await fetch('/dashboard/api/models/compare');
+        const response = await dashboardFetch('/dashboard/api/models/compare');
         const data = await response.json();
 
         const tbody = document.querySelector('#modelComparisonTable tbody');
@@ -245,13 +331,149 @@ async function loadModelComparison() {
 }
 
 /**
+ * Load dashboard data through authenticated API requests and update the page.
+ */
+async function loadDashboardData() {
+    try {
+        const [tasksResponse, trendsResponse, evaluationsResponse] = await Promise.all([
+            dashboardFetch('/dashboard/api/tasks'),
+            dashboardFetch('/dashboard/api/trends'),
+            dashboardFetch('/dashboard/api/evaluations?limit=10'),
+        ]);
+
+        if (!tasksResponse.ok || !trendsResponse.ok || !evaluationsResponse.ok) {
+            return;
+        }
+
+        taskStats = await tasksResponse.json();
+        trendsData = await trendsResponse.json();
+        const evaluationsData = await evaluationsResponse.json();
+
+        renderSummaryCards(taskStats);
+        renderCategoryHeatmap(taskStats.by_category || {});
+        renderCategoryFilter(taskStats.by_category || {});
+        renderEvaluations(evaluationsData.evaluations || []);
+        initializeCharts();
+        await loadModelComparison();
+    } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+    }
+}
+
+function renderSummaryCards(stats) {
+    const successRate = document.getElementById('overallSuccessRate');
+    const totalTasks = document.getElementById('totalTasks');
+    const totalEvaluations = document.getElementById('totalEvaluations');
+    const totalCategories = document.getElementById('totalCategories');
+
+    if (successRate) {
+        successRate.textContent = `${((stats.overall_success_rate || 0) * 100).toFixed(1)}%`;
+    }
+    if (totalTasks) {
+        totalTasks.textContent = String(stats.total_tasks || 0);
+    }
+    if (totalEvaluations) {
+        totalEvaluations.textContent = String(stats.total_evaluations || 0);
+    }
+    if (totalCategories) {
+        totalCategories.textContent = String(Object.keys(stats.by_category || {}).length);
+    }
+}
+
+function renderCategoryHeatmap(byCategory) {
+    const container = document.getElementById('categoryHeatmap');
+    if (!container) return;
+
+    container.innerHTML = '';
+    for (const [category, stats] of Object.entries(byCategory)) {
+        const cell = document.createElement('div');
+        const successRate = stats.success_rate || 0;
+        cell.className = 'heatmap-cell';
+        cell.style.setProperty('--success-rate', String(successRate));
+        cell.title = `${category}: ${(successRate * 100).toFixed(1)}% (${stats.success || 0}/${stats.total || 0})`;
+
+        const label = document.createElement('span');
+        label.className = 'cell-label';
+        label.textContent = category;
+        const value = document.createElement('span');
+        value.className = 'cell-value';
+        value.textContent = `${(successRate * 100).toFixed(0)}%`;
+
+        cell.append(label, value);
+        container.appendChild(cell);
+    }
+}
+
+function renderCategoryFilter(byCategory) {
+    const select = document.getElementById('categoryFilter');
+    if (!select) return;
+
+    select.innerHTML = '';
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'All Categories';
+    select.appendChild(allOption);
+
+    for (const category of Object.keys(byCategory)) {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        select.appendChild(option);
+    }
+}
+
+function renderEvaluations(evaluations) {
+    const tbody = document.querySelector('#evaluationsTable tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    for (const evaluation of evaluations) {
+        const row = document.createElement('tr');
+        row.dataset.evalId = evaluation.id;
+
+        const timestamp = document.createElement('td');
+        timestamp.textContent = String(evaluation.timestamp || '').slice(0, 19);
+
+        const categoryCell = document.createElement('td');
+        const categoryBadge = document.createElement('span');
+        categoryBadge.className = 'category-badge';
+        categoryBadge.textContent = evaluation.category || 'unknown';
+        categoryCell.appendChild(categoryBadge);
+
+        const tasks = document.createElement('td');
+        tasks.textContent = String(evaluation.total_tasks || 0);
+
+        const success = document.createElement('td');
+        const successRate = (evaluation.success_rate || 0) * 100;
+        success.innerHTML = `
+            <div class="success-rate-bar">
+                <div class="bar-fill" style="width: ${successRate}%"></div>
+                <span class="bar-label">${successRate.toFixed(1)}%</span>
+            </div>
+        `;
+
+        const duration = document.createElement('td');
+        duration.textContent = `${(evaluation.total_time || 0).toFixed(2)}s`;
+
+        const actions = document.createElement('td');
+        const button = document.createElement('button');
+        button.className = 'btn btn-small btn-view';
+        button.dataset.evalId = evaluation.id;
+        button.textContent = 'View';
+        button.addEventListener('click', () => viewDetails(button.dataset.evalId));
+        actions.appendChild(button);
+
+        row.append(timestamp, categoryCell, tasks, success, duration, actions);
+        tbody.appendChild(row);
+    }
+}
+
+/**
  * Refresh all dashboard data.
  */
 async function refreshDashboard() {
     try {
-        // Reload the page for simplicity
-        // In a more sophisticated implementation, we would update charts and tables via AJAX
-        window.location.reload();
+        await loadDashboardData();
     } catch (error) {
         console.error('Failed to refresh dashboard:', error);
         showNotification('Failed to refresh dashboard', 'error');
@@ -268,7 +490,7 @@ async function refreshDashboard() {
  */
 async function viewDetails(evalId) {
     try {
-        const response = await fetch(`/dashboard/api/evaluations/${evalId}`);
+        const response = await dashboardFetch(`/dashboard/api/evaluations/${evalId}`);
         if (!response.ok) {
             throw new Error('Failed to load evaluation details');
         }
@@ -409,7 +631,7 @@ async function submitNewEvaluation(event) {
     };
 
     try {
-        const response = await fetch('/dashboard/api/evaluate', {
+        const response = await dashboardFetch('/dashboard/api/evaluate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -442,7 +664,7 @@ async function pollEvaluationProgress(evalId) {
 
     const poll = async () => {
         try {
-            const response = await fetch(`/dashboard/api/evaluate/${evalId}/progress`);
+            const response = await dashboardFetch(`/dashboard/api/evaluate/${evalId}/progress`);
             if (!response.ok) {
                 throw new Error('Failed to get progress');
             }
@@ -621,6 +843,7 @@ function filterByCategory(category) {
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize charts
     initializeCharts();
+    void loadDashboardData();
 
     // Refresh button
     const refreshBtn = document.getElementById('refreshBtn');

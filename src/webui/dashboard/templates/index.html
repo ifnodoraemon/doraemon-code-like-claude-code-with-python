@@ -258,8 +258,9 @@
 
     <!-- Pass data to JavaScript -->
     <script>
-        const trendsData = {{ trends | tojson }};
-        const taskStats = {{ task_stats | tojson }};
+        let trendsData = {{ trends | tojson }};
+        let taskStats = {{ task_stats | tojson }};
+        const dashboardRequiresAuth = {{ requires_auth | tojson }};
     </script>
     <script src="/dashboard/static/dashboard.js"></script>
 </body>

@@ -1,23 +1,26 @@
 """Targeted coverage for webui/dashboard/api.py uncovered lines: 116,164,173,179-180,240-241,314-316,358,378,415-419,482-483,494,505,568,642-643."""
 
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from src.webui.dashboard.api import (
     EvaluationProgress,
     EvaluationRequest,
-    _running_evaluations,
+    _dashboard_page_requires_client_auth,
+    _empty_task_statistics,
+    _empty_trends,
     calculate_task_statistics,
     calculate_trends,
     compare_models,
+    dashboard_index,
     get_categories,
-    get_evaluations,
     get_evaluation_details,
     get_evaluation_progress,
-    get_task_statistics,
+    get_evaluations,
     list_evaluation_files,
     load_evaluation_details,
     run_evaluation_async,
@@ -31,6 +34,35 @@ class TestListEvaluationFilesNonDir:
         monkeypatch.setattr("src.webui.dashboard.api.EVAL_RESULTS_DIR", tmp_path)
         result = list_evaluation_files()
         assert result == []
+
+
+class TestDashboardIndexAuthShell:
+    def test_requires_client_auth_when_key_is_set_without_header(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WEBUI_API_KEY", "secret")
+        request = SimpleNamespace(headers={})
+
+        assert _dashboard_page_requires_client_auth(request) is True
+
+    def test_accepts_bearer_header_for_server_render(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WEBUI_API_KEY", "secret")
+        request = SimpleNamespace(headers={"Authorization": "Bearer secret"})
+
+        assert _dashboard_page_requires_client_auth(request) is False
+
+    @pytest.mark.asyncio
+    async def test_dashboard_index_does_not_inject_data_without_auth(self, monkeypatch):
+        monkeypatch.setenv("AGENT_WEBUI_API_KEY", "secret")
+        monkeypatch.setattr(
+            "src.webui.dashboard.api.list_evaluation_files",
+            lambda: pytest.fail("dashboard index should not load evaluations without auth"),
+        )
+
+        response = await dashboard_index(SimpleNamespace(headers={}))
+
+        assert response.context["requires_auth"] is True
+        assert response.context["evaluations"] == []
+        assert response.context["trends"] == _empty_trends()
+        assert response.context["task_stats"] == _empty_task_statistics()
 
 
 class TestLoadEvaluationDetailsPathTraversalResolve:
@@ -81,7 +113,7 @@ class TestGetEvaluationsOffsetBeyond:
 class TestGetEvaluationProgressMissing:
     @pytest.mark.asyncio
     async def test_missing_progress_raises_404(self):
-        with pytest.raises(Exception):
+        with pytest.raises(HTTPException):
             await get_evaluation_progress(eval_id="nonexistent_id")
 
 
@@ -147,7 +179,7 @@ class TestGetEvaluationDetailsPathTraversalCategory:
     @pytest.mark.asyncio
     async def test_slash_in_category_rejected(self, tmp_path, monkeypatch):
         monkeypatch.setattr("src.webui.dashboard.api.EVAL_RESULTS_DIR", tmp_path)
-        with pytest.raises(Exception):
+        with pytest.raises(HTTPException):
             await get_evaluation_details(eval_id=".._.._etc")
 
 

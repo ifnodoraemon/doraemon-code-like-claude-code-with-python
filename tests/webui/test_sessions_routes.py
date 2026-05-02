@@ -1,14 +1,14 @@
 """Tests for src/webui/routes/sessions.py"""
 
 import re
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.webui.routes.sessions import (
+    _ACTIVE_STREAMS,
     SessionResponse,
     UndoRequest,
-    _ACTIVE_STREAMS,
     _serialize_run,
     mark_stream_active,
     mark_stream_finished,
@@ -63,19 +63,16 @@ class TestSerializeRun:
 class TestMarkStream:
     def test_mark_active(self):
         mark_stream_active("sess1")
-        from src.webui.routes.sessions import _ACTIVE_STREAMS
         assert "sess1" in _ACTIVE_STREAMS
         mark_stream_finished("sess1")
 
     def test_mark_finished_removes(self):
         mark_stream_active("sess2")
         mark_stream_finished("sess2")
-        from src.webui.routes.sessions import _ACTIVE_STREAMS
         assert "sess2" not in _ACTIVE_STREAMS
 
     def test_mark_finished_idempotent(self):
         mark_stream_finished("nonexistent")
-        from src.webui.routes.sessions import _ACTIVE_STREAMS
         assert "nonexistent" not in _ACTIVE_STREAMS
 
 
@@ -142,29 +139,47 @@ class TestListSessionsRoute:
         mock_mgr.list_sessions.return_value = []
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
-            result = await list_sessions(limit=200)
+            await list_sessions(limit=200)
             mock_mgr.list_sessions.assert_called_once_with(project="default", limit=100)
 
 
 class TestGetSessionRoute:
     @pytest.mark.asyncio
     async def test_invalid_session_id(self):
-        from src.webui.routes.sessions import get_session
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session
         with pytest.raises(HTTPException) as exc_info:
             await get_session(session_id="bad.id")
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_session_not_found(self):
-        from src.webui.routes.sessions import get_session
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session
         mock_mgr = MagicMock()
-        mock_mgr.resume_session.return_value = None
+        mock_mgr.load_session.return_value = None
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             with pytest.raises(HTTPException) as exc_info:
                 await get_session(session_id="valid-id")
             assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_session_does_not_fall_back_to_name_lookup(self):
+        from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session
+        mock_mgr = MagicMock()
+        mock_mgr.load_session.return_value = None
+        mock_mgr.resume_session.return_value = MagicMock()
+
+        with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_session(session_id="NamedSession")
+
+        assert exc_info.value.status_code == 404
+        mock_mgr.resume_session.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_session_success(self):
@@ -177,7 +192,7 @@ class TestGetSessionRoute:
         mock_session.orchestration_state = {"run_id": "r1"}
         mock_session.orchestration_runs = []
         mock_session.active_orchestration_run_id = None
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             result = await get_session(session_id="s1")
@@ -195,7 +210,7 @@ class TestGetSessionRoute:
         mock_session.orchestration_state = {}
         mock_session.orchestration_runs = []
         mock_session.active_orchestration_run_id = None
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             result = await get_session(session_id="s1", include_messages=False)
@@ -213,7 +228,7 @@ class TestGetSessionRoute:
         mock_session.orchestration_state = {}
         mock_session.orchestration_runs = []
         mock_session.active_orchestration_run_id = None
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             result = await get_session(session_id="s1", message_limit=3)
@@ -230,7 +245,7 @@ class TestGetSessionRoute:
         mock_session.orchestration_state = {}
         mock_session.orchestration_runs = []
         mock_session.active_orchestration_run_id = None
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             result = await get_session(session_id="s1", message_offset=5, message_limit=2)
@@ -241,26 +256,29 @@ class TestGetSessionRoute:
 class TestGetSessionRunRoute:
     @pytest.mark.asyncio
     async def test_invalid_session_id(self):
-        from src.webui.routes.sessions import get_session_run
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session_run
         with pytest.raises(HTTPException) as exc_info:
             await get_session_run(session_id="bad.id", run_id="r1")
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_invalid_run_id(self):
-        from src.webui.routes.sessions import get_session_run
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session_run
         with pytest.raises(HTTPException) as exc_info:
             await get_session_run(session_id="s1", run_id="bad.id")
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_session_not_found(self):
-        from src.webui.routes.sessions import get_session_run
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session_run
         mock_mgr = MagicMock()
-        mock_mgr.resume_session.return_value = None
+        mock_mgr.load_session.return_value = None
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             with pytest.raises(HTTPException) as exc_info:
                 await get_session_run(session_id="s1", run_id="r1")
@@ -273,7 +291,7 @@ class TestGetSessionRunRoute:
         mock_session = MagicMock()
         mock_session.orchestration_runs = [{"run_id": "r1", "data": "test"}]
         mock_session.orchestration_state = {}
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             result = await get_session_run(session_id="s1", run_id="r1")
@@ -287,7 +305,7 @@ class TestGetSessionRunRoute:
         mock_session = MagicMock()
         mock_session.orchestration_runs = []
         mock_session.orchestration_state = {"run_id": "r1", "data": "from_state"}
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             result = await get_session_run(session_id="s1", run_id="r1")
@@ -295,13 +313,14 @@ class TestGetSessionRunRoute:
 
     @pytest.mark.asyncio
     async def test_run_not_found(self):
-        from src.webui.routes.sessions import get_session_run
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session_run
         mock_mgr = MagicMock()
         mock_session = MagicMock()
         mock_session.orchestration_runs = []
         mock_session.orchestration_state = {}
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             with pytest.raises(HTTPException) as exc_info:
@@ -312,18 +331,20 @@ class TestGetSessionRunRoute:
 class TestGetSessionDiffRoute:
     @pytest.mark.asyncio
     async def test_invalid_session_id(self):
-        from src.webui.routes.sessions import get_session_diff
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session_diff
         with pytest.raises(HTTPException) as exc_info:
             await get_session_diff(session_id="bad.id")
         assert exc_info.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_session_not_found(self):
-        from src.webui.routes.sessions import get_session_diff
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import get_session_diff
         mock_mgr = MagicMock()
-        mock_mgr.resume_session.return_value = None
+        mock_mgr.load_session.return_value = None
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             with pytest.raises(HTTPException) as exc_info:
                 await get_session_diff(session_id="s1")
@@ -337,7 +358,7 @@ class TestGetSessionDiffRoute:
         mock_session.metadata.project = "default"
         mock_session.metadata.checkpoints = None
         mock_session.metadata.created_at = 1000
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         mock_cp_mgr = MagicMock()
         mock_cp_mgr.checkpoints = []
@@ -352,8 +373,9 @@ class TestGetSessionDiffRoute:
 class TestUndoSessionRoute:
     @pytest.mark.asyncio
     async def test_invalid_session_id(self):
-        from src.webui.routes.sessions import undo_session
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import undo_session
         req = UndoRequest()
         with pytest.raises(HTTPException) as exc_info:
             await undo_session(session_id="bad.id", request=req)
@@ -361,8 +383,9 @@ class TestUndoSessionRoute:
 
     @pytest.mark.asyncio
     async def test_active_stream_blocks_undo(self):
-        from src.webui.routes.sessions import undo_session, mark_stream_active
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import mark_stream_active, undo_session
         mark_stream_active("active-sess")
         req = UndoRequest()
         try:
@@ -374,10 +397,11 @@ class TestUndoSessionRoute:
 
     @pytest.mark.asyncio
     async def test_session_not_found(self):
-        from src.webui.routes.sessions import undo_session
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import undo_session
         mock_mgr = MagicMock()
-        mock_mgr.resume_session.return_value = None
+        mock_mgr.load_session.return_value = None
         req = UndoRequest()
         with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
             with pytest.raises(HTTPException) as exc_info:
@@ -391,7 +415,7 @@ class TestUndoSessionRoute:
         mock_session = MagicMock()
         mock_session.metadata.project = "default"
         mock_session.metadata.checkpoints = ["cp1"]
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         mock_cp_mgr = MagicMock()
         mock_cp = MagicMock()
@@ -407,13 +431,14 @@ class TestUndoSessionRoute:
 
     @pytest.mark.asyncio
     async def test_undo_no_checkpoints_available(self):
-        from src.webui.routes.sessions import undo_session
         from fastapi import HTTPException
+
+        from src.webui.routes.sessions import undo_session
         mock_mgr = MagicMock()
         mock_session = MagicMock()
         mock_session.metadata.project = "default"
         mock_session.metadata.checkpoints = None
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         mock_cp_mgr = MagicMock()
         mock_cp_mgr.checkpoints = []
@@ -432,7 +457,7 @@ class TestUndoSessionRoute:
         mock_session = MagicMock()
         mock_session.metadata.project = "default"
         mock_session.metadata.checkpoints = ["cp1"]
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         mock_cp_mgr = MagicMock()
         mock_result = MagicMock()
@@ -452,15 +477,15 @@ class TestUndoSessionRoute:
 
 class TestGetSessionDiffWithCheckpoints:
     @pytest.mark.asyncio
-    async def test_diff_with_checkpoint_files(self, tmp_path):
+    async def test_diff_with_checkpoint_files(self, tmp_path, monkeypatch):
         from src.webui.routes.sessions import get_session_diff
-        from fastapi import HTTPException
+        monkeypatch.chdir(tmp_path)
 
         mock_mgr = MagicMock()
         mock_session = MagicMock()
         mock_session.metadata.project = "default"
         mock_session.metadata.checkpoints = ["cp1"]
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         mock_snap = MagicMock()
         mock_snap.path = str(tmp_path / "testfile.py")
@@ -492,14 +517,15 @@ class TestGetSessionDiffWithCheckpoints:
                 assert cp_data["files"][0]["after"]["content"] == "after content"
 
     @pytest.mark.asyncio
-    async def test_diff_with_deleted_file(self, tmp_path):
+    async def test_diff_with_deleted_file(self, tmp_path, monkeypatch):
         from src.webui.routes.sessions import get_session_diff
+        monkeypatch.chdir(tmp_path)
 
         mock_mgr = MagicMock()
         mock_session = MagicMock()
         mock_session.metadata.project = "default"
         mock_session.metadata.checkpoints = ["cp1"]
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
 
         mock_snap = MagicMock()
         mock_snap.path = str(tmp_path / "deleted_file.py")
@@ -526,15 +552,54 @@ class TestGetSessionDiffWithCheckpoints:
                 assert file_data["after"]["exists"] is False
 
     @pytest.mark.asyncio
-    async def test_undo_rewind_exception(self):
-        from src.webui.routes.sessions import undo_session
-        from fastapi import HTTPException
+    async def test_diff_skips_files_outside_project_root(self, tmp_path, monkeypatch):
+        from src.webui.routes.sessions import get_session_diff
+
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        outside_file = tmp_path / "outside.txt"
+        outside_file.write_text("secret", encoding="utf-8")
+        monkeypatch.chdir(project_root)
 
         mock_mgr = MagicMock()
         mock_session = MagicMock()
         mock_session.metadata.project = "default"
         mock_session.metadata.checkpoints = ["cp1"]
-        mock_mgr.resume_session.return_value = mock_session
+        mock_mgr.load_session.return_value = mock_session
+
+        mock_snap = MagicMock()
+        mock_snap.path = str(outside_file)
+        mock_snap.exists = True
+        mock_snap.content = "before"
+        mock_snap.size = 6
+        mock_snap.mtime = 1000.0
+
+        mock_cp = MagicMock()
+        mock_cp.id = "cp1"
+        mock_cp.created_at = None
+        mock_cp.prompt = None
+        mock_cp.description = ""
+        mock_cp.files = [mock_snap]
+
+        mock_cp_mgr = MagicMock()
+        mock_cp_mgr.get_checkpoint.return_value = mock_cp
+
+        with patch("src.webui.routes.sessions.SessionManager", return_value=mock_mgr):
+            with patch("src.core.checkpoint.CheckpointManager", return_value=mock_cp_mgr):
+                result = await get_session_diff(session_id="s1", include_content=True)
+                assert result["checkpoints"][0]["files"] == []
+
+    @pytest.mark.asyncio
+    async def test_undo_rewind_exception(self):
+        from fastapi import HTTPException
+
+        from src.webui.routes.sessions import undo_session
+
+        mock_mgr = MagicMock()
+        mock_session = MagicMock()
+        mock_session.metadata.project = "default"
+        mock_session.metadata.checkpoints = ["cp1"]
+        mock_mgr.load_session.return_value = mock_session
 
         mock_cp_mgr = MagicMock()
         mock_cp_mgr.rewind.side_effect = RuntimeError("rewind failed")

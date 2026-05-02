@@ -7,6 +7,7 @@ This module only loads project-local instructions:
 """
 
 from pathlib import Path
+from tempfile import gettempdir
 
 from .logger import get_logger
 from .paths import MEMORY_FILENAME, RULES_FILENAME, memory_path
@@ -58,10 +59,14 @@ def _read_instruction_file(path: Path) -> str | None:
 
 def _find_project_boundary(project_dir: Path) -> Path:
     """Find the repository / project root used for AGENTS.md discovery."""
-    for candidate in [project_dir, *project_dir.parents]:
+    resolved_project_dir = project_dir.resolve()
+    temp_root = Path(gettempdir()).resolve()
+    for candidate in [resolved_project_dir, *resolved_project_dir.parents]:
+        if candidate == temp_root and candidate != resolved_project_dir:
+            break
         if (candidate / ".git").exists() or (candidate / "pyproject.toml").exists():
             return candidate
-    return project_dir
+    return resolved_project_dir
 
 
 def _combine_instruction_sections(sections: list[tuple[str, str]]) -> str | None:
